@@ -2,7 +2,7 @@ import string
 from collections import Counter, defaultdict
 
 
-with open('moje/sifry/uloha1/text1_enc.txt', 'r') as f:
+with open('sifry/uloha1/text4_enc.txt', 'r') as f:
     ciphertext = f.read()
 
 
