@@ -7,90 +7,182 @@
 #include <arpa/inet.h>
 #include "snake.h"
 
-HAD *zdielany_had;
-bool hra_bezi = true;
-pthread_mutex_t mutex_had;
 
-// 1. VLÁKNO: Prijíma príkazy od klienta
+HAD *hadi[MAX_HRACOV] = {NULL};
+int klientske_sockety[MAX_HRACOV];
+bool sloty_obsadene[MAX_HRACOV] = {false};
+pthread_mutex_t mutex_hra = PTHREAD_MUTEX_INITIALIZER;
+bool hra_bezi = true;
+
+BOD aktualne_jedlo = {15, 5};
+void generuj_nove_jedlo() {
+    // Generujeme jedlo tak, aby nebolo na stene (1 až MAPA-2)
+    aktualne_jedlo.x = (rand() % (MAPA_WIDTH - 2)) + 1;
+    aktualne_jedlo.y = (rand() % (MAPA_HEIGHT - 2)) + 1;
+}
+
+// Vlákno pre obsluhu prichádzajúcich správ od konkrétneho hráča
 void* spracuj_vstupy(void* data) {
-    int socket = *((int*)data);
+    int index = *((int*)data);
+    free(data);
+    int sock = klientske_sockety[index];
     char prikaz;
-    while (hra_bezi && recv(socket, &prikaz, 1, 0) > 0) {
-        pthread_mutex_lock(&mutex_had);
-        if (prikaz == 'w') zdielany_had->aktualny_smer = HORE;
-        else if (prikaz == 's') zdielany_had->aktualny_smer = DOLE;
-        else if (prikaz == 'a') zdielany_had->aktualny_smer = VLAVO;
-        else if (prikaz == 'd') zdielany_had->aktualny_smer = VPRAVO;
-        else if (prikaz == 'q') hra_bezi = false;
-        pthread_mutex_unlock(&mutex_had);
+
+    // Kým klient posiela dáta...
+    while (recv(sock, &prikaz, 1, 0) > 0) {
+        pthread_mutex_lock(&mutex_hra);
+        if (hadi[index]) {
+            if (prikaz == 'w') hadi[index]->aktualny_smer = HORE;
+            else if (prikaz == 's') hadi[index]->aktualny_smer = DOLE;
+            else if (prikaz == 'a') hadi[index]->aktualny_smer = VLAVO;
+            else if (prikaz == 'd') hadi[index]->aktualny_smer = VPRAVO;
+        }
+        pthread_mutex_unlock(&mutex_hra);
+        if (prikaz == 'q') break;
     }
+
+    // Odpojenie hráča
+    printf("[Server] Hráč %d sa odpojil.\n", index + 1);
+    pthread_mutex_lock(&mutex_hra);
+    close(sock);
+    zmaz_hada(hadi[index]);
+    hadi[index] = NULL;
+    sloty_obsadene[index] = false;
+    pthread_mutex_unlock(&mutex_hra);
     return NULL;
 }
 
-// 2. VLÁKNO: Herná slučka (Pohyb a odosielanie)
+// Herná slučka (beží navždy v pozadí)
 void* herna_slucka(void* data) {
-    int socket = *((int*)data);
-    BOD export_hry[100];
+    (void)data;
+    HRA_STAV stav;
+    srand(time(NULL));
 
     while (hra_bezi) {
-        pthread_mutex_lock(&mutex_had);
-        
-        pohni_hada(zdielany_had, 0); // Tu sa had reálne pohne
-        int pocet = serializuj_hada(zdielany_had, export_hry);
-        
-        pthread_mutex_unlock(&mutex_had);
+        pthread_mutex_lock(&mutex_hra);
+        stav.jedlo = aktualne_jedlo;
 
-        // Odoslanie klientovi
-        if (send(socket, &pocet, sizeof(int), 0) <= 0) break;
-        if (send(socket, export_hry, sizeof(BOD) * pocet, 0) <= 0) break;
+        for (int i = 0; i < MAX_HRACOV; i++) {
+            if (sloty_obsadene[i] && hadi[i]) {
+                BOD hlava = hadi[i]->hlava->pozicia;
+                int rastie = 0;
+
+                // 1. KONTROLA: Jedlo
+                if (hlava.x == aktualne_jedlo.x && hlava.y == aktualne_jedlo.y) {
+                    rastie = 1;
+                    generuj_nove_jedlo();
+                }
+
+                pohni_hada(hadi[i], rastie);
+                
+                // Aktualizujeme polohu hlavy po pohybe pre ďalšie kontroly
+                hlava = hadi[i]->hlava->pozicia;
+
+                // 2. KONTROLA: Steny
+                if (hlava.x <= 0 || hlava.x >= MAPA_WIDTH - 1 || 
+                    hlava.y <= 0 || hlava.y >= MAPA_HEIGHT - 1) {
+                    
+                    // Reset hada pri náraze do steny
+                    hadi[i]->hlava->pozicia.x = 10 + (i * 5);
+                    hadi[i]->hlava->pozicia.y = 10;
+                    // Voliteľne: skrátiť hada na pôvodnú dĺžku
+                }
+
+                // 3. KONTROLA: Náraz do iných hráčov (aj do seba)
+                for (int j = 0; j < MAX_HRACOV; j++) {
+                    if (sloty_obsadene[j] && hadi[j]) {
+                        // Prechádzame všetky články hada 'j'
+                        SnakeNode *curr = hadi[j]->hlava;
+                        
+                        // Ak kontrolujeme náraz do seba (i == j), preskočíme hlavu
+                        if (i == j) curr = curr->next;
+
+                        while (curr != NULL) {
+                            if (hlava.x == curr->pozicia.x && hlava.y == curr->pozicia.y) {
+                                // NÁRAZ! Resetujeme hada 'i'
+                                hadi[i]->hlava->pozicia.x = 10 + (i * 5);
+                                hadi[i]->hlava->pozicia.y = 10;
+                                break;
+                            }
+                            curr = curr->next;
+                        }
+                    }
+                }
+
+                // Serializácia pre odoslanie
+                stav.dlzky[i] = serializuj_hada(hadi[i], stav.polohy[i]);
+                stav.aktivny[i] = true;
+            } else {
+                stav.aktivny[i] = false;
+            }
+        }
+        pthread_mutex_unlock(&mutex_hra);
         
-        usleep(150000); // Rýchlosť hada (150ms)
+        // Broadcast (odoslanie všetkým)
+        for (int i = 0; i < MAX_HRACOV; i++) {
+            if (sloty_obsadene[i]) {
+                send(klientske_sockety[i], &stav, sizeof(HRA_STAV), 0);
+            }
+        }
+
+        usleep(150000);
     }
-    hra_bezi = false;
     return NULL;
 }
 
 int main() {
-    zdielany_had = vytvor_hada(10, 10);
-    pthread_mutex_init(&mutex_had, NULL);
-
-    int server_fd, new_socket;
+    int server_fd;
     struct sockaddr_in address;
-    int opt = 1;
     int addrlen = sizeof(address);
 
     server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(12345);
 
     bind(server_fd, (struct sockaddr *)&address, sizeof(address));
-    listen(server_fd, 3);
+    listen(server_fd, MAX_HRACOV);
 
-    printf("Server čaká na pripojenie...\n");
-    new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
-    
-    // Spustíme OBE vlákna pre jedného klienta
-    pthread_t vlakno_logiky, vlakno_vstupov;
-    
-    // Alokujeme socket do pamäte, aby ho obe vlákna mali bezpečne
-    int *s_ptr = malloc(sizeof(int));
-    *s_ptr = new_socket;
+    // Spustíme hernú slučku hneď na začiatku
+    pthread_t t_logika;
+    pthread_create(&t_logika, NULL, herna_slucka, NULL);
 
-    pthread_create(&vlakno_logiky, NULL, herna_slucka, s_ptr);
-    pthread_create(&vlakno_vstupov, NULL, spracuj_vstupy, s_ptr);
+    printf("Server beží. Hráči sa môžu pripájať...\n");
 
-    // Čakáme, kým hra skončí (napr. stlačením 'q')
-    pthread_join(vlakno_logiky, NULL);
-    // Vlakno vstupov môžeme ukončiť násilne alebo nechať dobehnúť
-    
-    printf("Ukončujem hru...\n");
-    pthread_mutex_destroy(&mutex_had);
-    zmaz_hada(zdielany_had);
-    close(new_socket);
+    while (hra_bezi) {
+        int new_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+        
+        pthread_mutex_lock(&mutex_hra);
+        int volny_slot = -1;
+        for (int i = 0; i < MAX_HRACOV; i++) {
+            if (!sloty_obsadene[i]) {
+                volny_slot = i;
+                break;
+            }
+        }
+
+        if (volny_slot != -1) {
+            klientske_sockety[volny_slot] = new_sock;
+            hadi[volny_slot] = vytvor_hada(10 + (volny_slot * 3), 10);
+            sloty_obsadene[volny_slot] = true;
+            
+            int *arg = malloc(sizeof(int));
+            *arg = volny_slot;
+            pthread_t t_vstup;
+            pthread_create(&t_vstup, NULL, spracuj_vstupy, arg);
+            pthread_detach(t_vstup); // Vlákno sa samo uprace po skončení
+            
+            printf("Nový hráč pripojený na slot %d\n", volny_slot + 1);
+        } else {
+            printf("Server je plný, odpájam klienta.\n");
+            close(new_sock);
+        }
+        pthread_mutex_unlock(&mutex_hra);
+    }
+
     close(server_fd);
-    free(s_ptr);
-
     return 0;
 }

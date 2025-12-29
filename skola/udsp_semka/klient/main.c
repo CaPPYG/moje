@@ -7,6 +7,8 @@
 #include <ncurses.h>
 #include "snake.h"
 
+
+
 void* odosielaj_vstupy(void* data) {
     int sock = *((int*)data);
     while (1) {
@@ -37,64 +39,97 @@ int main() {
 
     // --- GUI INICIALIZÁCIA ---
     initscr();
-    start_color();        // Zapnutie farieb
+    start_color();
     use_default_colors();
-    init_pair(1, COLOR_GREEN, -1); // -1 znamená priesvitné pozadie (použije farbu terminálu)
-    init_pair(2, COLOR_RED, -1);
-    init_pair(3, COLOR_BLUE, -1);
-    init_pair(4, COLOR_YELLOW, -1);
+    // Použijeme rovnakú farbu pre text aj pozadie, aby vznikol plný blok
+    // Definícia "blokov" (textová farba, pozadie)
+    init_pair(1, COLOR_GREEN, COLOR_GREEN);   // Had: zelený blok
+    init_pair(2, COLOR_RED, COLOR_RED);       // Potrava: červený blok
+    init_pair(3, COLOR_BLUE, COLOR_BLUE);     // Steny: modrý blok
+    init_pair(4, COLOR_YELLOW, -1);           // Text: žltý na priesvitnom
     curs_set(0);          // Skrytie kurzora
     noecho();             // Nevypisovanie stlačených kláves
     cbreak();             // Čítanie znakov hneď (netreba Enter)
     nodelay(stdscr, TRUE); // getch nebude blokovať
 
     // Definícia farebných párov (ID, text, pozadie)
-    init_pair(1, COLOR_GREEN, COLOR_BLACK);  // Had
-    init_pair(2, COLOR_RED, COLOR_BLACK);    // Potrava
-    init_pair(3, COLOR_BLUE, COLOR_BLACK);   // Steny/Box
-    init_pair(4, COLOR_YELLOW, COLOR_BLACK); // Text/Skóre
+    init_pair(1, COLOR_GREEN, -1);   // Hráč 1 - Zelený
+    init_pair(2, COLOR_CYAN, -1);    // Hráč 2 - Tyrkysový
+    init_pair(3, COLOR_BLUE, -1);    // Steny - Modré
+    init_pair(4, COLOR_YELLOW, -1);  // Texty - Žlté
+    init_pair(5, COLOR_MAGENTA, -1); // Hráč 3 - Fialový
 
     pthread_t vlakno_vstup;
     pthread_create(&vlakno_vstup, NULL, odosielaj_vstupy, &sock);
 
     while (1) {
-        int pocet;
-        if (recv(sock, &pocet, sizeof(int), 0) <= 0) break;
+        HRA_STAV stav;
+        int bytes = recv(sock, &stav, sizeof(HRA_STAV), 0);
+        if (bytes <= 0) break; // Server sa odpojil
 
-        BOD poloha_hada[100];
-        recv(sock, poloha_hada, sizeof(BOD) * pocet, 0);
+        erase(); // Vymažeme obraz
 
-        // Použijeme erase() namiesto clear() pre plynulejší obraz
-        erase(); 
+        // 1. VYKRESLENIE PEVNEJ MAPY POMOCOU ZNAKOV
+        attron(COLOR_PAIR(3)); // Modrá farba pre steny
 
-        // 1. Vykreslenie modrého ohraničenia (GUI Box)
-        attron(COLOR_PAIR(3));
-        for (int i = 0; i < COLS; i++) {
-            mvaddch(0, i, '#');          // Horná stena
-            mvaddch(LINES - 1, i, '#');  // Dolná stena
+        // Horný a dolný okraj
+        for (int x = 0; x < MAPA_WIDTH; x++) {
+            mvaddch(0, x, '-');               // Horná stena
+            mvaddch(MAPA_HEIGHT - 1, x, '-');  // Dolná stena
         }
-        for (int i = 0; i < LINES; i++) {
-            mvaddch(i, 0, '#');          // Ľavá stena
-            mvaddch(i, COLS - 1, '#');   // Pravá stena
+
+        // Bočné steny
+        for (int y = 0; y < MAPA_HEIGHT; y++) {
+            mvaddch(y, 0, '|');               // Ľavá stena
+            mvaddch(y, MAPA_WIDTH - 1, '|');   // Pravá stena
         }
+
+        // Rohy (aby to vyzeralo profesionálne)
+        mvaddch(0, 0, '+');
+        mvaddch(0, MAPA_WIDTH - 1, '+');
+        mvaddch(MAPA_HEIGHT - 1, 0, '+');
+        mvaddch(MAPA_HEIGHT - 1, MAPA_WIDTH - 1, '+');
+
         attroff(COLOR_PAIR(3));
 
-        // 2. Vykreslenie hada zelenou farbou
-        attron(COLOR_PAIR(1));
-        for (int i = 0; i < pocet; i++) {
-            // Hlava @, telo o
-            mvaddch(poloha_hada[i].y, poloha_hada[i].x, (i == 0) ? '@' : 'o');
-        }
-        attroff(COLOR_PAIR(1));
+        // VYKRESLENIE JEDLA
+        attron(COLOR_PAIR(2)); // Červená farba (ID 2 sme si už definovali)
+        mvaddch(stav.jedlo.y, stav.jedlo.x, '*'); 
+        attroff(COLOR_PAIR(2));
 
-        // 3. Horný stavový riadok (Skóre)
+        // 2. VYKRESLENIE HADA (Zelená farba, priesvitné pozadie)
+        for (int h = 0; h < MAX_HRACOV; h++) {
+            // Kreslíme hada len ak server oznámil, že je slot aktívny
+            if (stav.aktivny[h]) {
+                attron(COLOR_PAIR(h == 0 ? 1 : (h == 1 ? 2 : 5))); // Priradenie farby podľa indexu
+                
+                for (int i = 0; i < stav.dlzky[h]; i++) {
+                    int x = stav.polohy[h][i].x;
+                    int y = stav.polohy[h][i].y;
+
+                    // Kontrola hraníc pred vykreslením
+                    if (x > 0 && x < MAPA_WIDTH - 1 && y > 0 && y < MAPA_HEIGHT - 1) {
+                        mvaddch(y, x, (i == 0) ? '@' : 'o');
+                    }
+                }
+                attroff(COLOR_PAIR(h == 0 ? 1 : (h == 1 ? 2 : 5)));
+            }
+        }
+
+       // Upravený "3. STATISTIKY POD MAPOU"
         attron(COLOR_PAIR(4));
-        mvprintw(0, 2, "[ HRAC: Patrik | DLZKA: %d ]", pocet);
-        mvprintw(LINES - 1, 2, "[ Ovladanie: WASD | Koniec: Q ]");
+        int y_offset = MAPA_HEIGHT + 1;
+        mvprintw(y_offset++, 2, "--- AKTUALNI HRACI ---");
+        for (int h = 0; h < MAX_HRACOV; h++) {
+            if (stav.aktivny[h]) {
+                mvprintw(y_offset++, 2, "Hrac %d | Dlzk: %d", h + 1, stav.dlzky[h]);
+            }
+        }
+        mvprintw(y_offset + 1, 2, "Ovladanie: WASD | Koniec: Q");
         attroff(COLOR_PAIR(4));
-        
-        refresh(); 
-    }
+
+        refresh();
+        }
 
     endwin(); 
     close(sock);
