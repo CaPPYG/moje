@@ -1,13 +1,30 @@
+# Kompilátor a vlajky
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -I./datove_typy
+CFLAGS = -Wall -Wextra -I./datove_typy -I./server -I./klient
+LDFLAGS = -pthread
+LDLIBS = -lncurses
 
-all: server_app client_app
+# Zdrojové súbory (Rozdelené podľa modulov)
+COMMON_SRC = datove_typy/snake.c
+SERVER_SRC = server/main.c server/logika.c
+CLIENT_SRC = klient/main.c klient/gui.c
 
-server_app: server/main.c datove_typy/snake.c
-	$(CC) $(CFLAGS) server/main.c datove_typy/snake.c -o server_app
+# Binárky
+SERVER_BIN = server_app
+CLIENT_BIN = klient_app
 
-client_app: klient/main.c
-	$(CC) $(CFLAGS) klient/main.c -o client_app -lncurses
+all: $(SERVER_BIN) $(CLIENT_BIN)
+
+# Kompilácia servera (spája main.c + logika.c + snake.c)
+$(SERVER_BIN): $(SERVER_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+	@echo "[OK] Server skompilovany."
+
+# Kompilácia klienta (spája main.c + gui.c + snake.c)
+$(CLIENT_BIN): $(CLIENT_SRC) $(COMMON_SRC)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
+	@echo "[OK] Klient skompilovany."
 
 clean:
-	rm -f server_app client_app
+	rm -f $(SERVER_BIN) $(CLIENT_BIN)
+	@echo "[CLEAN] Hotovo."
