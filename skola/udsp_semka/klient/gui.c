@@ -38,22 +38,22 @@ void vykresli_stav(HRA_STAV *stav) {
         for (int j = 0; j < POCET_JEDLA; j++) {
             attron(COLOR_PAIR(2)); 
             char znak = '*'; 
-            if (stav.jedla[j].typ == JEDLO_TURBO) znak = 'T';
-            if (stav.jedla[j].typ == JEDLO_DOUBLE) znak = '2';
-            mvaddch(stav.jedla[j].poloha.y, stav.jedla[j].poloha.x, znak);
+            if (stav->jedla[j].typ == JEDLO_TURBO) znak = 'T';
+            if (stav->jedla[j].typ == JEDLO_DOUBLE) znak = '2';
+            mvaddch(stav->jedla[j].poloha.y, stav->jedla[j].poloha.x, znak);
             attroff(COLOR_PAIR(2));
         }
 
         // 3. VYKRESLENIE HADOU
         for (int h = 0; h < MAX_HRACOV; h++) {
-            if (stav.aktivny[h]) {
+            if (stav->aktivny[h]) {
                 // Farba 1 pre vás, farba 5 pre ostatných
                 int color = (h == 0) ? 1 : 5; 
                 attron(COLOR_PAIR(color));
                 
-                for (int i = 0; i < stav.dlzky[h]; i++) {
-                    int x = stav.polohy[h][i].x;
-                    int y = stav.polohy[h][i].y;
+                for (int i = 0; i < stav->dlzky[h]; i++) {
+                    int x = stav->polohy[h][i].x;
+                    int y = stav->polohy[h][i].y;
 
                     // Kontrola či súradnice nie sú náhodné (mimo mapy)
                     if (x >= 0 && x < MAPA_WIDTH && y >= 0 && y < MAPA_HEIGHT) {
@@ -69,9 +69,9 @@ void vykresli_stav(HRA_STAV *stav) {
         int y_offset = MAPA_HEIGHT + 1;
         mvprintw(y_offset++, 2, "--- AKTUALNI HRACI ---");
         
-        int *ptr_dlzky = stav.dlzky; // Smerník na pole dĺžok
+        int *ptr_dlzky = stav->dlzky; // Smerník na pole dĺžok
         for (int h = 0; h < MAX_HRACOV; h++) {
-            if (stav.aktivny[h]) {
+            if (stav->aktivny[h]) {
                 // Použitie aritmetiky: *(ptr + h) namiesto [h]
                 mvprintw(y_offset++, 2, "Hrac %d | Dlzk: %d", h + 1, *(ptr_dlzky + h));
             }
@@ -91,7 +91,7 @@ void vykresli_koniec(const char* sprava) {
     // Vykreslenie rámika pre správu
     mvprintw(stred_y - 2, stred_x - 15, "******************************");
     mvprintw(stred_y - 1, stred_x - 15, "* *");
-    mvprintw(stred_y,     stred_x - 15, "* %-26s *", stav.sprava);
+    mvprintw(stred_y,     stred_x - 15, "* %-26s *", sprava);
     mvprintw(stred_y + 1, stred_x - 15, "* *");
     mvprintw(stred_y + 2, stred_x - 15, "******************************");
     
