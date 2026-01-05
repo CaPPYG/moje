@@ -12,38 +12,38 @@
 #include "snake.h"
 #include "logika.h"
 
-// --- GLOBÁLNE PREMENNÉ (Fyzicky definované tu) ---
-HAD *hadi[MAX_HRACOV] = {NULL};
-int klientske_sockety[MAX_HRACOV];
-bool sloty_obsadene[MAX_HRACOV] = {false};
-pthread_mutex_t mutex_hra = PTHREAD_MUTEX_INITIALIZER;
-
-volatile bool hra_bezi = true;
-volatile bool server_sa_vypina = false;
-
-// --- UKAZOVATELE NA FUNKCIE ---
-typedef void (*PowerUpFunc)(int);
-void efekt_klasik(int hrac) { printf("[LOG] Hrac %d zjedol Jablko.\n", hrac + 1); }
-void efekt_turbo(int hrac)  { printf("[LOG] Hrac %d aktivoval TURBO.\n", hrac + 1); }
-void efekt_double(int hrac) { printf("[LOG] Hrac %d ziskal DOUBLE BODY.\n", hrac + 1); }
-
-PowerUpFunc reakcie[] = {efekt_klasik, efekt_turbo, efekt_double};
-POWER_UP mapa_jedla[POCET_JEDLA];
+// Musíme zachovať globálny smerník, aby signál vedel vypnúť server
+SERVER_DATA *global_sd_ptr = NULL;
 
 void spracuj_signal(int sig) {
-    printf("\n[SIGNAL] Prijaty SIGINT (%d). Server sa vypina...\n", sig);
-    server_sa_vypina = true;
+    if (global_sd_ptr) {
+        printf("\n[SIGNAL] Prijaty SIGINT (%d). Server sa vypina...\n", sig);
+        global_sd_ptr->server_sa_vypina = true;
+    }
 }
 
-
 int main() {
+    srand(time(NULL));
+
+    SERVER_DATA sd;
+    memset(&sd, 0, sizeof(SERVER_DATA));
+    sd.hra_bezi = true;
+    sd.server_sa_vypina = false;
+    pthread_mutex_init(&sd.mutex_hra, NULL);
+
+    // Priradenie do globálneho smerníka pre signál
+    global_sd_ptr = &sd;
     signal(SIGINT, spracuj_signal);
     
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
-    struct sockaddr_in address = { .sin_family = AF_INET, .sin_addr.s_addr = INADDR_ANY, .sin_port = htons(12345) };
+    struct sockaddr_in address = {
+        .sin_family = AF_INET, 
+        .sin_addr.s_addr = INADDR_ANY, 
+        .sin_port = htons(12345)
+    };
     
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("[ERROR] Bind zlyhal");
@@ -56,10 +56,12 @@ int main() {
     printf("   Port: 12345 | Max hracov: %d           \n", MAX_HRACOV);
     printf("==========================================\n");
 
+    
+    // herna slučka v samostatnom vlákne
     pthread_t t_logika;
-    pthread_create(&t_logika, NULL, herna_slucka, NULL);
+    pthread_create(&t_logika, NULL, herna_slucka, &sd);
 
-    while (hra_bezi && !server_sa_vypina) {
+    while (sd.hra_bezi && !sd.server_sa_vypina) {
         struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
         setsockopt(server_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -69,24 +71,34 @@ int main() {
             break;
         }
 
-        // --- FIX: Reset timeoutu pre noveho hraca ---
+        // Deaktivácia timeoutu pre konkrétneho klienta
         struct timeval no_tv = { .tv_sec = 0, .tv_usec = 0 };
         setsockopt(new_sock, SOL_SOCKET, SO_RCVTIMEO, &no_tv, sizeof(no_tv));
         
         int flag = 1;
         setsockopt(new_sock, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 
-        pthread_mutex_lock(&mutex_hra);
+        pthread_mutex_lock(&sd.mutex_hra);
         int slot = -1;
-        for (int i = 0; i < MAX_HRACOV; i++) if (!sloty_obsadene[i]) { slot = i; break; }
+        for (int i = 0; i < MAX_HRACOV; i++) {
+            if (!sd.sloty_obsadene[i]) { 
+                slot = i; 
+                break; 
+            }
+        }
 
         if (slot != -1) {
-            klientske_sockety[slot] = new_sock;
-            hadi[slot] = vytvor_hada(10 + (slot * 5), 10);
-            sloty_obsadene[slot] = true;
+            sd.klientske_sockety[slot] = new_sock;
+            int r_x = (rand() % (MAPA_WIDTH - 4)) + 2;
+            int r_y = (rand() % (MAPA_HEIGHT - 4)) + 2;
+            sd.hadi[slot] = vytvor_hada(r_x, r_y);
+            sd.sloty_obsadene[slot] = true;
             
-            int *arg = malloc(sizeof(int));
-            *arg = slot;
+            // --- OPRAVA: Odosielame správnu štruktúru VSTUP_ARGS ---
+            VSTUP_ARGS *arg = malloc(sizeof(VSTUP_ARGS));
+            arg->sd = &sd;
+            arg->hrac_index = slot;
+
             pthread_t t_vstup;
             pthread_create(&t_vstup, NULL, spracuj_vstupy, arg);
             pthread_detach(t_vstup);
@@ -96,10 +108,40 @@ int main() {
             printf("[REJECT] Server je plny.\n");
             close(new_sock);
         }
-        pthread_mutex_unlock(&mutex_hra);
+        pthread_mutex_unlock(&sd.mutex_hra);
     }
 
+    // Čakanie na ukončenie logiky
     pthread_join(t_logika, NULL);
+    for (int i = 0; i < MAX_HRACOV; i++) {
+        if (sd.hadi[i]) {
+            zmaz_hada(sd.hadi[i]);
+            sd.hadi[i] = NULL;
+        }
+    }
+    pthread_mutex_lock(&sd.mutex_hra);
+    for (int i = 0; i < MAX_HRACOV; i++) {
+        if (sd.hadi[i]) {
+            zmaz_hada(sd.hadi[i]); // Táto funkcia musí vnútri uvoľniť LL aj OBJEKT
+            sd.hadi[i] = NULL;
+        }
+    }
+    
+    // --- AK PRIDÁŠ PREKÁŽKY DO SERVER_DATA ---
+    /*
+    LL *curr = sd.prekazky;
+    while (curr) {
+        LL *next = curr->next;
+        free(curr->data);
+        free(curr);
+        curr = next;
+    }
+    */
+    
+    pthread_mutex_unlock(&sd.mutex_hra);
+    pthread_mutex_destroy(&sd.mutex_hra);
+    
+    
     close(server_fd);
     printf("==========================================\n");
     printf("   SERVER BOL USPESNE UKONCENY.           \n");

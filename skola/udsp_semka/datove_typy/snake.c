@@ -2,36 +2,36 @@
 #include <stdbool.h>
 #include "snake.h"
 
+LL* vytvor_uzol(void *data) { 
+    LL *novy_uzol = malloc(sizeof(LL));
+    if (!novy_uzol) return NULL;
+    novy_uzol->data = data; 
+    novy_uzol->next = NULL;
+    
+    return novy_uzol;
+}
+
 /**
- * Inicializácia nového hada (Objektový prístup)
+ * Inicializácia nového hada
  * Vytvára hada s hlavou a jedným článkom tela.
  */
-HAD* vytvor_hada(int start_x, int start_y) {
+HAD* vytvor_hada(int x, int y) {
     HAD *had = malloc(sizeof(HAD));
     if (!had) return NULL;
 
-    had->dlzka = 2; 
-    had->aktualny_smer = VPRAVO;
+    // Najprv musíme vytvoriť dáta (OBJEKT)
+    OBJEKT *obj = malloc(sizeof(OBJEKT));
+    obj->pozicia = (BOD){x, y};
+    obj->znak = '@';
 
-    // 1. Vytvorenie hlavy
-    SnakeNode *hlava = malloc(sizeof(SnakeNode));
-    hlava->pozicia.x = start_x;
-    hlava->pozicia.y = start_y;
-    hlava->prev = NULL;
-
-    // 2. Vytvorenie druhého článku (telo)
-    SnakeNode *telo = malloc(sizeof(SnakeNode));
-    telo->pozicia.x = start_x - 1; // Telo za hlavou
-    telo->pozicia.y = start_y;
+    // Potom ich pošleme do uzla
+    had->hlava = vytvor_uzol(obj);
     
-    // 3. Obojsmerné prepojenie
-    hlava->next = telo;
-    telo->prev = hlava;
-    telo->next = NULL;
+    had->chvost = had->hlava;
+    had->velkost = 1;
+    had->aktualny_smer = 4; // VPRAVO
+    had->turbo_counter = 0;
 
-    had->hlava = hlava;
-    had->chvost = telo;
-    
     return had;
 }
 
@@ -41,32 +41,46 @@ HAD* vytvor_hada(int start_x, int start_y) {
  */
 void pohni_hada(HAD *had, int rastie) {
     if (!had || !had->hlava) return;
+    
+    // 1. Vypočítaj novú pozíciu hlavy
+    OBJEKT *stara_hlava_obj = (OBJEKT*)had->hlava->data;
+    BOD nova_poz = stara_hlava_obj->pozicia;
 
-    // Vytvorenie novej hlavy na základe aktuálneho smeru
-    SnakeNode *nova_hlava = malloc(sizeof(SnakeNode));
-    nova_hlava->pozicia = had->hlava->pozicia;
+    switch (had->aktualny_smer) {
+        case HORE:  nova_poz.y--; break;
+        case DOLE:  nova_poz.y++; break;
+        case VLAVO: nova_poz.x--; break;
+        case VPRAVO: nova_poz.x++; break;
+    }
 
-    if (had->aktualny_smer == HORE) nova_hlava->pozicia.y--;
-    else if (had->aktualny_smer == DOLE) nova_hlava->pozicia.y++;
-    else if (had->aktualny_smer == VLAVO) nova_hlava->pozicia.x--;
-    else if (had->aktualny_smer == VPRAVO) nova_hlava->pozicia.x++;
+    // 2. Starú hlavu zmeníme na znak tela '*'
+    stara_hlava_obj->znak = '*';
 
-    // Prepojenie novej hlavy so zvyškom zoznamu
+    // 3. Vytvoríme novú hlavu '@' a pripojíme ju na začiatok
+    OBJEKT *novy_obj = malloc(sizeof(OBJEKT));
+    novy_obj->pozicia = nova_poz;
+    novy_obj->znak = '@';
+
+    LL *nova_hlava = vytvor_uzol(novy_obj);
     nova_hlava->next = had->hlava;
-    nova_hlava->prev = NULL;
-    had->hlava->prev = nova_hlava;
     had->hlava = nova_hlava;
 
+    // 4. Ak had nerastie, musíme odstrániť chvost
     if (!rastie) {
-        // Logika posunu: odstránime posledný článok (chvost)
-        SnakeNode *stary_chvost = had->chvost;
-        if (stary_chvost->prev) {
-            had->chvost = stary_chvost->prev;
-            had->chvost->next = NULL;
-            free(stary_chvost);
+        LL *aktualny = had->hlava;
+        // Nájdeme predposledný uzol
+        while (aktualny->next != had->chvost) {
+            aktualny = aktualny->next;
         }
+        // Uvoľníme dáta chvosta a chvost samotný
+        free(had->chvost->data);
+        free(had->chvost);
+        
+        // Predposledný sa stáva chvostom
+        had->chvost = aktualny;
+        had->chvost->next = NULL;
     } else {
-        had->dlzka++;
+        had->velkost++;
     }
 }
 
@@ -75,10 +89,11 @@ void pohni_hada(HAD *had, int rastie) {
  */
 void zmaz_hada(HAD *had) {
     if (!had) return;
-    SnakeNode *aktualny = had->hlava;
+    LL *aktualny = had->hlava;
     while (aktualny != NULL) {
-        SnakeNode *dalsi = aktualny->next;
-        free(aktualny);
+        LL *dalsi = aktualny->next;
+        free(aktualny->data); // Najprv uvoľníme OBJEKT
+        free(aktualny);       // Potom uzol
         aktualny = dalsi;
     }
     free(had);
@@ -89,16 +104,22 @@ void zmaz_hada(HAD *had) {
  * Prevedie spájaný zoznam na pole súradníc pre sieťový prenos.
  */
 int serializuj_hada(HAD *had, BOD *buffer) {
-    if (!had || !buffer) return 0;
-    int i = 0;
-    SnakeNode *aktualny = had->hlava;
-    while (aktualny != NULL) {
-        // Demonštrácia aritmetiky ukazovateľov podľa zadania
-        *(buffer + i) = aktualny->pozicia; 
-        aktualny = aktualny->next;
-        i++;
+    int pocet = 0;
+    LL *curr = had->hlava;
+    
+    // Použijeme smerník na zápis do poľa pomocou aritmetiky
+    BOD *zapis = buffer; 
+
+    while (curr != NULL && pocet < 100) {
+        OBJEKT *obj = (OBJEKT*)curr->data;
+        
+        *zapis = obj->pozicia; // Zapíšeme na aktuálnu adresu
+        zapis++;               // ARITMETIKA UKAZOVATEĽOV: posun na ďalší BOD v poli
+        
+        curr = curr->next;
+        pocet++;
     }
-    return i; // Vráti aktuálnu dĺžku
+    return pocet;
 }
 
 /**
@@ -107,39 +128,34 @@ int serializuj_hada(HAD *had, BOD *buffer) {
  */
 bool skontroluj_koliziu_s_telom(HAD* had, BOD bod, bool preskoc_hlavu) {
     if (!had || !had->hlava) return false;
-    
-    SnakeNode *curr = had->hlava;
-    if (preskoc_hlavu && curr) {
-        curr = curr->next; // Preskočíme hlavu pri kontrole seba-nárazu
-    }
 
-    while (curr) {
-        if (curr->pozicia.x == bod.x && curr->pozicia.y == bod.y) {
+    LL *curr = had->hlava;
+    if (preskoc_hlavu) curr = curr->next;
+
+    while (curr != NULL) {
+        OBJEKT *obj = (OBJEKT*)curr->data;
+        if (obj->pozicia.x == bod.x && obj->pozicia.y == bod.y) {
             return true;
         }
         curr = curr->next;
     }
     return false;
 }
-void resetuj_poziciu_hada(HAD* had, int x, int y) {
-    if (had && had->hlava) {
-        had->hlava->pozicia.x = x;
-        had->hlava->pozicia.y = y;
-    }
-}
 
-BOD get_pozicia_hlavy(HAD* had) {
-    return had->hlava->pozicia;
+BOD get_pozicia_hlavy(HAD *had) {
+    if (!had || !had->hlava) return (BOD){0, 0};
+    // Pretypovanie: (OBJEKT*)had->hlava->data
+    return ((OBJEKT*)had->hlava->data)->pozicia;
 }
 
 void nastav_poziciu_hlavy(HAD* had, int x, int y) {
-    had->hlava->pozicia.x = x;
-    had->hlava->pozicia.y = y;
+    ((OBJEKT*)had->hlava->data)->pozicia.x = x;
+    ((OBJEKT*)had->hlava->data)->pozicia.y = y;
 }
 
 int get_dlzka_hada(HAD* had) {
     if (!had) return 0;
-    return had->dlzka;
+    return had->velkost;
 }
 void zmen_smer_hada(HAD* had, char klaves) {
     if (!had) return;
@@ -148,4 +164,44 @@ void zmen_smer_hada(HAD* had, char klaves) {
     else if (klaves == 's' && stary != HORE)   had->aktualny_smer = DOLE;
     else if (klaves == 'a' && stary != VPRAVO) had->aktualny_smer = VLAVO;
     else if (klaves == 'd' && stary != VLAVO)  had->aktualny_smer = VPRAVO;
+}
+
+
+void resetuj_poziciu_hada(HAD *had, int x, int y) {
+    if (!had || !had->hlava) return;
+
+    // 1. Zmažeme VŠETKO za hlavou
+    LL *aktualny = had->hlava->next;
+    while (aktualny != NULL) {
+        LL *na_zmazanie = aktualny;
+        aktualny = aktualny->next;
+        
+        if (na_zmazanie->data) free(na_zmazanie->data); // Uvoľníme OBJEKT
+        free(na_zmazanie);                             // Uvoľníme uzol
+    }
+
+    // 2. Dôležité: Ukončíme zoznam hneď za hlavou
+    had->hlava->next = NULL;
+    had->chvost = had->hlava; // Hlava je teraz zároveň aj chvostom
+    had->velkost = 1;         // Dĺžka je späť na 1
+
+    // 3. Resetujeme dáta v hlave
+    OBJEKT *obj_hlavy = (OBJEKT*)had->hlava->data;
+    if (obj_hlavy) {
+        obj_hlavy->pozicia.x = x;
+        obj_hlavy->pozicia.y = y;
+        obj_hlavy->znak = '@';
+    }
+}
+
+bool skontroluj_koliziu_v_zozname(LL *zoznam, BOD bod) {
+    LL *curr = zoznam;
+    while (curr != NULL) {
+        OBJEKT *obj = (OBJEKT*)curr->data;
+        if (obj->pozicia.x == bod.x && obj->pozicia.y == bod.y) {
+            return true;
+        }
+        curr = curr->next;
+    }
+    return false;
 }

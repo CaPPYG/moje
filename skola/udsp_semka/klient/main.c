@@ -44,10 +44,20 @@ int main() {
 
     while (1) {
         HRA_STAV stav;
-        // Prijmeme celú štruktúru naraz
-        int bytes = recv(sock, &stav, sizeof(HRA_STAV), 0);
-        
-        if (bytes <= 0) break; 
+        int celkovo_prijate = 0;
+        char *ptr = (char*)&stav;
+
+        // Cyklus, ktorý číta, kým nemá celú štruktúru
+        while (celkovo_prijate < (int)sizeof(HRA_STAV)) {
+            int r = recv(sock, ptr + celkovo_prijate, sizeof(HRA_STAV) - celkovo_prijate, 0);
+            if (r <= 0) {
+                // Ak sa spojenie preruší
+                endwin();
+                printf("Server ukoncil spojenie.\n");
+                return 0;
+            }
+            celkovo_prijate += r;
+        }
 
         vykresli_stav(&stav);
 
