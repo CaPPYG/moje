@@ -56,7 +56,7 @@ int main() {
     printf("   Port: 12345 | Max hracov: %d           \n", MAX_HRACOV);
     printf("==========================================\n");
 
-    
+    pthread_t t_vstupy[MAX_HRACOV]; // Pole na ukladanie ID vlákien hráčov
     // herna slučka v samostatnom vlákne
     pthread_t t_logika;
     pthread_create(&t_logika, NULL, herna_slucka, &sd);
@@ -99,9 +99,9 @@ int main() {
             arg->sd = &sd;
             arg->hrac_index = slot;
 
-            pthread_t t_vstup;
-            pthread_create(&t_vstup, NULL, spracuj_vstupy, arg);
-            pthread_detach(t_vstup);
+            
+            pthread_create(&t_vstupy[slot], NULL, spracuj_vstupy, arg);
+            
             
             printf("[CONNECT] Novy hrac pripojeny do slotu %d.\n", slot + 1);
         } else {
@@ -111,8 +111,16 @@ int main() {
         pthread_mutex_unlock(&sd.mutex_hra);
     }
 
+
     // Čakanie na ukončenie logiky
     pthread_join(t_logika, NULL);
+    for (int i = 0; i < MAX_HRACOV; i++) {
+        if (sd.sloty_obsadene[i]) {
+            pthread_join(t_vstupy[i], NULL);
+        }
+    }
+
+
     for (int i = 0; i < MAX_HRACOV; i++) {
         if (sd.hadi[i]) {
             zmaz_hada(sd.hadi[i]);
@@ -127,20 +135,11 @@ int main() {
         }
     }
     
-    // --- AK PRIDÁŠ PREKÁŽKY DO SERVER_DATA ---
-    /*
-    LL *curr = sd.prekazky;
-    while (curr) {
-        LL *next = curr->next;
-        free(curr->data);
-        free(curr);
-        curr = next;
-    }
-    */
+    
     
     pthread_mutex_unlock(&sd.mutex_hra);
     pthread_mutex_destroy(&sd.mutex_hra);
-    
+    sleep(2);
     
     close(server_fd);
     printf("==========================================\n");

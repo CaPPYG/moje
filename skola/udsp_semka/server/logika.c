@@ -9,6 +9,8 @@
 #include <time.h>
 
 // --- EFEKTY POWER-UPOV ---
+// UKAZOVATELE NA FUNKCIE (ZADANIE: 1-2 body)
+// Každý efekt je funkcia s podpisom: void (*)(void *data, int hrac)
 
 void efekt_klasik(void *data, int hrac) {
     (void)data; // Potlačenie warningu
@@ -26,13 +28,14 @@ void efekt_turbo(void *data, int hrac) {
 void efekt_double(void *data, int hrac) {
     SERVER_DATA *sd = (SERVER_DATA*)data;
     if (sd->hadi[hrac]) {
-        // Okamžitý bonusový rast cez pohni_hada s rastom, ale bez zmeny pozície
-        // Alebo jednoducho povieme, že v ďalšom kroku porastie znova
-        printf("[LOG] Hrac %d ziskal DOUBLE BODY.\n", hrac + 1);
+        // Pridá 2 časti tela hada
+        pohni_hada(sd->hadi[hrac], 2);
+        printf("[LOG] Hrac %d ziskal DOUBLE BODY (+2 casti)!\n", hrac + 1);
     }
 }
 
 // Pole ukazovateľov na funkcie (používa tvoj LL prístup cez void*)
+// UKAZOVATELE NA FUNKCIE - pole funkcií ktoré sa vyvolávajú podľa typu power-upu
 typedef void (*PowerUpFunc)(void*, int);
 PowerUpFunc reakcie[] = {efekt_klasik, efekt_turbo, efekt_double};
 
@@ -66,13 +69,17 @@ void* spracuj_vstupy(void* data) {
     while (sd->hra_bezi && !sd->server_sa_vypina) {
         int r = recv(sock, &prikaz, 1, 0);
         if (r > 0) {
+            if (prikaz == 'q') {
+                printf("[QUIT] Hrac %d stlacil Q. Hrac sa odpaja...\n", index + 1);
+                break;
+            }
             pthread_mutex_lock(&sd->mutex_hra);
             if (sd->hadi[index]) {
                 zmen_smer_hada(sd->hadi[index], prikaz);
             }
             pthread_mutex_unlock(&sd->mutex_hra);
-            if (prikaz == 'q') break;
         } else if (r <= 0) {
+            // Disconnect - klient sa odpojil
             break; 
         }
     }
@@ -83,6 +90,20 @@ void* spracuj_vstupy(void* data) {
     zmaz_hada(sd->hadi[index]);
     sd->hadi[index] = NULL;
     sd->sloty_obsadene[index] = false;
+    
+    // Skontroluj ci su este nejaci hraci
+    int pocet_hracov = 0;
+    for (int i = 0; i < MAX_HRACOV; i++) {
+        if (sd->sloty_obsadene[i]) {
+            pocet_hracov++;
+        }
+    }
+    
+    // Ak neni ziadny hrac, vypni server
+    if (pocet_hracov == 0) {
+        printf("[INFO] Ziadni hraci na serveri. Server sa vypina...\n");
+        sd->server_sa_vypina = true;
+    }
     pthread_mutex_unlock(&sd->mutex_hra);
     
     return NULL;
@@ -114,8 +135,24 @@ void* herna_slucka(void* data) {
                 }
             }
             pthread_mutex_unlock(&sd->mutex_hra);
-            sleep(1);
+            
+            // Čakaj 3 sekundy aby klienti videli skóre
+            sleep(3);
+            
+            // Teraz uzatvori sockety
+            pthread_mutex_lock(&sd->mutex_hra);
+            for (int i = 0; i < MAX_HRACOV; i++) {
+                if (sd->sloty_obsadene[i]) {
+                    close(sd->klientske_sockety[i]);
+                    zmaz_hada(sd->hadi[i]);
+                    sd->hadi[i] = NULL;
+                    sd->sloty_obsadene[i] = false;
+                }
+            }
+            pthread_mutex_unlock(&sd->mutex_hra);
+            
             sd->hra_bezi = false;
+            
             break;
         }
 
@@ -153,18 +190,24 @@ void* herna_slucka(void* data) {
                         respawn_hada(sd->hadi[i]);
                     }
 
-                    // 4. Kolízia s inými objektmi (Hadi)
+                    // 4. Kolízia s inými objektmi (Hadi a ich telá)
                     for (int j = 0; j < MAX_HRACOV; j++) {
                         if (sd->sloty_obsadene[j] && sd->hadi[j]) {
-                            // Kontrola kolízie s telom (vratane seba ak preskocime hlavu)
-                            if (skontroluj_koliziu_s_telom(sd->hadi[j], hlava, (i == j))) {
+                            
+                            // URČENIE ŠTARTOVACIEHO BODU PRE TEST
+                            // Ak kontrolujem seba (i == j), musím začať od krku (hlava->next), 
+                            // inak hlava koliduje s hlavou a had by bol v nekonečnom respawne.
+                            LL *zaciatok_testu = (i == j) ? sd->hadi[j]->hlava->next : sd->hadi[j]->hlava;
+
+                            // GENERICKÉ VOLANIE
+                            // ll_najdi_prvok vráti void* na OBJEKT, ak dôjde ku kolízii, inak NULL
+                            if (ll_najdi_prvok(zaciatok_testu, test_telo_hada, &hlava)) {
+                                printf("[COLLISION] Hrac %d narazil do %s!\n", i + 1, (i == j) ? "seba" : "ineho hraca");
                                 respawn_hada(sd->hadi[i]);
+                                break; // Po respawne už netreba kontrolovať ďalšie kolízie v tomto tiku
                             }
                         }
                     }
-
-                    // --- TU JE PRIESTOR PRE KOLÍZIU SO STENAMI (LL prekazky) ---
-                    // if (skontroluj_koliziu_genericku(sd->prekazky, hlava)) respawn_hada(...);
                 }
 
                 // Serializácia do poľa pre sieťový prenos (v každom tiku pre plynulosť)
@@ -185,7 +228,7 @@ void* herna_slucka(void* data) {
             }
         }
 
-        if (pocitadlo++ % 200 == 0) {
+        if (pocitadlo++ % 1000 == 0) {
             printf("\r[LOG] Hra bezi, tik: %d", globalny_tik);
             fflush(stdout);
         }

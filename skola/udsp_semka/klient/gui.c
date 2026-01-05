@@ -11,84 +11,97 @@ void inicializuj_ncurses() {
     cbreak();             
     nodelay(stdscr, TRUE); 
 
-    // OPRAVA FAREBNÝCH PÁROV (Nesmú sa ID duplikovať)
-    init_pair(1, COLOR_GREEN, -1);   // Hráč 1
-    init_pair(2, COLOR_RED, -1);     // Jedlo / Hráč 2 (v tvojom kóde bol konflikt)
-    init_pair(3, COLOR_BLUE, -1);    // Steny
-    init_pair(4, COLOR_YELLOW, -1);  // Text
-    init_pair(5, COLOR_MAGENTA, -1); // Hráč 3
-    init_pair(6, COLOR_CYAN, -1);    // Špeciálne jedlo
+    // DEFINÍCIA FAREBNÝCH PÁROV (Bez tohto farby nefungujú)
+    init_pair(1, COLOR_RED, -1);   // Pár 1: Hráč 1 (Červená)
+    init_pair(2, COLOR_GREEN, -1);     // Pár 2: Jedlo (Zelená)
+    init_pair(3, COLOR_BLUE, -1);    // Pár 3: Steny (Modrá)
+    init_pair(4, COLOR_YELLOW, -1);  // Pár 4: Text/Nadpisy (Žltá)
+    init_pair(5, COLOR_MAGENTA, -1); // Pár 5: Hráč 2 (Fialová)
+    init_pair(6, COLOR_CYAN, -1);    // Pár 6: Hráč 3 (Azúrová)
+    init_pair(7, COLOR_WHITE, -1);   // Pár 7: Hráč 4 (Biela)
 }
 
 void vykresli_stav(HRA_STAV *stav) {
     erase();
-    // 1. VYKRESLENIE MAPY
-        attron(COLOR_PAIR(3)); 
-        for (int x = 0; x < MAPA_WIDTH; x++) {
-            mvaddch(0, x, '-');               
-            mvaddch(MAPA_HEIGHT - 1, x, '-');  
-        }
-        for (int y = 0; y < MAPA_HEIGHT; y++) {
-            mvaddch(y, 0, '|');               
-            mvaddch(y, MAPA_WIDTH - 1, '|');   
-        }
-        attroff(COLOR_PAIR(3));
 
-        // 2. VYKRESLENIE JEDLA (Zosúladené so serverom)
-        for (int j = 0; j < POCET_JEDLA; j++) {
-            attron(COLOR_PAIR(2)); 
-            char znak = '*'; 
-            if (stav->jedla[j].typ == JEDLO_TURBO) znak = 'T';
-            if (stav->jedla[j].typ == JEDLO_DOUBLE) znak = '2';
-            mvaddch(stav->jedla[j].poloha.y, stav->jedla[j].poloha.x, znak);
-            attroff(COLOR_PAIR(2));
-        }
+    // Mapovanie indexu hráča na ID farebného páru
+    // Hráč 0 -> 1 (Zelená), Hráč 1 -> 5 (Fialová), atď.
+    int farby[] = {1, 5, 6, 7};
 
-        // 3. VYKRESLENIE HADOU
-        for (int h = 0; h < MAX_HRACOV; h++) {
-            if (stav->aktivny[h]) {
-                // Farba 1 pre vás, farba 5 pre ostatných
-                int color = (h == 0) ? 1 : 5; 
-                attron(COLOR_PAIR(color));
-                
-                for (int i = 0; i < stav->dlzky[h]; i++) {
-                    int x = stav->polohy[h][i].x;
-                    int y = stav->polohy[h][i].y;
+    // 1. VYKRESLENIE MAPY (Blue)
+    attron(COLOR_PAIR(3)); 
+    for (int x = 0; x < MAPA_WIDTH; x++) {
+        mvaddch(0, x, '-'); 
+        mvaddch(MAPA_HEIGHT - 1, x, '-');  
+    }
+    for (int y = 0; y < MAPA_HEIGHT; y++) {
+        mvaddch(y, 0, '|'); 
+        mvaddch(y, MAPA_WIDTH - 1, '|');   
+    }
+    attroff(COLOR_PAIR(3));
 
-                    // Kontrola či súradnice nie sú náhodné (mimo mapy)
-                    if (x >= 0 && x < MAPA_WIDTH && y >= 0 && y < MAPA_HEIGHT) {
-                        mvaddch(y, x, (i == 0) ? '@' : 'o');
-                    }
+    // 2. VYKRESLENIE JEDLA (Red)
+    for (int j = 0; j < POCET_JEDLA; j++) {
+        attron(COLOR_PAIR(2)); 
+        char znak = '*'; 
+        if (stav->jedla[j].typ == JEDLO_TURBO) znak = 'T';
+        if (stav->jedla[j].typ == JEDLO_DOUBLE) znak = '2';
+        mvaddch(stav->jedla[j].poloha.y, stav->jedla[j].poloha.x, znak);
+        attroff(COLOR_PAIR(2));
+    }
+
+    // 3. VYKRESLENIE HADOV
+    for (int h = 0; h < MAX_HRACOV; h++) {
+        if (stav->aktivny[h]) {
+            // Výber unikátnej farby pre hráča
+            int hrac_color = farby[h % 4]; 
+            attron(COLOR_PAIR(hrac_color));
+            
+            // Aritmetika ukazovateľov: prístup k poliam polôh
+            BOD *p_bod = stav->polohy[h]; 
+
+            for (int i = 0; i < stav->dlzky[h]; i++) {
+                // Výpočet pozície článku pomocou aritmetiky smerníkov
+                int curr_x = (p_bod + i)->x;
+                int curr_y = (p_bod + i)->y;
+
+                // Vykreslenie hlavy (@) alebo tela (o)
+                if (curr_x > 0 && curr_x < MAPA_WIDTH - 1 && curr_y > 0 && curr_y < MAPA_HEIGHT - 1) {
+                    mvaddch(curr_y, curr_x, (i == 0) ? '@' : 'o');
                 }
-                attroff(COLOR_PAIR(color));
             }
+            attroff(COLOR_PAIR(hrac_color));
         }
+    }
+    
+    // 4. ŠTATISTIKY
+    int y_off = MAPA_HEIGHT + 1;
+    attron(COLOR_PAIR(4));
+    mvprintw(y_off++, 2, "--- AKTUALNI HRACI ---");
+    attroff(COLOR_PAIR(4));
 
-        // 4. ŠTATISTIKY (Aritmetika ukazovateľov - SPLNENIE ZADANIA)
-        attron(COLOR_PAIR(4));
-        int y_offset = MAPA_HEIGHT + 1;
-        mvprintw(y_offset++, 2, "--- AKTUALNI HRACI ---");
-        
-        int *ptr_dlzky = stav->dlzky; // Smerník na pole dĺžok
-        for (int h = 0; h < MAX_HRACOV; h++) {
-            if (stav->aktivny[h]) {
-                // Použitie aritmetiky: *(ptr + h) namiesto [h]
-                mvprintw(y_offset++, 2, "Hrac %d | Dlzk: %d", h + 1, *(ptr_dlzky + h));
-            }
+    for (int h = 0; h < MAX_HRACOV; h++) {
+        if (stav->aktivny[h]) {
+            // Text štatistík bude mať rovnakú farbu ako had na mape
+            attron(COLOR_PAIR(farby[h % 4]));
+            mvprintw(y_off++, 2, "Hrac %d | Body (dlzka): %d", h + 1, *(stav->dlzky + h));
+            attroff(COLOR_PAIR(farby[h % 4]));
         }
-        mvprintw(y_offset + 1, 2, "Ovladanie: WASD | Koniec: Q");
-        attroff(COLOR_PAIR(4));
-        refresh();
+    }
+
+    attron(COLOR_PAIR(4));
+    mvprintw(y_off + 1, 2, "Ovladanie: WASD | Koniec: Q");
+    attroff(COLOR_PAIR(4));
+
+    refresh();
 }
-
 
 void vykresli_koniec(const char* sprava) {
     int stred_y = MAPA_HEIGHT / 2;
     int stred_x = MAPA_WIDTH / 2;
 
-    attron(COLOR_PAIR(4) | A_BOLD); // Žltá tučná farba
+    attron(COLOR_PAIR(4) | A_BOLD); 
     
-    // Vykreslenie rámika pre správu
     mvprintw(stred_y - 2, stred_x - 15, "******************************");
     mvprintw(stred_y - 1, stred_x - 15, "* *");
     mvprintw(stred_y,     stred_x - 15, "* %-26s *", sprava);

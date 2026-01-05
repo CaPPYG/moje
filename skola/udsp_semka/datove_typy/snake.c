@@ -2,7 +2,9 @@
 #include <stdbool.h>
 #include "snake.h"
 
+// Vytvorí nový uzol linked listu s ľubovoľným datovým typom
 LL* vytvor_uzol(void *data) { 
+    
     LL *novy_uzol = malloc(sizeof(LL));
     if (!novy_uzol) return NULL;
     novy_uzol->data = data; 
@@ -11,10 +13,7 @@ LL* vytvor_uzol(void *data) {
     return novy_uzol;
 }
 
-/**
- * Inicializácia nového hada
- * Vytvára hada s hlavou a jedným článkom tela.
- */
+// Inicializuje nového hada s hlavou na danej pozícii
 HAD* vytvor_hada(int x, int y) {
     HAD *had = malloc(sizeof(HAD));
     if (!had) return NULL;
@@ -35,14 +34,10 @@ HAD* vytvor_hada(int x, int y) {
     return had;
 }
 
-/**
- * Logika pohybu hada
- * @param rastie - ak je 1, chvost sa neodstráni a had sa predĺži
- */
+// Posunie hada dopredu - pridá hlavu, odstráni chvost pokiaľ rastie==0
 void pohni_hada(HAD *had, int rastie) {
-    if (!had || !had->hlava) return;
+    if (!had || !had->hlava) return;   
     
-    // 1. Vypočítaj novú pozíciu hlavy
     OBJEKT *stara_hlava_obj = (OBJEKT*)had->hlava->data;
     BOD nova_poz = stara_hlava_obj->pozicia;
 
@@ -52,11 +47,8 @@ void pohni_hada(HAD *had, int rastie) {
         case VLAVO: nova_poz.x--; break;
         case VPRAVO: nova_poz.x++; break;
     }
-
-    // 2. Starú hlavu zmeníme na znak tela '*'
     stara_hlava_obj->znak = '*';
-
-    // 3. Vytvoríme novú hlavu '@' a pripojíme ju na začiatok
+    
     OBJEKT *novy_obj = malloc(sizeof(OBJEKT));
     novy_obj->pozicia = nova_poz;
     novy_obj->znak = '@';
@@ -65,18 +57,15 @@ void pohni_hada(HAD *had, int rastie) {
     nova_hlava->next = had->hlava;
     had->hlava = nova_hlava;
 
-    // 4. Ak had nerastie, musíme odstrániť chvost
+    //Ak had nerastie, musíme odstrániť chvost
     if (!rastie) {
         LL *aktualny = had->hlava;
-        // Nájdeme predposledný uzol
         while (aktualny->next != had->chvost) {
             aktualny = aktualny->next;
         }
-        // Uvoľníme dáta chvosta a chvost samotný
         free(had->chvost->data);
         free(had->chvost);
         
-        // Predposledný sa stáva chvostom
         had->chvost = aktualny;
         had->chvost->next = NULL;
     } else {
@@ -84,9 +73,6 @@ void pohni_hada(HAD *had, int rastie) {
     }
 }
 
-/**
- * Uvoľnenie pamäte (Deštruktor)
- */
 void zmaz_hada(HAD *had) {
     if (!had) return;
     LL *aktualny = had->hlava;
@@ -99,22 +85,19 @@ void zmaz_hada(HAD *had) {
     free(had);
 }
 
-/**
- * Serializácia (Aritmetika ukazovateľov)
- * Prevedie spájaný zoznam na pole súradníc pre sieťový prenos.
- */
+// Konvertuje LL hada na pole BOD pre sieťový prenos
 int serializuj_hada(HAD *had, BOD *buffer) {
     int pocet = 0;
     LL *curr = had->hlava;
     
-    // Použijeme smerník na zápis do poľa pomocou aritmetiky
+    // Smerník na zápis
     BOD *zapis = buffer; 
 
     while (curr != NULL && pocet < 100) {
         OBJEKT *obj = (OBJEKT*)curr->data;
         
-        *zapis = obj->pozicia; // Zapíšeme na aktuálnu adresu
-        zapis++;               // ARITMETIKA UKAZOVATEĽOV: posun na ďalší BOD v poli
+        *zapis = obj->pozicia; 
+        zapis++;               
         
         curr = curr->next;
         pocet++;
@@ -122,10 +105,7 @@ int serializuj_hada(HAD *had, BOD *buffer) {
     return pocet;
 }
 
-/**
- * Zapuzdrená kontrola kolízií
- * @param preskoc_hlavu - true ak kontrolujeme náraz do seba (hlava vs telo)
- */
+
 bool skontroluj_koliziu_s_telom(HAD* had, BOD bod, bool preskoc_hlavu) {
     if (!had || !had->hlava) return false;
 
@@ -194,14 +174,23 @@ void resetuj_poziciu_hada(HAD *had, int x, int y) {
     }
 }
 
-bool skontroluj_koliziu_v_zozname(LL *zoznam, BOD bod) {
+// Iteruje LL a vracia prvý prvok kde test_func vráti true
+void* ll_najdi_prvok(LL* zoznam, TestCallback test_func, void* context) {
+    if (!zoznam || !test_func) return NULL;
+    
     LL *curr = zoznam;
     while (curr != NULL) {
-        OBJEKT *obj = (OBJEKT*)curr->data;
-        if (obj->pozicia.x == bod.x && obj->pozicia.y == bod.y) {
-            return true;
+        if (test_func(curr->data, context)) {
+            return curr->data; 
         }
         curr = curr->next;
     }
-    return false;
+    return NULL;
+}
+
+bool test_telo_hada(void* prvok, void* context) {
+    OBJEKT *obj = (OBJEKT*)prvok;
+    BOD *bod = (BOD*)context;
+    
+    return (obj->pozicia.x == bod->x && obj->pozicia.y == bod->y);
 }

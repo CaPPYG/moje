@@ -65,11 +65,10 @@ int main() {
         if (stav.koniec_hry) {
             vykresli_koniec(stav.sprava);
             pthread_join(vlakno_vstup, NULL);           
-            // Klient zostane zobrazený, kým ho server neodpojí alebo neubehne čas
-            continue; 
+            // Zobrazenie skóre na 5 sekúnd
+            sleep(3);
+            break;    
         }
-
-        
     }
 
     endwin(); 
