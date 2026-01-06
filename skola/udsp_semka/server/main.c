@@ -12,7 +12,6 @@
 #include "snake.h"
 #include "logika.h"
 
-// Musíme zachovať globálny smerník, aby signál vedel vypnúť server
 SERVER_DATA *global_sd_ptr = NULL;
 
 void spracuj_signal(int sig) {
@@ -56,7 +55,7 @@ int main() {
     printf("   Port: 12345 | Max hracov: %d           \n", MAX_HRACOV);
     printf("==========================================\n");
 
-    pthread_t t_vstupy[MAX_HRACOV]; // Pole na ukladanie ID vlákien hráčov
+    pthread_t t_vstupy[MAX_HRACOV];
     // herna slučka v samostatnom vlákne
     pthread_t t_logika;
     pthread_create(&t_logika, NULL, herna_slucka, &sd);
@@ -71,7 +70,6 @@ int main() {
             break;
         }
 
-        // Deaktivácia timeoutu pre konkrétneho klienta
         struct timeval no_tv = { .tv_sec = 0, .tv_usec = 0 };
         setsockopt(new_sock, SOL_SOCKET, SO_RCVTIMEO, &no_tv, sizeof(no_tv));
         
@@ -94,7 +92,6 @@ int main() {
             sd.hadi[slot] = vytvor_hada(r_x, r_y);
             sd.sloty_obsadene[slot] = true;
             
-            // --- OPRAVA: Odosielame správnu štruktúru VSTUP_ARGS ---
             VSTUP_ARGS *arg = malloc(sizeof(VSTUP_ARGS));
             arg->sd = &sd;
             arg->hrac_index = slot;
@@ -120,23 +117,14 @@ int main() {
         }
     }
 
-
+    // Uvoľnenie hadov - iba raz, s mutexom
+    pthread_mutex_lock(&sd.mutex_hra);
     for (int i = 0; i < MAX_HRACOV; i++) {
         if (sd.hadi[i]) {
             zmaz_hada(sd.hadi[i]);
             sd.hadi[i] = NULL;
         }
     }
-    pthread_mutex_lock(&sd.mutex_hra);
-    for (int i = 0; i < MAX_HRACOV; i++) {
-        if (sd.hadi[i]) {
-            zmaz_hada(sd.hadi[i]); // Táto funkcia musí vnútri uvoľniť LL aj OBJEKT
-            sd.hadi[i] = NULL;
-        }
-    }
-    
-    
-    
     pthread_mutex_unlock(&sd.mutex_hra);
     pthread_mutex_destroy(&sd.mutex_hra);
     sleep(2);

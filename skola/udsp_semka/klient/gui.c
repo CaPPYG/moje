@@ -1,8 +1,11 @@
 #include "gui.h"
 #include <ncurses.h>
+#include <pthread.h>
+#include <time.h>
+
+extern pthread_mutex_t curses_mtx;
 
 void inicializuj_ncurses() {
-    // --- GUI INICIALIZÁCIA ---
     initscr();
     start_color();
     use_default_colors();
@@ -10,25 +13,34 @@ void inicializuj_ncurses() {
     noecho();             
     cbreak();             
     nodelay(stdscr, TRUE); 
+    intrflush(stdscr, FALSE);
+    keypad(stdscr, TRUE);
 
-    // DEFINÍCIA FAREBNÝCH PÁROV (Bez tohto farby nefungujú)
-    init_pair(1, COLOR_RED, -1);   // Pár 1: Hráč 1 (Červená)
-    init_pair(2, COLOR_GREEN, -1);     // Pár 2: Jedlo (Zelená)
-    init_pair(3, COLOR_BLUE, -1);    // Pár 3: Steny (Modrá)
-    init_pair(4, COLOR_YELLOW, -1);  // Pár 4: Text/Nadpisy (Žltá)
-    init_pair(5, COLOR_MAGENTA, -1); // Pár 5: Hráč 2 (Fialová)
-    init_pair(6, COLOR_CYAN, -1);    // Pár 6: Hráč 3 (Azúrová)
-    init_pair(7, COLOR_WHITE, -1);   // Pár 7: Hráč 4 (Biela)
-}
+    init_pair(1, COLOR_RED, -1);   
+    init_pair(2, COLOR_GREEN, -1);     
+    init_pair(3, COLOR_BLUE, -1);  
+    init_pair(4, COLOR_YELLOW, -1); 
+    init_pair(5, COLOR_MAGENTA, -1);
+    init_pair(6, COLOR_CYAN, -1);  
+    init_pair(7, COLOR_WHITE, -1); 
+} 
 
 void vykresli_stav(HRA_STAV *stav) {
-    erase();
+    static time_t posledny_clear = 0;
+    time_t teraz = time(NULL);
 
-    // Mapovanie indexu hráča na ID farebného páru
-    // Hráč 0 -> 1 (Zelená), Hráč 1 -> 5 (Fialová), atď.
+    pthread_mutex_lock(&curses_mtx);
+
+    // kazde 3s tvrdy clear
+    if (teraz - posledny_clear >= 3) {
+        clear(); 
+        posledny_clear = teraz;
+    } else {
+        erase();
+    }
     int farby[] = {1, 5, 6, 7};
 
-    // 1. VYKRESLENIE MAPY (Blue)
+    // 1. VYKRESLENIE MAPY
     attron(COLOR_PAIR(3)); 
     for (int x = 0; x < MAPA_WIDTH; x++) {
         mvaddch(0, x, '-'); 
@@ -40,35 +52,39 @@ void vykresli_stav(HRA_STAV *stav) {
     }
     attroff(COLOR_PAIR(3));
 
-    // 2. VYKRESLENIE JEDLA (Red)
-    for (int j = 0; j < POCET_JEDLA; j++) {
+    // 2. VYKRESLENIE JEDLA
+    POWER_UP *jedlo = stav->jedla;                
+    POWER_UP *jedlo_koniec = jedlo + POCET_JEDLA;
+    
+    while (jedlo < jedlo_koniec) {
         attron(COLOR_PAIR(2)); 
         char znak = '*'; 
-        if (stav->jedla[j].typ == JEDLO_TURBO) znak = 'T';
-        if (stav->jedla[j].typ == JEDLO_DOUBLE) znak = '2';
-        mvaddch(stav->jedla[j].poloha.y, stav->jedla[j].poloha.x, znak);
+        if (jedlo->typ == JEDLO_TURBO) znak = 'T';
+        if (jedlo->typ == JEDLO_DOUBLE) znak = '2';
+        mvaddch(jedlo->poloha.y, jedlo->poloha.x, znak);
         attroff(COLOR_PAIR(2));
+        jedlo++; 
     }
 
     // 3. VYKRESLENIE HADOV
     for (int h = 0; h < MAX_HRACOV; h++) {
         if (stav->aktivny[h]) {
-            // Výber unikátnej farby pre hráča
             int hrac_color = farby[h % 4]; 
             attron(COLOR_PAIR(hrac_color));
             
-            // Aritmetika ukazovateľov: prístup k poliam polôh
-            BOD *p_bod = stav->polohy[h]; 
+            // iterácia cez telo hada
+            BOD *bod = stav->polohy[h];
+            BOD *koniec = bod + stav->dlzky[h];         
+            int index = 0;
 
-            for (int i = 0; i < stav->dlzky[h]; i++) {
-                // Výpočet pozície článku pomocou aritmetiky smerníkov
-                int curr_x = (p_bod + i)->x;
-                int curr_y = (p_bod + i)->y;
-
-                // Vykreslenie hlavy (@) alebo tela (o)
-                if (curr_x > 0 && curr_x < MAPA_WIDTH - 1 && curr_y > 0 && curr_y < MAPA_HEIGHT - 1) {
-                    mvaddch(curr_y, curr_x, (i == 0) ? '@' : 'o');
+            while (bod < koniec) {
+                // Priamy prístup cez pointer
+                if (bod->x > 0 && bod->x < MAPA_WIDTH - 1 && 
+                    bod->y > 0 && bod->y < MAPA_HEIGHT - 1) {
+                    mvaddch(bod->y, bod->x, (index == 0) ? '@' : 'o');
                 }
+                bod++;
+                index++;
             }
             attroff(COLOR_PAIR(hrac_color));
         }
@@ -82,7 +98,6 @@ void vykresli_stav(HRA_STAV *stav) {
 
     for (int h = 0; h < MAX_HRACOV; h++) {
         if (stav->aktivny[h]) {
-            // Text štatistík bude mať rovnakú farbu ako had na mape
             attron(COLOR_PAIR(farby[h % 4]));
             mvprintw(y_off++, 2, "Hrac %d | Body (dlzka): %d", h + 1, *(stav->dlzky + h));
             attroff(COLOR_PAIR(farby[h % 4]));
@@ -94,9 +109,11 @@ void vykresli_stav(HRA_STAV *stav) {
     attroff(COLOR_PAIR(4));
 
     refresh();
+    pthread_mutex_unlock(&curses_mtx);
 }
 
 void vykresli_koniec(const char* sprava) {
+    pthread_mutex_lock(&curses_mtx);
     int stred_y = MAPA_HEIGHT / 2;
     int stred_x = MAPA_WIDTH / 2;
 
@@ -110,4 +127,12 @@ void vykresli_koniec(const char* sprava) {
     
     attroff(COLOR_PAIR(4) | A_BOLD);
     refresh();
+}
+
+void ukonci_ncurses() {
+    nocbreak();
+    echo();
+    nodelay(stdscr, FALSE);
+    keypad(stdscr, FALSE);
+    endwin();
 }

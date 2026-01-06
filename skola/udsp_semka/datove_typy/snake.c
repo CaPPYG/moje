@@ -1,3 +1,23 @@
+/*
+ * =============================================================================
+ * SNAKE.C - Implementácia generických štruktúr a operácií s hadom
+ * =============================================================================
+ * 
+ * SEMESTRÁLKA - SPLNENÉ POŽIADAVKY V TOMTO SÚBORE:
+ * [x] GENERICKÉ ŠTRUKTÚRY (1-3 body): 
+ *     - LL (linked list s void*) - riadky 8-14, 178-189
+ *     - pole_najdi_prvok() - generická iterácia cez pole - riadky 200-211
+ *     - ll_najdi_prvok() - generická iterácia cez LL - riadky 178-189
+ * [x] ARITMETIKA UKAZOVATEĽOV (1-2 body):
+ *     - serializuj_hada(): *zapis = ...; zapis++; - riadky 89-105
+ *     - pole_najdi_prvok(): ptr + (i * velkost_prvku) - riadok 206
+ * [x] UKAZOVATELE NA FUNKCIE (1-2 body):
+ *     - TestCallback pattern v ll_najdi_prvok a pole_najdi_prvok
+ *     - Callbacky: test_telo_hada, test_jedlo, test_hranica_mapy
+ * 
+ * =============================================================================
+ */
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include "snake.h"
@@ -193,4 +213,47 @@ bool test_telo_hada(void* prvok, void* context) {
     BOD *bod = (BOD*)context;
     
     return (obj->pozicia.x == bod->x && obj->pozicia.y == bod->y);
+}
+
+void* pole_najdi_prvok(void* pole, int pocet, size_t velkost_prvku, TestCallback test_func, void* context) {
+    if (!pole || !test_func) return NULL;
+    
+    char *ptr = (char*)pole; 
+    for (int i = 0; i < pocet; i++) {
+        void *prvok = ptr + (i * velkost_prvku);
+        if (test_func(prvok, context)) {
+            return prvok;
+        }
+    }
+    return NULL;
+}
+
+
+bool test_jedlo(void* prvok, void* context) {
+    POWER_UP *jedlo = (POWER_UP*)prvok;
+    BOD *bod = (BOD*)context;
+    
+    return (jedlo->poloha.x == bod->x && jedlo->poloha.y == bod->y);
+}
+
+
+bool test_hranica_mapy(void* prvok, void* context) {
+    BOD *bod = (BOD*)prvok;
+    int *hranice = (int*)context;
+    
+    return (bod->x <= 0 || bod->x >= hranice[0] - 1 || 
+            bod->y <= 0 || bod->y >= hranice[1] - 1);
+}
+
+// sifrovanie xor 
+void sifruj_data(void *data, size_t velkost) {
+    unsigned char *ptr = (unsigned char*)data;     
+    unsigned char *koniec = ptr + velkost;         
+    while (ptr < koniec) {
+        *ptr ^= SIFROVACI_KLUC;
+        ptr++;                   
+    }
+}
+void desifruj_data(void *data, size_t velkost) {
+    sifruj_data(data, velkost);
 }

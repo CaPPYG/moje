@@ -3,9 +3,11 @@
 #define MAPA_WIDTH 120
 #define MAPA_HEIGHT 30
 #define MAX_HRACOV 4
-#define POCET_JEDLA 5 
+#define POCET_JEDLA 8 
+#define SIFROVACI_KLUC 0xAB 
 
 #include <stdbool.h> 
+#include <stddef.h>
 
 typedef enum {
     HORE, DOLE, VLAVO, VPRAVO
@@ -61,15 +63,23 @@ void zmaz_hada(HAD *had);
 int serializuj_hada(HAD *had, BOD *buffer);
 bool skontroluj_koliziu_s_telom(HAD* had, BOD bod, bool preskoc_hlavu);
 
-// CALLBACK PATTERN - testuje prvky v LL
+// CALLBACK PATTERN - testuje prvky v LL alebo poli
 typedef bool (*TestCallback)(void* prvok, void* context);
 void* ll_najdi_prvok(LL* zoznam, TestCallback test_func, void* context);
+void* pole_najdi_prvok(void* pole, int pocet, size_t velkost_prvku, TestCallback test_func, void* context);
+
+// KOLÍZNE CALLBACKY
 bool test_telo_hada(void* prvok, void* context);
+bool test_jedlo(void* prvok, void* context);        
+bool test_hranica_mapy(void* prvok, void* context); 
 
 BOD get_pozicia_hlavy(HAD* had);
 void nastav_poziciu_hlavy(HAD* had, int x, int y);
 void resetuj_poziciu_hada(HAD* had, int x, int y);
 int get_dlzka_hada(HAD* had);
 void zmen_smer_hada(HAD* had, char klaves);
+
+void sifruj_data(void *data, size_t velkost);
+void desifruj_data(void *data, size_t velkost);
 
 #endif

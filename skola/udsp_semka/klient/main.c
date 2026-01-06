@@ -8,6 +8,8 @@
 #include "snake.h"
 #include "gui.h"
 
+pthread_mutex_t curses_mtx = PTHREAD_MUTEX_INITIALIZER;
+
 void* odosielaj_vstupy(void* data) {
     int sock = *((int*)data);
     while (1) {
@@ -39,7 +41,7 @@ int main() {
     inicializuj_ncurses();
 
     pthread_t vlakno_vstup;
-    int socket_copy = sock; // Bezpečnejšie poslať kópiu
+    int socket_copy = sock;
     pthread_create(&vlakno_vstup, NULL, odosielaj_vstupy, &socket_copy);
 
     while (1) {
@@ -47,25 +49,23 @@ int main() {
         int celkovo_prijate = 0;
         char *ptr = (char*)&stav;
 
-        // Cyklus, ktorý číta, kým nemá celú štruktúru
+        // číta celú štruktúru
         while (celkovo_prijate < (int)sizeof(HRA_STAV)) {
             int r = recv(sock, ptr + celkovo_prijate, sizeof(HRA_STAV) - celkovo_prijate, 0);
             if (r <= 0) {
-                // Ak sa spojenie preruší
                 endwin();
                 printf("Server ukoncil spojenie.\n");
                 return 0;
             }
             celkovo_prijate += r;
         }
+        desifruj_data(&stav, sizeof(HRA_STAV));
 
         vykresli_stav(&stav);
 
-        // KONIEC HRY (Ak sa server vypne)
         if (stav.koniec_hry) {
             vykresli_koniec(stav.sprava);
             pthread_join(vlakno_vstup, NULL);           
-            // Zobrazenie skóre na 5 sekúnd
             sleep(3);
             break;    
         }

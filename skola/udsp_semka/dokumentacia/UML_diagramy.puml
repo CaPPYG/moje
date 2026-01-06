@@ -1,0 +1,309 @@
+@startuml SNAKE_ARCHITEKTURA
+' =============================================================================
+' UML DIAGRAMY PRE SEMESTRÁLNU PRÁCU - SNAKE MULTIPLAYER
+' =============================================================================
+' Tieto diagramy môžeš renderovať cez:
+'   - https://www.plantuml.com/plantuml/uml
+'   - VS Code rozšírenie "PlantUML"
+'   - IntelliJ IDEA plugin
+' =============================================================================
+
+title ARCHITEKTÚRA APLIKÁCIE - KOMPONENTOVÝ DIAGRAM
+
+package "SERVER" {
+    [main.c] as SM
+    [logika.c] as SL
+}
+
+package "KLIENT" {
+    [main.c] as KM
+    [gui.c] as KG
+}
+
+package "SPOLOČNÉ" {
+    [snake.c] as SC
+    note right of SC : Definície štruktúr\na správanie hada
+}
+
+database "TCP Socket\nPort 12345" as NET
+
+SM --> SL : pthread_create()
+SL --> SC : pohni_hada(), serializuj_hada()
+SM --> SC : #include
+
+KM --> KG : vykresli_stav()
+KM --> SC : desifruj_data()
+
+SM -down-> NET : send() [šifrované]
+NET -down-> KM : recv() [šifrované]
+KM -up-> NET : send() [klávesy]
+NET -up-> SM : recv() [klávesy]
+
+@enduml
+
+' =============================================================================
+@startuml SNAKE_TRIEDY
+title DIAGRAM TRIED (ŠTRUKTÚRY)
+
+class BOD {
+    +int x
+    +int y
+}
+
+class OBJEKT {
+    +BOD pozicia
+    +char znak
+}
+
+class LL <<Generický Linked List>> {
+    +void* data
+    +LL* next
+}
+
+class HAD {
+    +LL* hlava
+    +LL* chvost
+    +int velkost
+    +int aktualny_smer
+    +int turbo_counter
+}
+
+class POWER_UP {
+    +BOD poloha
+    +TYP_BONUSU typ
+}
+
+class HRA_STAV <<Sieťový prenos>> {
+    +BOD polohy[MAX_HRACOV][100]
+    +int dlzky[MAX_HRACOV]
+    +bool aktivny[MAX_HRACOV]
+    +POWER_UP jedla[POCET_JEDLA]
+    +bool koniec_hry
+    +char sprava[128]
+}
+
+class SERVER_DATA {
+    +HAD* hadi[MAX_HRACOV]
+    +int klientske_sockety[MAX_HRACOV]
+    +bool sloty_obsadene[MAX_HRACOV]
+    +pthread_mutex_t mutex_hra
+    +volatile bool hra_bezi
+    +volatile bool server_sa_vypina
+    +POWER_UP mapa_jedla[POCET_JEDLA]
+}
+
+HAD "1" *-- "*" LL : hlava/chvost
+LL "1" *-- "1" OBJEKT : data (void*)
+OBJEKT *-- BOD : pozicia
+POWER_UP *-- BOD : poloha
+SERVER_DATA "1" *-- "4" HAD : hadi[]
+SERVER_DATA "1" *-- "5" POWER_UP : mapa_jedla[]
+HRA_STAV "1" *-- "*" BOD : polohy[][]
+HRA_STAV "1" *-- "5" POWER_UP : jedla[]
+
+note right of LL
+  GENERICKÁ ŠTRUKTÚRA
+  void* data umožňuje
+  uložiť ľubovoľný typ
+end note
+
+@enduml
+
+' =============================================================================
+@startuml SNAKE_SEKVENCIA
+title SEKVENČNÝ DIAGRAM - HERNÝ CYKLUS
+
+participant "Klient 1" as K1
+participant "Klient 2" as K2
+participant "Server\n(accept loop)" as SA
+participant "Herná slučka\n(vlákno)" as HL
+participant "Vstup vlákno 1" as V1
+participant "Vstup vlákno 2" as V2
+
+== PRIPOJENIE ==
+K1 -> SA: connect()
+SA -> SA: vytvor_hada()
+SA -> V1: pthread_create()
+SA --> K1: slot pridelený
+
+K2 -> SA: connect()
+SA -> SA: vytvor_hada()
+SA -> V2: pthread_create()
+SA --> K2: slot pridelený
+
+== HERNÝ CYKLUS (20 FPS) ==
+loop každých 50ms
+    K1 -> V1: send('w')
+    V1 -> HL: zmen_smer_hada()
+    
+    HL -> HL: pohni_hada()
+    HL -> HL: test_jedlo() [pole_najdi_prvok]
+    HL -> HL: test_hranica_mapy()
+    HL -> HL: test_telo_hada() [ll_najdi_prvok]
+    HL -> HL: serializuj_hada()
+    HL -> HL: sifruj_data()
+    
+    HL --> K1: send(HRA_STAV) [šifrované]
+    HL --> K2: send(HRA_STAV) [šifrované]
+    
+    K1 -> K1: desifruj_data()
+    K1 -> K1: vykresli_stav()
+    
+    K2 -> K2: desifruj_data()
+    K2 -> K2: vykresli_stav()
+end
+
+== UKONČENIE (Ctrl+C) ==
+SA -> SA: signal(SIGINT)
+SA -> HL: server_sa_vypina = true
+HL -> HL: stav.koniec_hry = true
+HL -> HL: sifruj_data()
+HL --> K1: send("SERVER VYPNUTY!")
+HL --> K2: send("SERVER VYPNUTY!")
+K1 -> K1: vykresli_koniec()
+K2 -> K2: vykresli_koniec()
+
+@enduml
+
+' =============================================================================
+@startuml SNAKE_KOLIZIE
+title DIAGRAM AKTIVÍT - KONTROLA KOLÍZIÍ
+
+start
+:Získaj pozíciu hlavy;
+
+partition "1. KOLÍZIA S JEDLOM" {
+    :pole_najdi_prvok(mapa_jedla, test_jedlo, &hlava);
+    if (nájdené jedlo?) then (áno)
+        :rastie = 1;
+        :reakcie[typ](sd, hrac);
+        note right: UKAZOVATEĽ NA FUNKCIU
+        :generuj_nove_jedlo();
+    else (nie)
+    endif
+}
+
+:pohni_hada(had, rastie);
+:Aktualizuj pozíciu hlavy;
+
+partition "2. KOLÍZIA S HRANICAMI" {
+    :test_hranica_mapy(&hlava, hranice);
+    if (mimo mapy?) then (áno)
+        :respawn_hada();
+        stop
+    else (nie)
+    endif
+}
+
+partition "3. KOLÍZIA S HADMI" {
+    :Pre každého hada j;
+    :ll_najdi_prvok(telo, test_telo_hada, &hlava);
+    note right
+        GENERICKÁ FUNKCIA
+        s CALLBACK patternrom
+    end note
+    if (kolízia?) then (áno)
+        :respawn_hada();
+        stop
+    else (nie)
+    endif
+}
+
+:Pokračuj v hre;
+stop
+
+@enduml
+
+' =============================================================================
+@startuml SNAKE_UKAZOVATELE
+title UKAZOVATELE NA FUNKCIE - POWER-UP SYSTÉM
+
+class "PowerUpFunc" as PUF <<typedef>> {
+    void (*)(void* data, int hrac)
+}
+
+class "efekt_klasik" as EK {
+    +void efekt_klasik(void*, int)
+    --
+    Obyčajné jablko
+    Had rastie o 1
+}
+
+class "efekt_turbo" as ET {
+    +void efekt_turbo(void*, int)
+    --
+    Turbo boost
+    had->turbo_counter += 30
+}
+
+class "efekt_double" as ED {
+    +void efekt_double(void*, int)
+    --
+    Double body
+    Had rastie o 2
+}
+
+class "reakcie[]" as R <<pole ukazovateľov>> {
+    reakcie[0] = efekt_klasik
+    reakcie[1] = efekt_turbo
+    reakcie[2] = efekt_double
+    --
+    Volanie: reakcie[typ](sd, i)
+}
+
+PUF <|.. EK
+PUF <|.. ET
+PUF <|.. ED
+
+R --> EK : [0]
+R --> ET : [1]
+R --> ED : [2]
+
+note bottom of R
+    SEMESTRÁLKA: Ukazovatele na funkcie
+    Dynamický výber funkcie podľa typu power-upu
+end note
+
+@enduml
+
+' =============================================================================
+@startuml SNAKE_SIFROVANIE
+title ŠIFROVANÁ KOMUNIKÁCIA - XOR ŠIFRA
+
+participant "Server" as S
+participant "Sieť (TCP)" as N
+participant "Klient" as K
+
+S -> S: Priprav HRA_STAV
+note right of S
+    Nešifrované dáta:
+    { polohy, dlzky, jedla... }
+end note
+
+S -> S: sifruj_data(&stav, sizeof)
+note right of S
+    XOR každý byte s kľúčom 0xAB
+    ptr ^= SIFROVACI_KLUC; ptr++;
+    (ARITMETIKA UKAZOVATEĽOV)
+end note
+
+S -> N: send(šifrované dáta)
+note over N
+    Dáta v sieti sú
+    nečitateľné bez kľúča
+end note
+
+N -> K: recv(šifrované dáta)
+
+K -> K: desifruj_data(&stav, sizeof)
+note left of K
+    XOR je symetrická operácia:
+    data ^ key ^ key = data
+end note
+
+K -> K: vykresli_stav()
+note left of K
+    Pôvodné dáta obnovené
+end note
+
+@enduml

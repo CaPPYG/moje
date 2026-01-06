@@ -8,12 +8,9 @@
 #include <errno.h>
 #include <time.h>
 
-// --- EFEKTY POWER-UPOV ---
-// UKAZOVATELE NA FUNKCIE (ZADANIE: 1-2 body)
 // Každý efekt je funkcia s podpisom: void (*)(void *data, int hrac)
-
 void efekt_klasik(void *data, int hrac) {
-    (void)data; // Potlačenie warningu
+    (void)data;
     printf("[LOG] Hrac %d zjedol Jablko.\n", hrac + 1);
 }
 
@@ -34,12 +31,10 @@ void efekt_double(void *data, int hrac) {
     }
 }
 
-// Pole ukazovateľov na funkcie (používa tvoj LL prístup cez void*)
-// UKAZOVATELE NA FUNKCIE - pole funkcií ktoré sa vyvolávajú podľa typu power-upu
 typedef void (*PowerUpFunc)(void*, int);
 PowerUpFunc reakcie[] = {efekt_klasik, efekt_turbo, efekt_double};
 
-// --- POMOCNÉ FUNKCIE ---
+// pomocne
 
 void respawn_hada(HAD *had) {
     if (!had) return;
@@ -54,7 +49,7 @@ void generuj_nove_jedlo(SERVER_DATA *sd, int index) {
     sd->mapa_jedla[index].typ = rand() % 3;
 }
 
-// --- VLÁKNO PRE VSTUPY ---
+// vlakno pre vstupy
 
 void* spracuj_vstupy(void* data) {
     VSTUP_ARGS *args = (VSTUP_ARGS*)data;
@@ -79,7 +74,6 @@ void* spracuj_vstupy(void* data) {
             }
             pthread_mutex_unlock(&sd->mutex_hra);
         } else if (r <= 0) {
-            // Disconnect - klient sa odpojil
             break; 
         }
     }
@@ -91,15 +85,14 @@ void* spracuj_vstupy(void* data) {
     sd->hadi[index] = NULL;
     sd->sloty_obsadene[index] = false;
     
-    // Skontroluj ci su este nejaci hraci
+    
     int pocet_hracov = 0;
     for (int i = 0; i < MAX_HRACOV; i++) {
         if (sd->sloty_obsadene[i]) {
             pocet_hracov++;
         }
-    }
-    
-    // Ak neni ziadny hrac, vypni server
+    }    
+    // ziadny hrac, vypni server
     if (pocet_hracov == 0) {
         printf("[INFO] Ziadni hraci na serveri. Server sa vypina...\n");
         sd->server_sa_vypina = true;
@@ -108,8 +101,6 @@ void* spracuj_vstupy(void* data) {
     
     return NULL;
 }
-
-// --- HLAVNÁ HERNÁ SLUČKA ---
 
 void* herna_slucka(void* data) {
     SERVER_DATA *sd = (SERVER_DATA*)data;
@@ -126,12 +117,16 @@ void* herna_slucka(void* data) {
         memset(&stav, 0, sizeof(HRA_STAV));
         pthread_mutex_lock(&sd->mutex_hra);
 
+        // ked sa vypina
         if (sd->server_sa_vypina) {
             stav.koniec_hry = true;
             for (int i = 0; i < MAX_HRACOV; i++) {
                 if (sd->sloty_obsadene[i]) {
                     sprintf(stav.sprava, "SERVER VYPNUTY! Body: %d", get_dlzka_hada(sd->hadi[i]));
-                    send(sd->klientske_sockety[i], &stav, sizeof(HRA_STAV), 0);
+                    // Šifruj pred odoslaním
+                    HRA_STAV stav_kopia = stav;
+                    sifruj_data(&stav_kopia, sizeof(HRA_STAV));
+                    send(sd->klientske_sockety[i], &stav_kopia, sizeof(HRA_STAV), 0);
                 }
             }
             pthread_mutex_unlock(&sd->mutex_hra);
@@ -157,9 +152,8 @@ void* herna_slucka(void* data) {
         }
 
         for (int i = 0; i < MAX_HRACOV; i++) {
-            if (sd->sloty_obsadene[i] && sd->hadi[i]) {
+            if (sd->sloty_obsadene[i] && sd->hadi[i]) {             
                 
-                // Určenie pohybu (Turbo logika)
                 bool pohni_sa = false;
                 if (sd->hadi[i]->turbo_counter > 0) {
                     pohni_sa = true; // Turbo had ide v každom tiku
@@ -172,56 +166,60 @@ void* herna_slucka(void* data) {
                     BOD hlava = get_pozicia_hlavy(sd->hadi[i]);
                     int rastie = 0;
 
-                    // 1. Kolízia s jedlom
-                    for (int j = 0; j < POCET_JEDLA; j++) {
-                        if (hlava.x == sd->mapa_jedla[j].poloha.x && hlava.y == sd->mapa_jedla[j].poloha.y) {
-                            rastie = 1;
-                            reakcie[sd->mapa_jedla[j].typ](sd, i);
-                            generuj_nove_jedlo(sd, j);
-                        }
+                    // 1. kolizia s jedlom
+                    POWER_UP *zjedene = (POWER_UP*)pole_najdi_prvok(
+                        sd->mapa_jedla, POCET_JEDLA, sizeof(POWER_UP), 
+                        test_jedlo, &hlava
+                    );
+                    if (zjedene) {
+                        rastie = 1;
+                        reakcie[zjedene->typ](sd, i);
+                        int index = (int)(zjedene - sd->mapa_jedla);
+                        generuj_nove_jedlo(sd, index);
                     }
 
-                    // 2. Samotný pohyb (Linked List update)
+                    // 2. samotný pohyb
                     pohni_hada(sd->hadi[i], rastie);
                     hlava = get_pozicia_hlavy(sd->hadi[i]);
 
-                    // 3. Kolízia s hranicami
-                    if (hlava.x <= 0 || hlava.x >= MAPA_WIDTH - 1 || hlava.y <= 0 || hlava.y >= MAPA_HEIGHT - 1) {
+                    // 3. kolizia s hranicami
+                    int hranice[2] = {MAPA_WIDTH, MAPA_HEIGHT};
+                    if (test_hranica_mapy(&hlava, hranice)) {
+                        printf("[COLLISION] Hrac %d narazil do steny!\n", i + 1);
                         respawn_hada(sd->hadi[i]);
+                        continue;
                     }
 
-                    // 4. Kolízia s inými objektmi (Hadi a ich telá)
+                    // 4. kolizia s hadmi
                     for (int j = 0; j < MAX_HRACOV; j++) {
                         if (sd->sloty_obsadene[j] && sd->hadi[j]) {
-                            
-                            // URČENIE ŠTARTOVACIEHO BODU PRE TEST
-                            // Ak kontrolujem seba (i == j), musím začať od krku (hlava->next), 
-                            // inak hlava koliduje s hlavou a had by bol v nekonečnom respawne.
+                            // ked i == j cize sameho seba tak ideme od krku xd
                             LL *zaciatok_testu = (i == j) ? sd->hadi[j]->hlava->next : sd->hadi[j]->hlava;
 
-                            // GENERICKÉ VOLANIE
-                            // ll_najdi_prvok vráti void* na OBJEKT, ak dôjde ku kolízii, inak NULL
                             if (ll_najdi_prvok(zaciatok_testu, test_telo_hada, &hlava)) {
                                 printf("[COLLISION] Hrac %d narazil do %s!\n", i + 1, (i == j) ? "seba" : "ineho hraca");
                                 respawn_hada(sd->hadi[i]);
-                                break; // Po respawne už netreba kontrolovať ďalšie kolízie v tomto tiku
+                                break;
                             }
                         }
                     }
                 }
-
-                // Serializácia do poľa pre sieťový prenos (v každom tiku pre plynulosť)
                 stav.dlzky[i] = serializuj_hada(sd->hadi[i], stav.polohy[i]);
                 stav.aktivny[i] = true;
             }
         }
+        // kopirovanie jedal do stavu
+        POWER_UP *src = sd->mapa_jedla;       
+        POWER_UP *dst = stav.jedla;               
+        POWER_UP *koniec = src + POCET_JEDLA;     
         
-        // Skopírujeme jedlo do stavu pre klienta
-        for (int i = 0; i < POCET_JEDLA; i++) stav.jedla[i] = sd->mapa_jedla[i];
+        while (src < koniec) {
+            *dst++ = *src++;  // Kopíruj a posuň oba pointre
+        }
 
         pthread_mutex_unlock(&sd->mutex_hra);
+        sifruj_data(&stav, sizeof(HRA_STAV));
 
-        // Rozoslanie dát
         for (int i = 0; i < MAX_HRACOV; i++) {
             if (sd->sloty_obsadene[i]) {
                 send(sd->klientske_sockety[i], &stav, sizeof(HRA_STAV), 0);

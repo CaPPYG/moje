@@ -1,3 +1,21 @@
+# =============================================================================
+# MAKEFILE - Zostavení semestrálnej práce
+# =============================================================================
+#
+# SEMESTRÁLKA - SPLNENÉ POŽIADAVKY:
+# [x] MAKEFILE (1 bod): Kompilovateľné cez 'make all'
+# [x] ROZČLENENIE MODULOV: datove_typy/, server/, klient/
+#
+# POUŽITIE:
+#   make          - Skompiluje server_app aj klient_app
+#   make clean    - Zmaže binárky
+#
+# OVERENIE ÚNIKOV PAMÄTE (Valgrind):
+#   valgrind --leak-check=full ./server_app
+#   valgrind --leak-check=full ./klient_app
+#
+# =============================================================================
+
 # Kompilátor a vlajky
 CC = gcc
 CFLAGS = -Wall -Wextra -I./datove_typy -I./server -I./klient
