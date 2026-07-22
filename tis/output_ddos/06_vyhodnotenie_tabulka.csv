@@ -1,0 +1,16 @@
+﻿Parameter;Sigma Tunel;Falošné Poplachy (FP);Doba Detekcie [ms]
+avg;±1σ;122;10.0
+avg;±2σ;57;10.0
+avg;±3σ;47;10.0
+std;±1σ;143;10.0
+std;±2σ;70;13.0
+std;±3σ;53;13.0
+cv;±1σ;160;14.0
+cv;±2σ;120;15.0
+cv;±3σ;84;521.0
+skewness;±1σ;145;10.0
+skewness;±2σ;119;13.0
+skewness;±3σ;94;13.0
+q;±1σ;121;10.0
+q;±2σ;63;10.0
+q;±3σ;50;10.0
