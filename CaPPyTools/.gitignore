@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Výstupné priečinky a médiá
+*_cleaned/
+CaPPy_output/
+Downloads/reels/
+*.mp4
+*.mov
+*.mkv
+*.webm
