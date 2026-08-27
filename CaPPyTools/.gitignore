@@ -13,3 +13,11 @@ Downloads/reels/
 *.mov
 *.mkv
 *.webm
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Nastavenia appky
+config.json
