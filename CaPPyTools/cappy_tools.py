@@ -149,6 +149,13 @@ SAFE_FILTERS = {
 # ── Global server state ───────────────────────────────────────────────────────
 _srv = {"schedule": [], "devices": [], "output_dir": "", "videos": [], "server": None}
 
+# ── Konfigurácia (config.json vedľa appky / exe) ─────────────────────────────
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+
 # ─── UI helpers ───────────────────────────────────────────────────────────────
 
 # Plannerský postup – klikateľné kroky (záložky Videá..Drive)
@@ -949,6 +956,21 @@ class LocationSection(tk.LabelFrame):
                 self.marker.delete()
             self.marker = self.map_widget.set_marker(lat, lon)
 
+    def load(self, cfg):
+        """Načíta GPS nastavenia z config.json."""
+        if not cfg:
+            return
+        if "location_enabled" in cfg:
+            self.enabled_var.set(bool(cfg["location_enabled"]))
+        if cfg.get("lat"):
+            self.lat_var.set(str(cfg["lat"]))
+        if cfg.get("lon"):
+            self.lon_var.set(str(cfg["lon"]))
+        if cfg.get("jitter"):
+            self.jitter_var.set(str(cfg["jitter"]))
+        if cfg.get("city"):
+            self.city_var.set(str(cfg["city"]))
+
     def get_coords(self):
         """Returns (enabled, lat, lon, jitter) – base coords without extra jitter applied."""
         if not self.enabled_var.get():
@@ -1003,6 +1025,21 @@ class FiltersSection(tk.LabelFrame):
 
     def get_states(self):
         return {fid: card.get_state() for fid, card in self.cards.items()}
+
+    def set_states(self, states):
+        """Načíta stavy filtrov z config.json."""
+        for fid, st in (states or {}).items():
+            card = self.cards.get(fid)
+            if not card:
+                continue
+            card.set_enabled(bool(st.get("enabled", True)))
+            if card.has_range:
+                try:
+                    card.min_var.set(float(st.get("min", card._dmin)))
+                    card.max_var.set(float(st.get("max", card._dmax)))
+                except (TypeError, ValueError):
+                    pass
+            card._update_labels()
 
 # ─── Device Fingerprint Section ──────────────────────────────────────────────
 
@@ -1122,6 +1159,24 @@ class DeviceFingerprintSection(tk.LabelFrame):
             "artist":        self.artist_var.get(),
             "comment":       self.comment_var.get(),
         }
+
+    def load_settings(self, cfg):
+        """Načíta fingerprint nastavenia z config.json."""
+        if not cfg:
+            return
+        if cfg.get("mode"):
+            self.mode_var.set(cfg["mode"])
+            self._set_mode(self.mode_var.get())
+        if cfg.get("device"):
+            self.device_var.set(cfg["device"])
+        if cfg.get("days_back"):
+            self.days_var.set(str(cfg["days_back"]))
+        self.title_var.set(cfg.get("title", ""))
+        self.artist_var.set(cfg.get("artist", ""))
+        self.comment_var.set(cfg.get("comment", ""))
+        self.rand_date_var.set(bool(cfg.get("random_date", True)))
+        self.rand_uid_var.set(bool(cfg.get("random_uid", True)))
+        self.no_sig_var.set(bool(cfg.get("no_ffmpeg_sig", True)))
 # ─── Metadata Cleaner Tab ─────────────────────────────────────────────────────
 
 class MetadataTab(tk.Frame):
@@ -1536,6 +1591,19 @@ class DownloaderTab(tk.Frame):
             self._log(f"  ✗ {e}")
         self.update_btn.config(state="normal")
 
+    def load(self, cfg):
+        """Načíta nastavenia sťahovania z config.json."""
+        if not cfg:
+            return
+        if cfg.get("folder"):
+            self.folder_var.set(cfg["folder"])
+        if cfg.get("cookies_mode"):
+            self.cookies_mode.set(cfg["cookies_mode"])
+        if cfg.get("browser"):
+            self.browser_var.set(cfg["browser"])
+        if cfg.get("cookies_file"):
+            self.cookies_file_var.set(cfg["cookies_file"])
+
     def _run(self, links, out_folder):
         self._log(f"Spúšťam – {len(links)} linkov → {out_folder}\n")
         mode = self.cookies_mode.get()
@@ -1647,6 +1715,16 @@ class VideoTab(tk.Frame):
         self.listbox.delete(0, "end")
         self._update()
 
+    def load(self, paths):
+        """Načíta zoznam videí z config.json."""
+        self.videos.clear()
+        self.listbox.delete(0, "end")
+        for p in (paths or []):
+            if os.path.isfile(p) and p not in self.videos:
+                self.videos.append(p)
+                self.listbox.insert("end", os.path.basename(p))
+        self._update()
+
 # ─── Planner: Devices Tab ─────────────────────────────────────────────────────
 
 class DevicesTab(tk.Frame):
@@ -1743,6 +1821,13 @@ class DevicesTab(tk.Frame):
         self.devices.pop(i)
         self._refresh_list()
         if self.on_change: self.on_change()
+
+    def load(self, devices):
+        """Načíta zariadenia z config.json."""
+        self.devices.clear()
+        self.devices.extend(devices or [])
+        self._refresh_list()
+        if self.on_change: self.on_change()
 # ─── Planner: Schedule Tab ────────────────────────────────────────────────────
 
 class ScheduleTab(tk.Frame):
@@ -1754,6 +1839,7 @@ class ScheduleTab(tk.Frame):
         self._output_dir = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "CaPPy_output"))
         self._cancelled  = False
         self.on_server_start = None
+        self.on_saved = None
 
         self.step_bar = StepBar(self, 2)
         self.step_bar.pack(fill="x", padx=16, pady=(12, 2))
@@ -1835,6 +1921,21 @@ class ScheduleTab(tk.Frame):
         self._log_box.config(state="disabled")
         self.update_idletasks()
 
+    def load(self, cfg):
+        """Načíta nastavenia rozvrhu z config.json."""
+        if not cfg:
+            return
+        if cfg.get("output_dir"):
+            self._output_dir.set(cfg["output_dir"])
+        if cfg.get("start_date"):
+            self._start_var.set(cfg["start_date"])
+        if "vmin" in cfg:
+            self._vmin.set(int(cfg["vmin"]))
+        if "vmax" in cfg:
+            self._vmax.set(int(cfg["vmax"]))
+        if "update_originals" in cfg:
+            self.orig_var.set(bool(cfg["update_originals"]))
+
     def _generate_and_serve(self):
         self._generate()
         if self.on_server_start:
@@ -1910,6 +2011,8 @@ class ScheduleTab(tk.Frame):
         # Save schedule.json
         with open(os.path.join(out_dir, "schedule.json"), "w") as f:
             json.dump(schedule_to_json(schedule, devices, videos), f, indent=2, ensure_ascii=False)
+        if self.on_saved:
+            self.on_saved()
 
         total = sum(len(vids) for _, day in schedule for vids in day.values())
         if self.orig_var.get():
@@ -2133,6 +2236,15 @@ class DriveTab(tk.Frame):
         self._log_box.see("end")
         self._log_box.config(state="disabled")
         self.update_idletasks()
+
+    def load(self, cfg):
+        """Načíta Drive nastavenia z config.json."""
+        if not cfg:
+            return
+        if cfg.get("remote"):
+            self.remote_var.set(cfg["remote"])
+        if cfg.get("target"):
+            self.target_var.set(cfg["target"])
 
     def _open_config(self):
         try:
@@ -2388,6 +2500,88 @@ def run_dep_check(root):
     return restart
 
 
+# ─── Ukladanie / načítanie nastavení (config.json) ───────────────────────────
+
+def load_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def save_config(app):
+    try:
+        cfg = {
+            "videos": list(app.vid_tab.videos),
+            "devices": list(app.dev_tab.devices),
+            "schedule": {
+                "output_dir": app.sch_tab._output_dir.get(),
+                "start_date": app.sch_tab._start_var.get(),
+                "vmin": app.sch_tab._vmin.get(),
+                "vmax": app.sch_tab._vmax.get(),
+                "update_originals": app.sch_tab.orig_var.get(),
+            },
+            "downloader": {
+                "folder": app.dl_tab.folder_var.get(),
+                "cookies_mode": app.dl_tab.cookies_mode.get(),
+                "browser": app.dl_tab.browser_var.get(),
+                "cookies_file": app.dl_tab.cookies_file_var.get(),
+            },
+            "drive": {
+                "remote": app.drive_tab.remote_var.get(),
+                "target": app.drive_tab.target_var.get(),
+            },
+            "cleaner": {
+                "lat": app.meta_tab.location.lat_var.get(),
+                "lon": app.meta_tab.location.lon_var.get(),
+                "jitter": app.meta_tab.location.jitter_var.get(),
+                "city": app.meta_tab.location.city_var.get(),
+                "location_enabled": app.meta_tab.location.enabled_var.get(),
+                "copies": app.meta_tab.copies_var.get(),
+                "update_originals": app.meta_tab.orig_var.get(),
+                "filters": app.meta_tab.filters.get_states(),
+                "fingerprint": {
+                    "mode": app.meta_tab.fingerprint.mode_var.get(),
+                    "device": app.meta_tab.fingerprint.device_var.get(),
+                    "days_back": app.meta_tab.fingerprint.days_var.get(),
+                    "title": app.meta_tab.fingerprint.title_var.get(),
+                    "artist": app.meta_tab.fingerprint.artist_var.get(),
+                    "comment": app.meta_tab.fingerprint.comment_var.get(),
+                    "random_date": app.meta_tab.fingerprint.rand_date_var.get(),
+                    "random_uid": app.meta_tab.fingerprint.rand_uid_var.get(),
+                    "no_ffmpeg_sig": app.meta_tab.fingerprint.no_sig_var.get(),
+                },
+            },
+        }
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def apply_config(app, cfg):
+    if not cfg:
+        return
+    app.vid_tab.load(cfg.get("videos"))
+    app.dev_tab.load(cfg.get("devices"))
+    app.sch_tab.load(cfg.get("schedule"))
+    app.dl_tab.load(cfg.get("downloader"))
+    app.drive_tab.load(cfg.get("drive"))
+    cleaner = cfg.get("cleaner") or {}
+    if cleaner:
+        app.meta_tab.location.load(cleaner)
+        if "copies" in cleaner:
+            try:
+                app.meta_tab.copies_var.set(int(cleaner["copies"]))
+            except (TypeError, ValueError):
+                pass
+        if "update_originals" in cleaner:
+            app.meta_tab.orig_var.set(bool(cleaner["update_originals"]))
+        app.meta_tab.filters.set_states(cleaner.get("filters"))
+        app.meta_tab.fingerprint.load_settings(cleaner.get("fingerprint"))
+
+
 # ── Main App ──────────────────────────────────────────────────────────────────
 
 class PlannerApp:
@@ -2433,9 +2627,11 @@ class PlannerApp:
         self.srv_tab = ServerTab(self.nb)
         self.drive_tab = DriveTab(self.nb,
                                    get_output_dir=lambda: _srv["output_dir"])
+        self.meta_tab = MetadataTab(self.nb)
+        self.dl_tab = DownloaderTab(self.nb)
 
-        self.nb.add(MetadataTab(self.nb), text="  Metadata Cleaner  ")
-        self.nb.add(DownloaderTab(self.nb), text="  Reels Downloader  ")
+        self.nb.add(self.meta_tab, text="  Metadata Cleaner  ")
+        self.nb.add(self.dl_tab, text="  Reels Downloader  ")
         self.nb.add(self.vid_tab, text="  Videá  ")
         self.nb.add(self.dev_tab, text="  Zariadenia  ")
         self.nb.add(self.sch_tab, text="  Rozvrh  ")
@@ -2443,8 +2639,12 @@ class PlannerApp:
         self.nb.add(self.drive_tab, text="  Drive  ")
 
         self.sch_tab.on_server_start = self._generate_and_serve
+        self.sch_tab.on_saved = self._save_config
         for tab in (self.vid_tab, self.dev_tab, self.sch_tab, self.srv_tab, self.drive_tab):
             tab.step_bar.set_nav(self._goto_planner)
+
+        apply_config(self, load_config())
+        root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _generate_and_serve(self):
         self.srv_tab.start_now()
@@ -2465,6 +2665,14 @@ class PlannerApp:
         self.vid_tab.summary_var.set(msg)
         self.dev_tab.summary_var.set(msg)
         self.sch_tab._info_var.set(msg)
+        self._save_config()
+
+    def _save_config(self):
+        save_config(self)
+
+    def _on_close(self):
+        self._save_config()
+        self.root.destroy()
 
 
 def main():
