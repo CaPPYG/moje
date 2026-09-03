@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>☀️ Solar Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/solar/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">☀️</div>
+      <div class="brand-text">
+        <h1>Solar Monitor</h1>
+        <div class="subtitle">Siseli PV · live</div>
+      </div>
+    </div>
+    <div class="badges">
+      <span id="status-badge" class="badge offline">Offline</span>
+      <span id="mode-badge" class="badge idle">idle</span>
+      <span id="clock"></span>
+    </div>
+    <button id="refresh-btn" class="refresh-btn" title="Obnoviť dáta" aria-label="Obnoviť">↻</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <!-- Battery SOC is the primary instrument: largest, first, most visible -->
+      <article class="card stat battery">
+        <div class="gauge">
+          <svg viewBox="0 0 120 120">
+            <circle class="track" cx="60" cy="60" r="52"></circle>
+            <circle class="bar" id="soc-bar" cx="60" cy="60" r="52"></circle>
+          </svg>
+          <div class="gauge-center">
+            <span class="num" id="bat-soc">—</span>
+            <small>SOC %</small>
+          </div>
+        </div>
+        <div class="stat-label">Batéria</div>
+        <div class="stat-second" id="bat-voltage">—</div>
+        <div class="stat-power" id="bat-power">—</div>
+      </article>
+
+      <article class="card stat solar">
+        <span class="stat-icon">☀️</span>
+        <div class="stat-label">Panely &amp; Dom</div>
+        <div class="flow-grid">
+          <div class="flow-item"><span class="flow-lbl">Panely – výkon</span><span class="flow-val"><span id="hero-pv-w">—</span><small>W</small></span></div>
+          <div class="flow-item"><span class="flow-lbl">Panely – napätie</span><span class="flow-val"><span id="hero-pv-v">—</span><small>V</small></span></div>
+          <div class="flow-item"><span class="flow-lbl">Dom – spotreba</span><span class="flow-val"><span id="hero-load-w">—</span><small>W</small></span></div>
+          <div class="flow-item"><span class="flow-lbl">Dom – napätie</span><span class="flow-val"><span id="hero-load-v">—</span><small>V</small></span></div>
+        </div>
+      </article>
+
+      <article class="card stat today">
+        <span class="stat-icon">📈</span>
+        <div class="stat-label">Dnes vyrobené</div>
+        <div class="stat-value-big"><span id="daily-kwh">—</span><span class="stat-unit">kWh</span></div>
+        <div class="stat-total" id="daily-sub">—</div>
+      </article>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <div class="card-head"><h3>🔋 Batéria</h3><span class="chip" id="charge-chip">—</span></div>
+        <dl>
+          <dt>Napätie</dt><dd id="b-voltage">—</dd>
+          <dt>Prúd</dt><dd id="b-current">—</dd>
+          <dt>Výkon</dt><dd id="b-power">—</dd>
+          <dt>SOH</dt><dd id="b-soh">—</dd>
+          <dt>Kapacita (zost.)</dt><dd id="b-rem">—</dd>
+          <dt>Nominálna kapacita</dt><dd id="b-nom">—</dd>
+          <dt>Počet cyklov</dt><dd id="b-cycles">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>🌡️ Teploty &amp; Balancovanie</h3><span class="chip">BMS</span></div>
+        <dl>
+          <dt>MOS</dt><dd id="b-tmos">—</dd>
+          <dt>Teplota 1</dt><dd id="b-t1">—</dd>
+          <dt>Teplota 2</dt><dd id="b-t2">—</dd>
+          <dt>Bal. prúd</dt><dd id="b-balcur">—</dd>
+          <dt>Bal. akcia</dt><dd id="b-balact">—</dd>
+          <dt>Nabíjací MOSFET</dt><dd id="b-chg">—</dd>
+          <dt>Vybíjací MOSFET</dt><dd id="b-dchg">—</dd>
+          <dt>Chyby (bitmask)</dt><dd id="b-err">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>☀️ Panely</h3><span class="chip">invertor</span></div>
+        <dl>
+          <dt>Aktuálny výkon</dt><dd id="pv-detail">—</dd>
+          <dt>Inštalovaná kapacita</dt><dd id="pv-cap">—</dd>
+          <dt>Dnes</dt><dd id="pv-daily">—</dd>
+          <dt>Mesiac</dt><dd id="pv-monthly">—</dd>
+          <dt>Rok</dt><dd id="pv-yearly">—</dd>
+          <dt>Celkom</dt><dd id="pv-total">—</dd>
+          <dt>Zariadenia</dt><dd id="devices">—</dd>
+          <dt>Posledné dáta</dt><dd id="vendor-ts">—</dd>
+          <dt>Stav stanice</dt><dd id="pv-status">—</dd>
+          <dt>Invertor – výkon</dt><dd id="inv-power">—</dd>
+          <dt>Invertor – online</dt><dd id="inv-online">—</dd>
+          <dt>Invertor – posl. dáta</dt><dd id="inv-ts">—</dd>
+          <dt>Invertor – názov</dt><dd id="inv-name">—</dd>
+          <dt>Invertor – stav</dt><dd id="inv-state">—</dd>
+          <dt>Invertor – alarm</dt><dd id="inv-alarm">—</dd>
+          <dt>Invertor – dnes</dt><dd id="inv-daily">—</dd>
+          <dt>Invertor – celkom</dt><dd id="inv-total">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>⚡ Tok energie</h3><span class="chip" id="flow-time">—</span></div>
+        <dl>
+          <dt>Panely – výkon</dt><dd id="f-pv-kw">—</dd>
+          <dt>Panely – napätie</dt><dd id="f-pv-v">—</dd>
+          <dt>Dom – spotreba</dt><dd id="f-load-kw">—</dd>
+          <dt>Dom – napätie</dt><dd id="f-load-v">—</dd>
+          <dt>Batéria – výkon</dt><dd id="f-bat-kw">—</dd>
+          <dt>Batéria – napätie</dt><dd id="f-bat-v">—</dd>
+          <dt>Batéria – prúd</dt><dd id="f-bat-a">—</dd>
+          <dt>Sieť – výkon</dt><dd id="f-grid-kw">—</dd>
+          <dt>Sieť – napätie</dt><dd id="f-grid-v">—</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>🔋 Články</h3><span class="chip" id="cell-range">—</span></div>
+        <div id="cells" class="cells"></div>
+      </div>
+    </section>
+
+    <section class="card chart-card">
+      <div class="card-head"><h3>Výroba dnes</h3></div>
+      <canvas id="chart" height="160"></canvas>
+      <div class="legend">
+        <span class="l-solar">Výkon (kW)</span>
+        <span class="l-soc">SOC (%)</span>
+      </div>
+    </section>
+
+    <footer>
+      <span id="last-update">Čakám na dáta…</span>
+      <span id="error-msg"></span>
+    </footer>
+  </main>
+  <script src="/solar/static/app.js"></script>
+</body>
+</html>

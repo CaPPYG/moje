@@ -1,0 +1,17 @@
+[Unit]
+Description=Solar monitor (Flask + Gunicorn)
+After=network.target
+
+[Service]
+User=patrik
+Group=patrik
+WorkingDirectory=/home/patrik/solar
+EnvironmentFile=/home/patrik/solar/.env
+ExecStart=/home/patrik/solar/.venv/bin/gunicorn -w 1 --threads 8 -b 127.0.0.1:8000 app:app
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
