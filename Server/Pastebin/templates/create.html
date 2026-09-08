@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PasteBin – Zabezpečený Pastebin & Image Share</title>
-  <meta name="description" content="Bezpečné, anonymné a dočasné zdieľanie textu, kódu a obrázkov s expiráciou a funkciou zmazania po prečítaní.">
+  <title>PasteBin – Rýchly Clipboard & Zabezpečený Pastebin</title>
+  <meta name="description" content="Bezpečné, rýchle a dočasné zdieľanie textu, kódu a obrázkov s cross-device schránkou a expiráciou.">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,15 +24,18 @@
         <span class="brand-name">PasteBin</span>
       </a>
     </div>
-    <div class="header-right" style="display: flex; align-items: center; gap: 14px;">
-      <span style="font-size: 0.85em; color: var(--text-dim);">🔒 End-to-end dočasné zdieľanie</span>
-      <a href="{{ url_for('logout') }}" style="color: var(--text-dim); text-decoration: none; font-size: 0.85em; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05);" title="Odhlásiť sa">
+    <div class="header-right">
+      <span class="header-sync-status" id="headerSyncStatus" title="Automatická synchronizácia aktívna">
+        <span class="sync-dot"></span> <span class="sync-label">Live Schránka</span>
+      </span>
+      <a href="{{ url_for('logout') }}" class="btn-header" title="Odhlásiť sa">
         <i class="fas fa-arrow-right-from-bracket"></i> Odhlásiť
       </a>
     </div>
   </header>
 
   <main class="main-content">
+    <!-- Top Creator Form Card -->
     <form id="pasteForm" class="card-paste">
       <!-- Tabs Header -->
       <div class="tabs-header">
@@ -46,7 +49,10 @@
 
       <!-- Tab Content: Text -->
       <div class="tab-content" id="textContentSection">
-        <textarea id="pasteTextarea" class="paste-textarea" placeholder="Sem napíš alebo vlož svoj text, logy, konfiguráciu alebo zdrojový kód..." autofocus></textarea>
+        <textarea id="pasteTextarea" class="paste-textarea" placeholder="Sem napíš alebo vlož svoj text, odkaz, kód či poznámku pre rýchly prenos medzi zariadeniami..." autofocus></textarea>
+        <div class="textarea-hint">
+          <span><i class="fas fa-keyboard"></i> Tip: Stlač <kbd>Ctrl</kbd> + <kbd>Enter</kbd> pre okamžité uloženie</span>
+        </div>
       </div>
 
       <!-- Tab Content: Image -->
@@ -102,7 +108,7 @@
         </div>
 
         <button type="submit" class="btn-submit" id="submitBtn">
-          <i class="fas fa-lock"></i> Vytvoriť bezpečný odkaz
+          <i class="fas fa-paper-plane"></i> Vytvoriť & Uložiť do schránky
         </button>
       </div>
     </form>
@@ -123,13 +129,93 @@
       </div>
       <div class="success-details">
         <span><i class="fas fa-shield-alt"></i> Šifrované uloženie</span>
-        <span><i class="fas fa-eye-slash"></i> Zmazanie po vypršaní platnosti</span>
+        <span><i class="fas fa-sync"></i> Pridané na vrch schránky nižšie</span>
       </div>
     </div>
+
+    <!-- ─── Clipboard & Active Links Section ─── -->
+    <section class="clipboard-section" id="clipboardSection">
+      <div class="clipboard-header-card">
+        <div class="clipboard-title-row">
+          <div class="clipboard-heading">
+            <div class="clipboard-icon"><i class="fas fa-clipboard-check"></i></div>
+            <div>
+              <h2 class="clipboard-title">Rýchla Schránka & História liniek</h2>
+              <p class="clipboard-subtitle">Kopíruj obsah medzi PC a mobilom bleskovo jedným klikom</p>
+            </div>
+          </div>
+          <div class="clipboard-stats">
+            <span class="count-pill" id="activeCountBadge">0 položiek</span>
+            <button type="button" class="btn-refresh" id="btnRefreshPastes" title="Obnoviť schránku">
+              <i class="fas fa-rotate" id="refreshIcon"></i> <span>Obnoviť</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Controls Toolbar (Search & Filter) -->
+        <div class="clipboard-controls">
+          <div class="search-input-wrapper">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="pasteSearchInput" class="search-input" placeholder="Filtrovať podľa textu alebo ID..." autocomplete="off">
+            <button type="button" id="clearSearchBtn" class="clear-search-btn" style="display:none;" title="Zmazať filter">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div class="filter-group">
+            <button type="button" class="filter-btn active" data-filter="all">Všetko</button>
+            <button type="button" class="filter-btn" data-filter="text"><i class="fas fa-file-code"></i> Text</button>
+            <button type="button" class="filter-btn" data-filter="image"><i class="fas fa-image"></i> Obrázky</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid / List Container -->
+      <div class="pastes-grid" id="pastesContainer">
+        <!-- Rendered dynamically by JavaScript -->
+      </div>
+
+      <!-- Empty State -->
+      <div class="empty-state" id="emptyState" style="display: none;">
+        <div class="empty-icon"><i class="fas fa-inbox"></i></div>
+        <h3>Zatiaľ žiadne záznamy v schránke</h3>
+        <p>Vložte text, odkaz alebo obrázok do formulára vyššie a ihneď ho tu uvidíte pripravený na kopírovanie.</p>
+      </div>
+    </section>
   </main>
+
+  <!-- QR Code Modal -->
+  <div class="modal-overlay" id="qrModal" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><i class="fas fa-qrcode"></i> QR Kód pre mobil</div>
+        <button type="button" class="modal-close-btn" id="closeQrModal"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Naskenujte fotoaparátom v mobile a odkaz sa okamžite otvorí:</p>
+        <div class="qr-code-wrapper" id="qrCodeContainer"></div>
+        <div class="qr-url-box">
+          <input type="text" id="qrUrlInput" class="url-input" readonly>
+          <button type="button" class="btn-copy" id="btnCopyQrUrl" title="Kopírovať URL"><i class="fas fa-copy"></i></button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-action" id="btnCloseQrModal">Zavrieť</button>
+        <a id="btnOpenQrUrl" href="#" target="_blank" class="btn-submit" style="text-decoration: none; padding: 9px 18px; font-size: 0.9em;">
+          <i class="fas fa-external-link-alt"></i> Otvoriť link
+        </a>
+      </div>
+    </div>
+  </div>
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <!-- Initial State Data from Flask -->
+  <script>
+    window.__INITIAL_PASTES__ = {{ pastes|tojson|safe if pastes is defined else '[]' }};
+    window.__BASE_URL__ = {{ base_url|tojson|safe if base_url is defined else '""' }};
+  </script>
+  <script src="{{ url_for('static', filename='qrcode.min.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

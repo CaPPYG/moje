@@ -122,7 +122,43 @@ def run_tests():
     assert r.status_code == 404
     print("  -> OK (expired record automatically deleted and returned 404)")
 
-    print("\nALL 8 TESTS PASSED SUCCESSFULLY! [OK]")
+    print("Test 9: GET /api/pastes unauthenticated returns 401")
+    # New clean client without session
+    unauth_client = app.test_client()
+    r = unauth_client.get("/api/pastes")
+    assert r.status_code == 401
+    print("  -> OK")
+
+    print("Test 10: GET /api/pastes authenticated returns active pastes")
+    r = client.get("/api/pastes")
+    assert r.status_code == 200
+    pastes_data = json.loads(r.data)
+    assert pastes_data["status"] == "ok"
+    assert isinstance(pastes_data["pastes"], list)
+    assert len(pastes_data["pastes"]) > 0
+    # Check that each paste has url and required fields
+    p0 = pastes_data["pastes"][0]
+    assert "id" in p0
+    assert "url" in p0
+    assert "type" in p0
+    print(f"  -> OK (found {len(pastes_data['pastes'])} active pastes)")
+
+    print("Test 11: DELETE /api/paste/<id> unauthenticated returns 401")
+    r = unauth_client.delete(f"/api/paste/{p0['id']}")
+    assert r.status_code == 401
+    print("  -> OK")
+
+    print("Test 12: DELETE /api/paste/<id> authenticated removes the paste")
+    r = client.delete(f"/api/paste/{p0['id']}")
+    assert r.status_code == 200
+    del_data = json.loads(r.data)
+    assert del_data["status"] == "ok"
+    # Verify paste is gone
+    r = client.get(f"/p/{p0['id']}")
+    assert r.status_code == 404
+    print("  -> OK (successfully deleted paste)")
+
+    print("\nALL 12 TESTS PASSED SUCCESSFULLY! [OK]")
 
 if __name__ == "__main__":
     run_tests()

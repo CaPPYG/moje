@@ -155,8 +155,9 @@ def delete_paste(paste_id):
                     os.remove(full_path)
                 except Exception:
                     pass
-        conn.execute("DELETE FROM pastes WHERE id = ?", (paste_id,))
+        cur = conn.execute("DELETE FROM pastes WHERE id = ?", (paste_id,))
         conn.commit()
+        return cur.rowcount > 0
 
 
 def cleanup_expired():
@@ -167,3 +168,25 @@ def cleanup_expired():
         rows = conn.execute("SELECT id FROM pastes WHERE expires_at IS NOT NULL AND expires_at < ?", (now_iso,)).fetchall()
         for r in rows:
             delete_paste(r["id"])
+
+
+def get_all_pastes(include_expired=False):
+    """Vráti zoznam všetkých aktívnych záznamov zoradených od najnovšieho."""
+    init_db()
+    if not include_expired:
+        cleanup_expired()
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT id, type, content, file_path, file_mime,
+                   (password_hash IS NOT NULL AND password_hash != '') AS has_password,
+                   burn_after_reading, views_count, expires_at, created_at
+            FROM pastes
+            ORDER BY created_at DESC
+        """).fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            item["has_password"] = bool(item["has_password"])
+            item["burn_after_reading"] = bool(item["burn_after_reading"])
+            result.append(item)
+        return result

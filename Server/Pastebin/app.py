@@ -57,6 +57,23 @@ def is_creator_authenticated():
     return session.get("creator_auth") is True
 
 
+def check_creator_auth():
+    """Overí oprávnenie tvorcu cez session, HTTP hlavičky, JSON body alebo query parameter."""
+    auth_header = request.headers.get("X-Master-Password") or request.headers.get("X-Paste-Master-Password")
+    form_master = request.form.get("master_password") if request.form else None
+    json_data = request.get_json(silent=True) if request.is_json else None
+    json_master = json_data.get("master_password") if json_data else None
+    query_master = request.args.get("master_password")
+
+    return bool(
+        is_creator_authenticated()
+        or auth_header == MASTER_PASSWORD
+        or form_master == MASTER_PASSWORD
+        or json_master == MASTER_PASSWORD
+        or query_master == MASTER_PASSWORD
+    )
+
+
 def get_base_url():
     """Zostaví základnú URL adresu (napr. https://garcarzp.online alebo lokálnu)."""
     proto = request.headers.get("X-Forwarded-Proto", request.scheme)
@@ -70,7 +87,9 @@ def get_base_url():
 def index():
     if not is_creator_authenticated():
         return render_template("login.html")
-    return render_template("create.html")
+    pastes = db.get_all_pastes()
+    base_url = get_base_url()
+    return render_template("create.html", pastes=pastes, base_url=base_url)
 
 
 @app.route("/login", methods=["POST"])
@@ -90,24 +109,37 @@ def logout():
     return redirect(url_for("index"))
 
 
-# ─── API Vytvorenie Paste ──────────────────────────────────────────────────────
+# ─── API Vytvorenie a Správa Záznamov ──────────────────────────────────────────
+
+@app.route("/api/pastes", methods=["GET"])
+def api_list_pastes():
+    if not check_creator_auth():
+        return jsonify({
+            "status": "error",
+            "message": "Neautorizovaný prístup. Vyžaduje sa prihlásenie tvorcu."
+        }), 401
+
+    raw_pastes = db.get_all_pastes()
+    base_url = get_base_url()
+
+    formatted = []
+    for p in raw_pastes:
+        item = dict(p)
+        item["url"] = f"{base_url}/p/{p['id']}"
+        item["raw_url"] = f"{base_url}/p/{p['id']}/raw"
+        formatted.append(item)
+
+    return jsonify({
+        "status": "ok",
+        "pastes": formatted,
+        "count": len(formatted)
+    })
+
 
 @app.route("/api/paste", methods=["POST"])
 def api_create_paste():
     # 0. Overenie oprávnenia pre vytvorenie záznamu
-    auth_header = request.headers.get("X-Master-Password") or request.headers.get("X-Paste-Master-Password")
-    form_master = request.form.get("master_password") if request.form else None
-    json_data = request.get_json(silent=True) if request.is_json else None
-    json_master = json_data.get("master_password") if json_data else None
-
-    is_auth = (
-        is_creator_authenticated()
-        or auth_header == MASTER_PASSWORD
-        or form_master == MASTER_PASSWORD
-        or json_master == MASTER_PASSWORD
-    )
-
-    if not is_auth:
+    if not check_creator_auth():
         return jsonify({
             "status": "error",
             "message": "Neautorizovaný prístup. Pre vytvorenie záznamu sa vyžaduje heslo aplikácie."
@@ -323,6 +355,28 @@ def api_get_paste(paste_id):
         "views_count": paste.get("views_count", 0) + 1,
         "expires_at": paste.get("expires_at"),
         "created_at": paste["created_at"]
+    })
+
+
+@app.route("/api/paste/<paste_id>", methods=["DELETE"])
+def api_delete_paste(paste_id):
+    if not check_creator_auth():
+        return jsonify({
+            "status": "error",
+            "message": "Neautorizovaný prístup. Vyžaduje sa heslo aplikácie."
+        }), 401
+
+    deleted = db.delete_paste(paste_id)
+    if not deleted:
+        return jsonify({
+            "status": "error",
+            "message": "Záznam neexistuje alebo už bol zmazaný."
+        }), 404
+
+    return jsonify({
+        "status": "ok",
+        "message": "Záznam bol úspešne zmazaný.",
+        "id": paste_id
     })
 
 
