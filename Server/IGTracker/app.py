@@ -1166,6 +1166,104 @@ def api_vault_delete(video_id):
     return jsonify({"status": "ok", "message": "Video bolo zmazané z Vaultu."}), 200
 
 
+@app.route("/api/spoofer/quick-spoof", methods=["POST"])
+@auth_required
+def api_quick_spoof():
+    """
+    Rýchly manuálny spoofing videa priamo cez webové rozhranie.
+    Podporuje výber z Vaultu (Google Drive / lokálne) aj priamy upload z PC.
+    Aplikuje FFmpeg mikro-kontrast jitter (yuv420p, faststart), EXIF smartphone fingerprint a GPS v LA/Vegas.
+    """
+    video_id = request.form.get("video_id", type=int)
+    region = (request.form.get("region") or "us").lower()
+    account_id = request.form.get("account_id", type=int)
+
+    if account_id:
+        acc = db.get_account_by_id(account_id)
+        if acc and acc.get("region"):
+            region = acc["region"].lower()
+
+    ts = int(time.time())
+    rand_hex = uuid.uuid4().hex[:6]
+    out_filename = f"quick_spoof_{region}_{ts}_{rand_hex}.mp4"
+    out_path = os.path.join(SPOOFED_DIR, out_filename)
+    thumb_filename = f"thumb_{os.path.splitext(out_filename)[0]}.jpg"
+    thumb_path = os.path.join(THUMBS_DIR, thumb_filename)
+
+    meta = {}
+    orig_name = "video.mp4"
+
+    try:
+        # A) Z Vaultu
+        if video_id:
+            video = db.get_vault_video_by_id(video_id)
+            if not video:
+                return jsonify({"status": "error", "message": "Video vo Vaulte nebolo nájdené."}), 404
+            orig_name = video.get("original_name") or "vault_video.mp4"
+            ext = os.path.splitext(orig_name)[1].lower() or ".mp4"
+
+            if video.get("storage_type") == "gdrive" and video.get("gdrive_file_id"):
+                with gdrive_vault.temporary_master(video["gdrive_file_id"], ext=ext) as temp_master_path:
+                    meta = spoofer.spoof_video_for_account(temp_master_path, out_path, region=region)
+                    spoofer.generate_thumbnail(out_path, thumb_path)
+            else:
+                local_src = os.path.join(VAULT_DIR, video["filename"])
+                if not os.path.exists(local_src):
+                    return jsonify({"status": "error", "message": "Lokálny master súbor neexistuje."}), 404
+                meta = spoofer.spoof_video_for_account(local_src, out_path, region=region)
+                spoofer.generate_thumbnail(out_path, thumb_path)
+
+        # B) Z priameho uploadu súboru
+        elif "file" in request.files and request.files["file"].filename:
+            f = request.files["file"]
+            orig_name = f.filename
+            ext = os.path.splitext(orig_name)[1].lower() or ".mp4"
+            temp_src = os.path.join(tempfile.gettempdir(), f"src_quick_{ts}_{rand_hex}{ext}")
+            f.save(temp_src)
+            try:
+                meta = spoofer.spoof_video_for_account(temp_src, out_path, region=region)
+                spoofer.generate_thumbnail(out_path, thumb_path)
+            finally:
+                if os.path.exists(temp_src):
+                    try: os.remove(temp_src)
+                    except Exception: pass
+        else:
+            return jsonify({"status": "error", "message": "Vyberte video z Vaultu alebo nahrajte súbor z PC."}), 400
+
+    except Exception as e:
+        logger.exception(f"Chyba pri rýchlom spoofovaní: {e}")
+        return jsonify({"status": "error", "message": f"Chyba pri spoofovaní: {str(e)}"}), 500
+
+    host = request.headers.get("X-Forwarded-Host") or request.host or "garcarzp.online"
+    if "127.0.0.1" in host or "localhost" in host:
+        host = "garcarzp.online"
+
+    video_url = f"/ig/media/vault/spoofed/{out_filename}"
+    public_url = f"https://{host}/ig/media/vault/spoofed/{out_filename}"
+    thumb_url = f"/ig/media/vault/thumbs/{thumb_filename}"
+    download_url = f"/ig/api/spoofer/download/{out_filename}"
+
+    return jsonify({
+        "status": "ok",
+        "message": f"Video bolo úspešne naspoofované ({meta.get('device', 'Smartfón')}, GPS: {meta.get('city', region.upper())})!",
+        "filename": out_filename,
+        "original_name": orig_name,
+        "video_url": video_url,
+        "public_url": public_url,
+        "thumbnail_url": thumb_url,
+        "download_url": download_url,
+        "vault_video_id": video_id,
+        "meta": meta
+    }), 200
+
+
+@app.route("/api/spoofer/download/<filename>", methods=["GET"])
+def download_spoofed_video(filename):
+    """Priame stiahnutie naspoofovaného MP4 videa do PC."""
+    safe_name = os.path.basename(filename)
+    return send_from_directory(SPOOFED_DIR, safe_name, as_attachment=True, download_name=safe_name)
+
+
 # ─── Auto-Planner & Review Studio API ──────────────────────────────────────────
 
 @app.route("/api/planner/posts", methods=["GET"])

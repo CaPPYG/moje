@@ -1029,6 +1029,16 @@
             <i class="fas fa-check-circle" style="color: #10b981;"></i>
             <span id="previewBadgeText">Pripravené na publikovanie</span>
           </div>
+          <!-- Manual Quick Spoof Toolbar in Studio -->
+          <div id="manualSpoofBar" style="display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 8px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;">
+            <div style="font-size: 0.76rem; color: #94a3b8; display: flex; align-items: center; gap: 6px;" id="manualSpoofStatusText">
+              <i class="fas fa-shield-halved" style="color: #38bdf8;"></i>
+              <span>Chcete aplikovať Anti-Ban Spoofing (US/SK GPS, Smartfón EXIF)?</span>
+            </div>
+            <button type="button" class="btn-save" id="btnManualStudioSpoof" onclick="triggerStudioQuickSpoof()" style="background: linear-gradient(135deg, #ec4899, #8b5cf6); padding: 5px 12px; font-size: 0.76rem;">
+              <i class="fas fa-bolt"></i> ⚡ Naspoofovať video
+            </button>
+          </div>
         </div>
 
         <!-- Caption Field -->
@@ -1210,6 +1220,9 @@
         </div>
       </div>
       <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn-save" onclick="openQuickSpoofModal()" style="background: linear-gradient(135deg, #ec4899, #8b5cf6); font-size: 0.84rem; padding: 7px 14px;" title="Okamžitý manuálny spoofing videa priamo na stránke">
+          <i class="fas fa-bolt"></i> ⚡ Rýchly Spoof
+        </button>
         <a href="/ig/api/download/desktop-spoofer" class="btn-save" style="background: linear-gradient(135deg, #7c3aed, #4f46e5); font-size: 0.84rem; padding: 7px 14px; text-decoration: none;" title="Stiahnuť PC Spoofer (.zip) pre bleskový export 50+ videí na počítači">
           <i class="fas fa-download"></i> 💻 PC Spoofer (.zip)
         </a>
@@ -1384,6 +1397,105 @@
           <i class="fab fa-google-drive"></i> Otvoriť na Drive
         </a>
         <button type="button" class="btn-cancel" onclick="closeVaultPreviewModal()">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Spoof Modal (pre rýchly manuálny test a spoofing 1 alebo zopár videí) -->
+  <div id="quickSpoofModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 580px; width: 95%; padding: 22px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <i class="fas fa-bolt" style="color: #ec4899;"></i>
+          <span>⚡ Rýchly Manuálny Spoofing</span>
+        </div>
+        <button class="modal-close" onclick="closeQuickSpoofModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="margin-top: 14px;">
+        <p style="font-size: 0.82rem; color: #94a3b8; margin: 0 0 14px 0;">
+          Okamžite premení video na unikátny originál pre algoritmus Instagramu. Aplikuje FFmpeg mikro-kontrast jitter (yuv420p + faststart), vymaže pôvodné podpisy a zapíše nový device fingerprint a GPS lokáciu.
+        </p>
+
+        <!-- Step 1: Select Video Source -->
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label class="form-label" style="font-size: 0.78rem;">1. Vyberte video na spoofnutie:</label>
+          <div style="display: flex; gap: 8px; flex-direction: column;">
+            <select id="quickSpoofVideoSelect" class="form-input" style="font-size: 0.82rem;" onchange="onQuickSpoofSelectChange(this.value)">
+              <option value="">-- Vyberte video z Media Vaultu --</option>
+            </select>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: #64748b;">
+              <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></span>
+              <span>alebo nahrajte z PC</span>
+              <span style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></span>
+            </div>
+            <input type="file" id="quickSpoofFileInput" accept="video/mp4,video/quicktime" class="form-input" style="font-size: 0.8rem; padding: 6px;" onchange="onQuickSpoofFileChange(this)">
+          </div>
+        </div>
+
+        <!-- Step 2: Target Region -->
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label class="form-label" style="font-size: 0.78rem;">2. Cieľový región & GPS hotspoty:</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; cursor: pointer;">
+              <input type="radio" name="quickSpoofRegion" value="us" checked>
+              <div>
+                <div style="font-weight: 600; font-size: 0.82rem; color: #fff;">🇺🇸 USA Hotspots</div>
+                <div style="font-size: 0.7rem; color: #94a3b8;">Los Angeles & Las Vegas</div>
+              </div>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; cursor: pointer;">
+              <input type="radio" name="quickSpoofRegion" value="sk">
+              <div>
+                <div style="font-weight: 600; font-size: 0.82rem; color: #fff;">🇸🇰 Slovensko</div>
+                <div style="font-size: 0.7rem; color: #94a3b8;">Bratislava & Košice</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Progress Box -->
+        <div id="quickSpoofProgressBox" class="token-verify-box" style="display: none; margin-bottom: 14px; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">
+          <i class="fas fa-spinner fa-spin"></i>
+          <span id="quickSpoofProgressText">Spoofujem video (FFmpeg yuv420p, EXIF stripping, GPS injection)...</span>
+        </div>
+
+        <!-- Result Box -->
+        <div id="quickSpoofResultBox" style="display: none; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="width: 100px; aspect-ratio: 9/16; max-height: 150px; background: #000; border-radius: 8px; overflow: hidden; position: relative;">
+              <video id="quickSpoofResultVideo" controls playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-weight: 700; color: #10b981; font-size: 0.88rem;">
+                <i class="fas fa-circle-check"></i> Video úspešne naspoofované!
+              </div>
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <span class="spoof-tag-pill" id="qsBadgeDevice"><i class="fas fa-mobile-screen" style="color:#ec4899;"></i> Smartfón</span>
+                <span class="spoof-tag-pill" id="qsBadgeCity"><i class="fas fa-location-dot" style="color:#10b981;"></i> GPS</span>
+                <span class="spoof-tag-pill"><i class="fas fa-palette" style="color:#38bdf8;"></i> Pixel Hash Safe (yuv420p)</span>
+              </div>
+              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;" id="qsDetailsText"></div>
+            </div>
+          </div>
+
+          <!-- Result Actions -->
+          <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+            <button type="button" class="btn-save" style="background: var(--ig-gradient); font-size: 0.78rem; padding: 7px 12px;" onclick="useQuickSpoofedInStudio()">
+              <i class="fas fa-paper-plane"></i> Použiť v Manuálnom Štúdiu
+            </button>
+            <a id="btnDownloadQuickSpoofed" href="#" download class="btn-cancel" style="font-size: 0.78rem; padding: 7px 12px; text-decoration: none;">
+              <i class="fas fa-download"></i> Stiahnuť MP4 do PC
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn-cancel" onclick="closeQuickSpoofModal()">Zavrieť</button>
+        <button type="button" class="btn-save" id="btnRunQuickSpoof" onclick="runQuickSpoof()" style="background: linear-gradient(135deg, #ec4899, #8b5cf6);">
+          <i class="fas fa-bolt"></i> Spustiť Rýchly Spoof
+        </button>
       </div>
     </div>
   </div>
@@ -1602,14 +1714,27 @@
       badgeText.textContent = `${file.name} (${fileMb} MB)`;
 
       const fileUrl = URL.createObjectURL(file);
+      const manualSpoofBar = document.getElementById('manualSpoofBar');
       if (file.type.startsWith('video/')) {
         imgEl.style.display = 'none';
         videoEl.style.display = 'block';
         videoEl.src = fileUrl;
+        if (manualSpoofBar) {
+          manualSpoofBar.style.display = 'flex';
+          const statusText = document.getElementById('manualSpoofStatusText');
+          if (statusText) {
+            statusText.innerHTML = `<i class="fas fa-shield-halved" style="color: #38bdf8;"></i> <span>Chcete aplikovať Anti-Ban Spoofing (US/SK GPS, Smartfón EXIF)?</span>`;
+          }
+          const btnManualStudioSpoof = document.getElementById('btnManualStudioSpoof');
+          if (btnManualStudioSpoof) {
+            btnManualStudioSpoof.innerHTML = '<i class="fas fa-bolt"></i> ⚡ Naspoofovať video';
+          }
+        }
       } else {
         videoEl.style.display = 'none';
         imgEl.style.display = 'block';
         imgEl.src = fileUrl;
+        if (manualSpoofBar) manualSpoofBar.style.display = 'none';
       }
     }
 
@@ -1622,6 +1747,8 @@
       document.getElementById('manualMediaUrl').value = '';
       document.getElementById('previewBox').style.display = 'none';
       document.getElementById('dropzoneBox').style.display = 'block';
+      const manualSpoofBar = document.getElementById('manualSpoofBar');
+      if (manualSpoofBar) manualSpoofBar.style.display = 'none';
       const videoEl = document.getElementById('videoPreviewEl');
       videoEl.pause();
       videoEl.src = '';
@@ -1929,15 +2056,28 @@
         ${tagBadgeHtml}
       `;
 
+      const manualSpoofBar = document.getElementById('manualSpoofBar');
       if (v.media_type === 'photo') {
         videoEl.style.display = 'none';
         videoEl.pause();
         imgEl.style.display = 'block';
         imgEl.src = v.url;
+        if (manualSpoofBar) manualSpoofBar.style.display = 'none';
       } else {
         imgEl.style.display = 'none';
         videoEl.style.display = 'block';
         videoEl.src = v.url;
+        if (manualSpoofBar) {
+          manualSpoofBar.style.display = 'flex';
+          const statusText = document.getElementById('manualSpoofStatusText');
+          if (statusText) {
+            statusText.innerHTML = `<i class="fas fa-shield-halved" style="color: #38bdf8;"></i> <span>Chcete aplikovať Anti-Ban Spoofing (US/SK GPS, Smartfón EXIF)?</span>`;
+          }
+          const btnManualStudioSpoof = document.getElementById('btnManualStudioSpoof');
+          if (btnManualStudioSpoof) {
+            btnManualStudioSpoof.innerHTML = '<i class="fas fa-bolt"></i> ⚡ Naspoofovať video';
+          }
+        }
       }
 
       closeVaultPickerModal();
@@ -2181,6 +2321,11 @@
                 <button type="button" class="btn-save" style="padding: 4px 8px; font-size: 0.74rem; background: var(--ig-gradient);" onclick="useVaultItemInManual(${v.id})" title="Použiť toto médium v Manuálnom štúdiu">
                   <i class="fas fa-paper-plane"></i> Použiť
                 </button>
+                ${!isPhoto ? `
+                  <button type="button" class="btn-cancel" style="padding: 4px 8px; font-size: 0.74rem; color: #ec4899; border-color: rgba(236, 72, 153, 0.4);" onclick="openQuickSpoofModal(${v.id}, '${escapeHtml(v.original_name)}')" title="⚡ Rýchly manuálny Spoofing tohto videa">
+                    <i class="fas fa-bolt"></i> Spoof
+                  </button>
+                ` : ''}
                 <button type="button" class="btn-cancel" style="padding: 4px 8px; font-size: 0.74rem;" onclick="openVaultTagModal(${v.id}, '${escapeHtml(v.tag || '')}', '${escapeHtml(v.original_name)}')" title="Upraviť tag média">
                   <i class="fas fa-tag"></i> Tag
                 </button>
@@ -2335,6 +2480,218 @@
       } catch (err) {
         console.error(err);
         showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    // ── Quick Manual Spoofing Modal Logic ──
+    let lastQuickSpoofedResult = null;
+
+    function openQuickSpoofModal(preselectedVideoId = null, preselectedTitle = null) {
+      const modal = document.getElementById('quickSpoofModal');
+      const select = document.getElementById('quickSpoofVideoSelect');
+      const fileInput = document.getElementById('quickSpoofFileInput');
+      const progBox = document.getElementById('quickSpoofProgressBox');
+      const resBox = document.getElementById('quickSpoofResultBox');
+      const videoEl = document.getElementById('quickSpoofResultVideo');
+
+      if (videoEl) { videoEl.pause(); videoEl.src = ''; }
+      if (progBox) progBox.style.display = 'none';
+      if (resBox) resBox.style.display = 'none';
+      if (fileInput) fileInput.value = '';
+
+      // Populate select with vault videos
+      if (select) {
+        const videoItems = (allVaultVideosList || []).filter(v => v.media_type !== 'photo');
+        select.innerHTML = '<option value="">-- Vyberte video z Media Vaultu --</option>' +
+          videoItems.map(v => `<option value="${v.id}" ${preselectedVideoId && v.id === preselectedVideoId ? 'selected' : ''}>${escapeHtml(v.original_name)} ${v.tag ? '[' + escapeHtml(v.tag) + ']' : ''}</option>`).join('');
+
+        if (preselectedVideoId) {
+          select.value = preselectedVideoId;
+        }
+      }
+
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeQuickSpoofModal() {
+      const modal = document.getElementById('quickSpoofModal');
+      const videoEl = document.getElementById('quickSpoofResultVideo');
+      if (videoEl) { videoEl.pause(); videoEl.src = ''; }
+      if (modal) modal.style.display = 'none';
+    }
+
+    function onQuickSpoofSelectChange(val) {
+      if (val) {
+        const fileInput = document.getElementById('quickSpoofFileInput');
+        if (fileInput) fileInput.value = '';
+      }
+    }
+
+    function onQuickSpoofFileChange(input) {
+      if (input && input.files && input.files.length > 0) {
+        const select = document.getElementById('quickSpoofVideoSelect');
+        if (select) select.value = '';
+      }
+    }
+
+    async function runQuickSpoof() {
+      const select = document.getElementById('quickSpoofVideoSelect');
+      const fileInput = document.getElementById('quickSpoofFileInput');
+      const regionRadios = document.getElementsByName('quickSpoofRegion');
+      let selectedRegion = 'us';
+      for (const r of regionRadios) {
+        if (r.checked) { selectedRegion = r.value; break; }
+      }
+
+      const videoId = select ? select.value : '';
+      const file = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
+
+      if (!videoId && !file) {
+        showToast('Vyberte video z Vaultu alebo nahrajte súbor z PC.', 'error');
+        return;
+      }
+
+      const progBox = document.getElementById('quickSpoofProgressBox');
+      const progText = document.getElementById('quickSpoofProgressText');
+      const resBox = document.getElementById('quickSpoofResultBox');
+      const btnRun = document.getElementById('btnRunQuickSpoof');
+
+      if (progBox) progBox.style.display = 'flex';
+      if (progText) progText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Prebieha FFmpeg kódovanie (yuv420p, faststart, EXIF & GPS spoofing)...';
+      if (resBox) resBox.style.display = 'none';
+      if (btnRun) { btnRun.disabled = true; btnRun.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Spoofujem...'; }
+
+      const formData = new FormData();
+      if (videoId) formData.append('video_id', videoId);
+      if (file) formData.append('file', file);
+      formData.append('region', selectedRegion);
+      if (typeof ACCOUNT_ID !== 'undefined' && ACCOUNT_ID) formData.append('account_id', ACCOUNT_ID);
+
+      try {
+        const res = await fetch(`${PREFIX}/api/spoofer/quick-spoof`, {
+          method: 'POST',
+          headers: { 'X-Master-Password': PWD },
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          lastQuickSpoofedResult = data;
+          showToast(data.message || 'Video úspešne naspoofované!', 'success');
+
+          if (progBox) progBox.style.display = 'none';
+          if (resBox) resBox.style.display = 'block';
+
+          const resVideo = document.getElementById('quickSpoofResultVideo');
+          if (resVideo) {
+            resVideo.src = data.video_url;
+            resVideo.load();
+          }
+
+          const badgeDev = document.getElementById('qsBadgeDevice');
+          const badgeCity = document.getElementById('qsBadgeCity');
+          const details = document.getElementById('qsDetailsText');
+          const btnDl = document.getElementById('btnDownloadQuickSpoofed');
+
+          if (badgeDev) badgeDev.innerHTML = `<i class="fas fa-mobile-screen" style="color:#ec4899;"></i> ${escapeHtml(data.meta && data.meta.device ? data.meta.device : 'Smartfón')}`;
+          if (badgeCity) badgeCity.innerHTML = `<i class="fas fa-location-dot" style="color:#10b981;"></i> GPS: ${escapeHtml(data.meta && data.meta.city ? data.meta.city : selectedRegion.toUpperCase())}`;
+          if (details) {
+            const lat = data.meta && data.meta.lat ? Number(data.meta.lat).toFixed(4) : '';
+            const lon = data.meta && data.meta.lon ? Number(data.meta.lon).toFixed(4) : '';
+            details.innerHTML = `Súbor: <strong>${escapeHtml(data.filename)}</strong><br>GPS: ${lat}, ${lon}`;
+          }
+          if (btnDl) {
+            btnDl.href = data.download_url;
+            btnDl.setAttribute('download', data.filename);
+          }
+        } else {
+          showToast(data.message || 'Chyba pri spoofovaní videa.', 'error');
+          if (progBox) progBox.style.display = 'none';
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia pri spoofovaní.', 'error');
+        if (progBox) progBox.style.display = 'none';
+      } finally {
+        if (btnRun) {
+          btnRun.disabled = false;
+          btnRun.innerHTML = '<i class="fas fa-bolt"></i> Spustiť Rýchly Spoof';
+        }
+      }
+    }
+
+    function useQuickSpoofedInStudio() {
+      if (!lastQuickSpoofedResult) return;
+      closeQuickSpoofModal();
+      switchMainView('manual');
+      switchTab('reel');
+
+      uploadedMediaUrl = lastQuickSpoofedResult.public_url;
+      selectedFile = null;
+      if (lastQuickSpoofedResult.vault_video_id) {
+        selectedVaultVideoId = lastQuickSpoofedResult.vault_video_id;
+      }
+
+      const previewBox = document.getElementById('previewBox');
+      const imgEl = document.getElementById('imagePreviewEl');
+      const videoEl = document.getElementById('videoPreviewEl');
+      const badgeText = document.getElementById('previewBadgeText');
+      const dropzone = document.getElementById('dropzoneBox');
+      const manualSpoofBar = document.getElementById('manualSpoofBar');
+
+      if (dropzone) dropzone.style.display = 'none';
+      if (previewBox) previewBox.style.display = 'block';
+      if (imgEl) imgEl.style.display = 'none';
+      if (videoEl) {
+        videoEl.style.display = 'block';
+        videoEl.src = lastQuickSpoofedResult.video_url;
+        videoEl.load();
+      }
+      if (badgeText) {
+        const city = (lastQuickSpoofedResult.meta && lastQuickSpoofedResult.meta.city) ? lastQuickSpoofedResult.meta.city : 'USA';
+        badgeText.innerHTML = `
+          <span class="vault-badge" style="background:rgba(236,72,153,0.25);color:#ec4899;font-weight:700;"><i class="fas fa-bolt"></i> Spoofed (Anti-Ban)</span>
+          <span style="color:#fff;font-weight:600;margin-left:4px;">${escapeHtml(lastQuickSpoofedResult.original_name)}</span>
+          <span class="vault-tag-badge vault-tag-free" style="font-size:0.72rem;margin-left:6px;"><i class="fas fa-location-dot"></i> ${escapeHtml(city)}</span>
+        `;
+      }
+      if (manualSpoofBar) {
+        manualSpoofBar.style.display = 'flex';
+        const statusText = document.getElementById('manualSpoofStatusText');
+        if (statusText) {
+          const dev = (lastQuickSpoofedResult.meta && lastQuickSpoofedResult.meta.device) ? lastQuickSpoofedResult.meta.device : 'Smartfón';
+          const city = (lastQuickSpoofedResult.meta && lastQuickSpoofedResult.meta.city) ? lastQuickSpoofedResult.meta.city : 'GPS';
+          statusText.innerHTML = `<i class="fas fa-circle-check" style="color: #10b981;"></i> <span style="color: #10b981; font-weight: 600;">Video je naspoofované (${escapeHtml(dev)}, ${escapeHtml(city)})</span>`;
+        }
+        const btnManualStudioSpoof = document.getElementById('btnManualStudioSpoof');
+        if (btnManualStudioSpoof) {
+          btnManualStudioSpoof.innerHTML = '<i class="fas fa-arrows-rotate"></i> Znova pre-spoofovať';
+        }
+      }
+
+      showToast('Naspoofované video je načítané v Manuálnom Štúdiu!', 'success');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function triggerStudioQuickSpoof() {
+      if (selectedVaultVideoId) {
+        openQuickSpoofModal(selectedVaultVideoId);
+      } else if (selectedFile) {
+        openQuickSpoofModal();
+        try {
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(selectedFile);
+          const fileInput = document.getElementById('quickSpoofFileInput');
+          if (fileInput) {
+            fileInput.files = dataTransfer.files;
+            const select = document.getElementById('quickSpoofVideoSelect');
+            if (select) select.value = '';
+          }
+        } catch (e) {
+          console.warn('DataTransfer not supported:', e);
+        }
+      } else {
+        openQuickSpoofModal();
       }
     }
 
