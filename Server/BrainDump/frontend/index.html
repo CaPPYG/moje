@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1a202c">
+  <meta name="description" content="Hlasový záznamník úloh — nadiktuj čokoľvek, AI to rozdelí na kategorizované to-do položky.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BrainDump">
+
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var i = 0; i < regs.length; i++) regs[i].unregister();
+      });
+    }
+  </script>
+
+  <title>Voice BrainDump — GarcArzP HUB</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css?t=1788900000">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+</head>
+<body>
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header class="app-header">
+  <div class="header-left">
+    <a href="/" class="header-back" id="hub-back-btn">
+      <i class="fas fa-chevron-left"></i>
+      <span>HUB</span>
+    </a>
+    <div class="header-logo">🧠 BrainDump</div>
+  </div>
+  <div class="header-actions">
+    <div class="lang-toggle">
+      <i class="fas fa-language" style="font-size:.85rem;"></i>
+      <select class="lang-select" id="lang-select" title="Jazyk rozpoznávania reči">
+        <option value="sk-SK" selected>SK</option>
+        <option value="en-US">EN</option>
+        <option value="cs-CZ">CZ</option>
+      </select>
+    </div>
+    <a href="app-debug.apk" download="BrainDump.apk" class="btn-apk" title="Stiahnuť Android aplikáciu s widgetom (APK)">
+      <i class="fab fa-android"></i>
+      <span>APK</span>
+    </a>
+    <button class="btn-quick-add" id="btn-quick-add" title="Pridať úlohu manuálne">
+      <i class="fas fa-plus"></i>
+    </button>
+    <button class="btn-icon" id="btn-export" title="Exportovať všetky úlohy">
+      <i class="fas fa-copy"></i>
+    </button>
+    <button class="btn-icon" id="btn-clear-done" title="Vymazať splnené úlohy">
+      <i class="fas fa-broom"></i>
+    </button>
+    <button class="btn-icon" id="btn-logout" title="Odhlásiť sa">
+      <i class="fas fa-lock"></i>
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<main class="app-container">
+
+  <!-- Processing bar (shows during LLM call) -->
+  <div class="processing-bar" id="processing-bar"></div>
+
+  <!-- ── Voice Panel ── -->
+  <section class="voice-panel" aria-label="Hlasový vstup">
+    <p class="voice-panel-title">
+      <i class="fas fa-waveform" style="margin-right:6px; opacity:.5;"></i>
+      Hlasový záznam úloh
+    </p>
+
+    <div class="mic-btn-wrapper">
+      <button class="mic-btn" id="mic-btn" aria-label="Spustiť nahrávanie" title="Stlač a hovor">
+        <!-- Ripple rings (visible when recording) -->
+        <span class="mic-rings" aria-hidden="true">
+          <span class="ring"></span>
+          <span class="ring"></span>
+          <span class="ring"></span>
+        </span>
+        <i class="fas fa-microphone" id="mic-icon"></i>
+      </button>
+    </div>
+
+    <p class="voice-status" id="voice-status">Stlač mikrofón a hovor…</p>
+
+    <div class="transcript-box" id="transcript-box" aria-live="polite" aria-label="Prepis hovoreného textu">
+      <span class="transcript-placeholder" id="transcript-placeholder">
+        Tu sa zobrazí to, čo hovoríš…
+      </span>
+      <span id="transcript-text" style="display:none;"></span>
+      <span class="transcript-cursor" id="transcript-cursor" style="display:none;" aria-hidden="true"></span>
+    </div>
+
+    <div class="voice-actions">
+      <button class="btn-secondary" id="btn-clear-text" style="display:none;">
+        <i class="fas fa-xmark"></i> Zrušiť
+      </button>
+      <button class="btn-primary" id="btn-send" disabled>
+        <i class="fas fa-sparkles"></i> Spracovať cez AI
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Stats Bar ── -->
+  <div class="stats-bar" id="stats-bar" aria-label="Štatistiky úloh">
+    <div class="stat-pill" data-cat="Work" title="Pracovné úlohy">
+      <div class="stat-count" id="stat-work">0</div>
+      <div class="stat-label">🖥 Work</div>
+    </div>
+    <div class="stat-pill" data-cat="Groceries" title="Nákupný zoznam">
+      <div class="stat-count" id="stat-groceries">0</div>
+      <div class="stat-label">🛒 Nákup</div>
+    </div>
+    <div class="stat-pill" data-cat="Personal" title="Osobné úlohy">
+      <div class="stat-count" id="stat-personal">0</div>
+      <div class="stat-label">👤 Osobné</div>
+    </div>
+    <div class="stat-pill" data-cat="Other" title="Ostatné">
+      <div class="stat-count" id="stat-other">0</div>
+      <div class="stat-label">📌 Ostatné</div>
+    </div>
+  </div>
+
+  <!-- ── Calendar Strip ── -->
+  <div class="calendar-strip-wrapper" aria-label="Výber dňa">
+    <div class="calendar-strip" id="calendar-strip" role="tablist">
+      <!-- Dynamically generated by JS -->
+    </div>
+    <button class="cal-nav-btn cal-prev" id="cal-prev" title="Predchádzajúce dni" aria-label="Predchádzajúce dni">
+      <i class="fas fa-chevron-left"></i>
+    </button>
+    <button class="cal-nav-btn cal-next" id="cal-next" title="Nasledujúce dni" aria-label="Nasledujúce dni">
+      <i class="fas fa-chevron-right"></i>
+    </button>
+  </div>
+
+  <!-- ── Task Board ── -->
+  <div class="board-header">
+    <h1 class="board-title" id="board-title">
+      <i class="fas fa-list-check" style="color: var(--accent); font-size:.9em;"></i>
+      Moje úlohy
+    </h1>
+    <div class="board-controls">
+      <button class="filter-btn active" id="filter-all" data-filter="all">Všetky</button>
+      <button class="filter-btn" id="filter-open" data-filter="open">Otvorené</button>
+      <button class="filter-btn" id="filter-done" data-filter="done">Splnené</button>
+    </div>
+  </div>
+
+  <div id="task-board" role="region" aria-label="Zoznam úloh">
+    <!-- Dynamically rendered -->
+  </div>
+
+</main>
+
+<!-- ═══════════════ AUTH MODAL ═══════════════ -->
+<div id="auth-overlay" class="auth-overlay" style="display: none;">
+  <div class="auth-card">
+    <div class="auth-logo">🧠</div>
+    <h2 class="auth-title">BrainDump</h2>
+    <p class="auth-subtitle">Zadajte prístupové heslo pre vstup do aplikácie</p>
+    <div class="auth-form" id="auth-form">
+      <div class="auth-input-group">
+        <i class="fas fa-key auth-input-icon"></i>
+        <input type="password" id="auth-password" class="auth-input" placeholder="Zadaj heslo..." autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter'){event.preventDefault();performLogin(this.value);}" required>
+      </div>
+      <div id="auth-error" class="auth-error" style="display: none;"></div>
+      <button type="button" id="auth-submit-btn" class="btn-primary auth-submit-btn" onclick="performLogin(document.getElementById('auth-password').value)">
+        <i class="fas fa-unlock"></i> Odomknúť
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ QUICK ADD MODAL (TickTick style) ═══════════════ -->
+<div id="quick-add-overlay" class="modal-overlay" style="display: none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">
+        <i class="fas fa-plus-circle" style="color: var(--accent);"></i>
+        <span>Nová úloha</span>
+      </div>
+      <button class="modal-close" id="quick-add-close" title="Zatvoriť">&times;</button>
+    </div>
+    <form id="quick-add-form" class="modal-form" onsubmit="return false;">
+      <textarea id="quick-add-text" class="modal-textarea" placeholder="Čo máš na pláne? (napr. Kúpiť mlieko, Odoslať report...)" rows="3" required></textarea>
+      <div class="category-selector-label">Kategória:</div>
+      <div class="category-pills" id="category-pills">
+        <button type="button" class="cat-pill active" data-cat="Work">🖥️ Work</button>
+        <button type="button" class="cat-pill" data-cat="Groceries">🛒 Nákup</button>
+        <button type="button" class="cat-pill" data-cat="Personal">👤 Osobné</button>
+        <button type="button" class="cat-pill" data-cat="Other">📌 Ostatné</button>
+      </div>
+      <div class="due-date-row">
+        <label for="quick-add-due-date" class="due-date-label">
+          <i class="fas fa-calendar-day"></i> Termín:
+        </label>
+        <input type="date" id="quick-add-due-date" class="due-date-input" title="Dátum termínu (voliteľné)">
+        <button type="button" class="due-date-clear" id="quick-add-due-clear" title="Zrušiť dátum">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="quick-add-cancel">Zrušiť</button>
+        <button type="submit" class="btn-primary" id="quick-add-submit">
+          <i class="fas fa-check"></i> Pridať úlohu
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ EDIT TASK MODAL ═══════════════ -->
+<div id="edit-task-overlay" class="modal-overlay" style="display: none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">
+        <i class="fas fa-pen" style="color: var(--accent);"></i>
+        <span>Upraviť úlohu</span>
+      </div>
+      <button class="modal-close" id="edit-task-close" title="Zatvoriť">&times;</button>
+    </div>
+    <form id="edit-task-form" class="modal-form" onsubmit="return false;">
+      <textarea id="edit-task-text" class="modal-textarea" rows="3" required></textarea>
+      <div class="category-selector-label">Kategória:</div>
+      <div class="category-pills" id="edit-category-pills">
+        <button type="button" class="cat-pill" data-cat="Work">🖥️ Work</button>
+        <button type="button" class="cat-pill" data-cat="Groceries">🛒 Nákup</button>
+        <button type="button" class="cat-pill" data-cat="Personal">👤 Osobné</button>
+        <button type="button" class="cat-pill" data-cat="Other">📌 Ostatné</button>
+      </div>
+      <div class="due-date-row">
+        <label for="edit-task-due-date" class="due-date-label">
+          <i class="fas fa-calendar-day"></i> Termín:
+        </label>
+        <input type="date" id="edit-task-due-date" class="due-date-input" title="Dátum termínu (voliteľné)">
+        <button type="button" class="due-date-clear" id="edit-due-clear" title="Zrušiť dátum">
+          <i class="fas fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="edit-task-cancel">Zrušiť</button>
+        <button type="submit" class="btn-primary" id="edit-task-submit">
+          <i class="fas fa-check"></i> Uložiť zmeny
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ═══════════════ TOAST CONTAINER ═══════════════ -->
+<div id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<script src="app.js?t=1788900000"></script>
+</body>
+</html>

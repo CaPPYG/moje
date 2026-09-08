@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GarcArzP HUB</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #1a202c;
+            --card-bg: #2d3748;
+            --text-color: #e2e8f0;
+            --accent-color: #4299e1;
+            --border-color: #4a5568;
+            --hover-bg: #4a5568;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            box-sizing: border-box;
+            background-image: radial-gradient(circle at center, rgba(66, 153, 225, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            text-align: center;
+            margin-top: 40px;
+        }
+        h1 {
+            color: var(--accent-color);
+            margin-bottom: 40px;
+            font-size: 2.5em;
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            padding: 20px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            text-decoration: none;
+            color: var(--text-color);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(to right, var(--accent-color), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.3s ease-out;
+        }
+        .card:hover::before {
+            transform: translateX(0);
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px var(--accent-color);
+            background-color: var(--hover-bg);
+        }
+        .card-icon {
+            font-size: 3.5em;
+            margin-bottom: 15px;
+            color: var(--accent-color);
+            transition: color 0.2s ease;
+        }
+        .card:hover .card-icon {
+            color: var(--text-color);
+        }
+        .card-title {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .card-description {
+            font-size: 0.95em;
+            color: #a0aec0;
+            line-height: 1.5;
+        }
+
+        .card-drive::before {
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+        }
+        .card-drive:hover {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px rgba(56, 189, 248, 0.4);
+        }
+
+        .card-pastebin::before {
+            background: linear-gradient(to right, #8b5cf6, #f97316);
+        }
+        .card-pastebin:hover {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px rgba(139, 92, 246, 0.4);
+        }
+
+        .card-ig::before {
+            background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+        }
+        .card-ig:hover {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px rgba(220, 39, 67, 0.45);
+        }
+
+        .card-braindump::before {
+            background: linear-gradient(135deg, #4299e1, #a78bfa);
+        }
+        .card-braindump:hover {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px rgba(167, 139, 250, 0.4);
+        }
+
+        .card-cloak::before {
+            background: linear-gradient(135deg, #f75ff2, #8b5cf6);
+        }
+        .card-cloak:hover {
+            box-shadow: 0 8px 25px var(--shadow-color), 0 0 20px rgba(247, 95, 242, 0.45);
+        }
+
+        /* System & Network Status Bar */
+        .status-bar {
+            background: rgba(30, 41, 59, 0.75);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(74, 85, 104, 0.6);
+            border-radius: 14px;
+            padding: 14px 20px;
+            margin: 0 auto 30px auto;
+            max-width: 1100px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+        .status-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85em;
+            color: #a0aec0;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(74, 85, 104, 0.3);
+        }
+        .status-indicator-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pulse-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+            display: inline-block;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            animation: pulse-animation 2s infinite;
+        }
+        .pulse-dot.offline {
+            background-color: #718096;
+            box-shadow: none;
+            animation: none;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .status-label-badge {
+            font-size: 0.85em;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #e2e8f0;
+        }
+        .status-meta-group {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            font-size: 0.85em;
+        }
+        .status-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .status-metrics-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 12px;
+        }
+        .metric-pill {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(74, 85, 104, 0.4);
+            border-radius: 10px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+        .metric-pill:hover {
+            border-color: rgba(66, 153, 225, 0.5);
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .metric-title-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8em;
+            color: #94a3b8;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .metric-icon {
+            font-size: 0.95em;
+            color: var(--accent-color);
+        }
+        .metric-val {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.05em;
+            font-weight: 700;
+            color: #f1f5f9;
+        }
+        .metric-subval {
+            font-size: 0.78em;
+            color: #94a3b8;
+            display: flex;
+            justify-content: space-between;
+        }
+        .metric-track {
+            width: 100%;
+            height: 4px;
+            background: rgba(74, 85, 104, 0.4);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .metric-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-color);
+            border-radius: 3px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+        }
+
+        /* Sieťový monitor (Network Activity) */
+        .metric-pill-net .metric-icon { color: #38bdf8; }
+        .metric-pill-net .metric-fill { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2em;
+            }
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+            .card {
+                padding: 20px;
+            }
+            .card-icon {
+                font-size: 3em;
+            }
+            .card-title {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>GarcArzP Project HUB</h1>
+
+        <!-- Kompaktný stavový panel servera & sieťového limitu -->
+        <div class="status-bar" id="statusBar">
+            <div class="status-top-row">
+                <div class="status-indicator-group">
+                    <span class="pulse-dot" id="sysLiveDot"></span>
+                    <span class="status-label-badge" id="sysStatusText">GCE SERVER: ONLINE</span>
+                </div>
+                <div class="status-meta-group">
+                    <div class="status-meta-item" title="Doba behu systému">
+                        <i class="fas fa-clock"></i> <span id="sysUptime">Uptime: --</span>
+                    </div>
+                    <div class="status-meta-item" title="Posledná aktualizácia metrík">
+                        <i class="fas fa-rotate" id="sysRefreshIcon" style="cursor: pointer;" title="Kliknite pre obnovenie"></i> <span id="sysUpdated">--:--:--</span>
+                    </div>
+                </div>
+            </div>
+            <div class="status-metrics-row">
+                <!-- CPU -->
+                <div class="metric-pill" id="cpuPill" title="Zaťaženie procesora">
+                    <div class="metric-header">
+                        <div class="metric-title-group">
+                            <i class="fas fa-microchip metric-icon"></i>
+                            <span>CPU</span>
+                        </div>
+                        <span class="metric-val" id="cpuPercent">-- %</span>
+                    </div>
+                    <div class="metric-track">
+                        <div class="metric-fill" id="cpuFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="metric-subval">
+                        <span id="cpuCores">Cores: --</span>
+                        <span id="cpuLoadDesc">Zaťaženie</span>
+                    </div>
+                </div>
+
+                <!-- RAM -->
+                <div class="metric-pill" id="ramPill" title="Využitie operačnej pamäte">
+                    <div class="metric-header">
+                        <div class="metric-title-group">
+                            <i class="fas fa-memory metric-icon" style="color: #a78bfa;"></i>
+                            <span>RAM</span>
+                        </div>
+                        <span class="metric-val" id="ramPercent">-- %</span>
+                    </div>
+                    <div class="metric-track">
+                        <div class="metric-fill" id="ramFill" style="width: 0%; background: linear-gradient(90deg, #818cf8, #a78bfa);"></div>
+                    </div>
+                    <div class="metric-subval">
+                        <span id="ramUsage">-- / -- GB</span>
+                        <span>Využitie</span>
+                    </div>
+                </div>
+
+                <!-- DISK -->
+                <div class="metric-pill" id="diskPill" title="Zaplnenie diskového priestoru">
+                    <div class="metric-header">
+                        <div class="metric-title-group">
+                            <i class="fas fa-hard-drive metric-icon" style="color: #34d399;"></i>
+                            <span>DISK (/)</span>
+                        </div>
+                        <span class="metric-val" id="diskPercent">-- %</span>
+                    </div>
+                    <div class="metric-track">
+                        <div class="metric-fill" id="diskFill" style="width: 0%; background: linear-gradient(90deg, #10b981, #34d399);"></div>
+                    </div>
+                    <div class="metric-subval">
+                        <span id="diskUsage">-- / -- GB</span>
+                        <span>Koreňový disk</span>
+                    </div>
+                </div>
+
+                <!-- SIEŤOVÁ AKTIVITA (NET TRAFFIC) -->
+                <div class="metric-pill metric-pill-net" id="netPill" title="Sieťová aktivita a celkové prenesené dáta">
+                    <div class="metric-header">
+                        <div class="metric-title-group">
+                            <i class="fas fa-arrow-right-arrow-left metric-icon" style="color: #38bdf8;"></i>
+                            <span>SIEŤ (TRAFFIC)</span>
+                        </div>
+                        <span class="metric-val" id="netSpeedVal" style="font-size: 0.88em; color: #38bdf8; font-family: 'Inter', monospace;">↑ 0 B/s | ↓ 0 B/s</span>
+                    </div>
+                    <div class="metric-track">
+                        <div class="metric-fill" id="netFill" style="width: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8);"></div>
+                    </div>
+                    <div class="metric-subval" style="font-size: 0.8em; font-weight: 500;">
+                        <span id="netOutText" style="color: #e2e8f0;">NET OUT: -- GB</span>
+                        <span id="netInText" style="color: #94a3b8;">NET IN: -- GB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="dashboard-grid">
+            <!-- Solar Monitor Card -->
+            <a href="/solar" class="card">
+                <div class="card-icon"><i class="fas fa-sun"></i></div>
+                <div class="card-title">Solar Monitor <span style="font-size: 0.45em; background: #718096; color: #fff; padding: 2px 8px; border-radius: 6px; vertical-align: middle;">Pozastavené</span></div>
+                <div class="card-description">
+                    Monitorovanie solárnej energie, spotreby a stavu batérií v reálnom čase. <em>(Služba je momentálne pozastavená)</em>
+                </div>
+            </a>
+
+            <!-- Drive Drop Card -->
+            <a href="/drive" class="card card-drive">
+                <div class="card-icon" style="color: #38bdf8;"><i class="fab fa-google-drive"></i></div>
+                <div class="card-title">Drive Drop <span style="font-size: 0.45em; background: linear-gradient(135deg, #3b82f6, #06b6d4); color: #fff; padding: 2px 8px; border-radius: 6px; vertical-align: middle; font-weight: 600;">Nové</span></div>
+                <div class="card-description">
+                    Rýchly uploader a downloader pre priečinok <b>UPLOADED</b> na Google Drive. Pošli si súbory zo školy a stiahni kdekoľvek.
+                </div>
+            </a>
+
+            <!-- PasteBin Card -->
+            <a href="/paste" class="card card-pastebin">
+                <div class="card-icon" style="color: #c084fc;"><i class="fas fa-shield-halved"></i></div>
+                <div class="card-title">PasteBin <span style="font-size: 0.45em; background: linear-gradient(135deg, #8b5cf6, #f97316); color: #fff; padding: 2px 8px; border-radius: 6px; vertical-align: middle; font-weight: 600;">Nové</span></div>
+                <div class="card-description">
+                    Zabezpečený pastebin pre text, kód aj obrázky s TTL expiráciou, heslom a funkciou „spáliť po prečítaní“.
+                </div>
+            </a>
+
+            <!-- IG Analytics Tracker Card -->
+            <a href="/ig" class="card card-ig">
+                <div class="card-icon" style="background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"><i class="fab fa-instagram"></i></div>
+                <div class="card-title">IG Tracker <span style="font-size: 0.45em; background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); color: #fff; padding: 2px 8px; border-radius: 6px; vertical-align: middle; font-weight: 600;">Nové</span></div>
+                <div class="card-description">
+                    Analytický tracker pre Instagram profily – sledovanie rastu followerov (denná delta), TOP reels (views & likes), priemerov a engagementu.
+                </div>
+            </a>
+
+            <!-- BrainDump — Voice Task Manager Card -->
+            <a href="/braindump" class="card card-braindump">
+                <div class="card-icon" style="background: linear-gradient(135deg, #4299e1, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"><i class="fas fa-microphone-lines"></i></div>
+                <div class="card-title">BrainDump <span style="font-size: 0.45em; background: linear-gradient(135deg, #4299e1, #a78bfa); color: #fff; padding: 2px 8px; border-radius: 6px; vertical-align: middle; font-weight: 600;">Nové</span></div>
+                <div class="card-description">
+                    Hlasový záznamník úloh — nadiktuj čokoľvek, AI (Groq Llama 3) to automaticky rozdelí na kategorizované to-do položky. PWA pre Android.
+                </div>
+            </a>
+        </div>
+    </div>
+    <script>
+        // Pri lokálnom otvorení (file://) presmerovať linky na lokálne bežiace porty
+        if (window.location.protocol === 'file:') {
+            const driveLink = document.querySelector('a[href="/drive"]');
+            if (driveLink) driveLink.href = 'http://127.0.0.1:5050';
+            const pasteLink = document.querySelector('a[href="/paste"]');
+            if (pasteLink) pasteLink.href = 'http://127.0.0.1:5060';
+            const solarLink = document.querySelector('a[href="/solar"]');
+            if (solarLink) solarLink.href = 'http://127.0.0.1:8000';
+            const igLink = document.querySelector('a[href="/ig"]');
+            if (igLink) igLink.href = 'http://127.0.0.1:5080';
+            const brainLink = document.querySelector('a[href="/braindump"]');
+            if (brainLink) brainLink.href = 'http://127.0.0.1:5090/../frontend/index.html';
+        }
+
+        // ─── Systémový a sieťový monitor (Auto-refresh) ─────────────
+        const statusEndpoint = (window.location.protocol === 'file:')
+            ? 'http://127.0.0.1:5070/api/system-status'
+            : '/api/system-status';
+
+        async function updateSystemStatus() {
+            const refreshIcon = document.getElementById('sysRefreshIcon');
+            if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+            try {
+                const res = await fetch(statusEndpoint, { cache: 'no-store' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const data = await res.json();
+
+                // Online indikátor
+                const liveDot = document.getElementById('sysLiveDot');
+                const statusText = document.getElementById('sysStatusText');
+                if (liveDot) liveDot.className = 'pulse-dot';
+                if (statusText) statusText.textContent = data.mock ? 'LOKÁLNY MONITOR: ONLINE' : 'GCE SERVER: ONLINE';
+
+                // Uptime
+                if (data.uptime && data.uptime.human) {
+                    const el = document.getElementById('sysUptime');
+                    if (el) el.textContent = 'Uptime: ' + data.uptime.human;
+                }
+
+                // Čas poslednej aktualizácie
+                const now = new Date();
+                const timeStr = now.toTimeString().split(' ')[0];
+                const updatedEl = document.getElementById('sysUpdated');
+                if (updatedEl) updatedEl.textContent = timeStr;
+
+                // CPU
+                if (data.cpu) {
+                    const cpuPercent = document.getElementById('cpuPercent');
+                    const cpuFill = document.getElementById('cpuFill');
+                    const cpuCores = document.getElementById('cpuCores');
+                    if (cpuPercent) cpuPercent.textContent = data.cpu.percent + ' %';
+                    if (cpuFill) cpuFill.style.width = Math.min(100, Math.max(0, data.cpu.percent)) + '%';
+                    if (cpuCores) cpuCores.textContent = 'Jadrá: ' + data.cpu.cores;
+                }
+
+                // RAM
+                if (data.memory) {
+                    const ramPercent = document.getElementById('ramPercent');
+                    const ramFill = document.getElementById('ramFill');
+                    const ramUsage = document.getElementById('ramUsage');
+                    if (ramPercent) ramPercent.textContent = data.memory.percent + ' %';
+                    if (ramFill) ramFill.style.width = Math.min(100, Math.max(0, data.memory.percent)) + '%';
+                    if (ramUsage) ramUsage.textContent = data.memory.used_gb + ' / ' + data.memory.total_gb + ' GB';
+                }
+
+                // Disk
+                if (data.disk) {
+                    const diskPercent = document.getElementById('diskPercent');
+                    const diskFill = document.getElementById('diskFill');
+                    const diskUsage = document.getElementById('diskUsage');
+                    if (diskPercent) diskPercent.textContent = data.disk.percent + ' %';
+                    if (diskFill) diskFill.style.width = Math.min(100, Math.max(0, data.disk.percent)) + '%';
+                    if (diskUsage) diskUsage.textContent = data.disk.used_gb + ' / ' + data.disk.total_gb + ' GB';
+                }
+
+                // Sieťová aktivita (Network Traffic & Speed)
+                if (data.network) {
+                    const netSpeedVal = document.getElementById('netSpeedVal');
+                    const netOutText = document.getElementById('netOutText');
+                    const netInText = document.getElementById('netInText');
+
+                    if (netSpeedVal) {
+                        netSpeedVal.textContent = data.network.rate_summary || `↑ ${data.network.rate_out_human || '0 B/s'} | ↓ ${data.network.rate_in_human || '0 B/s'}`;
+                    }
+                    if (netOutText) {
+                        netOutText.textContent = `NET OUT: ${data.network.egress_gb} GB`;
+                    }
+                    if (netInText) {
+                        netInText.textContent = `NET IN: ${data.network.ingress_gb} GB`;
+                    }
+                }
+            } catch (err) {
+                // Tichý offline režim bez poškodenia layoutu
+                const liveDot = document.getElementById('sysLiveDot');
+                const statusText = document.getElementById('sysStatusText');
+                if (liveDot) liveDot.className = 'pulse-dot offline';
+                if (statusText) statusText.textContent = 'MONITOR OFFLINE';
+            } finally {
+                if (refreshIcon) {
+                    setTimeout(() => refreshIcon.classList.remove('fa-spin'), 350);
+                }
+            }
+        }
+
+        // Spustenie monitora po načítaní
+        updateSystemStatus();
+        setInterval(updateSystemStatus, 6000);
+        const refreshIconBtn = document.getElementById('sysRefreshIcon');
+        if (refreshIconBtn) refreshIconBtn.addEventListener('click', updateSystemStatus);
+    </script>
+</body>
+</html>

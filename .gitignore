@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+*.egg
+
+# Secrets, Environment & Auth Tokens
+.env
+.env.*
+!.env.example
+*.key
+credentials*.json
+*token*.*
+cookies*.txt
+cookies*.json
+
+# SQLite Databases & Uploaded Media
+*.db
+*.sqlite
+*.sqlite3
+IGTracker/data/vault/
+IGTracker/static/desktop_spoofer.zip
+Pastebin/data/uploads/
+
+# Android / Gradle
+.gradle/
+**/build/
+*.apk
+*.aab
+local.properties
+.idea/
+*.iml
+
+# Node / Web
+node_modules/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.gemini/
+*.log
+
+# Submodules / other repos
+sach/
+

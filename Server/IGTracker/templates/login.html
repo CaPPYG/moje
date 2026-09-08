@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vstup do IG Tracker</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <a href="{{ url_for('index') }}" class="brand">
+        <div class="brand-icon ig-gradient-icon"><i class="fab fa-instagram"></i></div>
+        <span class="brand-name">IG Tracker</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="main-content center-card-wrapper">
+    <div class="center-card">
+      <div class="center-card-icon ig-gradient-bg">
+        <i class="fab fa-instagram"></i>
+      </div>
+      <h1 class="center-card-title">IG Analytics Tracker</h1>
+      <p class="center-card-desc">Zadajte prístupové heslo pre vstup do analytického dashboardu.</p>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for m in messages %}
+            <div class="alert-error">
+              {{ m }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('login') }}" class="login-form">
+        <div class="input-wrapper">
+          <input type="password" name="password" class="auth-input" placeholder="Zadaj heslo..." required autofocus>
+        </div>
+        <button type="submit" class="btn-primary-ig">
+          <i class="fas fa-arrow-right"></i> Prihlásiť sa
+        </button>
+      </form>
+    </div>
+  </main>
+
+</body>
+</html>

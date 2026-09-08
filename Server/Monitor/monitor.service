@@ -1,0 +1,17 @@
+[Unit]
+Description=GarcArzP HUB - System & Network Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=patrik
+WorkingDirectory=/home/patrik/server/Monitor
+Environment="PATH=/home/patrik/server/Monitor/venv/bin:/usr/local/bin:/usr/bin"
+Environment="MONITOR_PORT=5070"
+Environment="MONITOR_HOST=127.0.0.1"
+ExecStart=/home/patrik/server/Monitor/venv/bin/python app.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drive Drop – Google Drive File Uploader & Downloader</title>
+  <meta name="description" content="Jednoduchý a bezpečný file uploader a downloader pre priečinok UPLOADED na Google Drive.">
+  
+  <!-- Modern Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- ─── Header ─────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <div class="brand">
+        <div class="brand-icon"><i class="fab fa-google-drive"></i></div>
+        <span class="brand-name">Drive Drop</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      {% if drive_connected %}
+        <div class="status-badge" title="Google Drive je pripojený">
+          <span class="status-dot"></span>
+          <span>Drive: <b>{{ folder_name }}</b></span>
+        </div>
+      {% else %}
+        <div class="status-badge fallback" title="Drive token chýba – súbory sa ukladajú na lokálny server">
+          <span class="status-dot"></span>
+          <span>Lokálny server</span>
+        </div>
+        {% if authenticated %}
+          <a href="{{ url_for('connect_drive') }}" class="btn-action btn-download-direct" style="padding: 5px 12px; font-size: 0.82em; text-decoration: none;" title="Pripojiť Google Drive účet">
+            <i class="fab fa-google-drive"></i> Pripojiť Drive
+          </a>
+        {% endif %}
+      {% endif %}
+
+      {% if authenticated %}
+        <a href="{{ url_for('logout') }}" class="btn-logout" title="Odhlásiť sa">
+          <i class="fas fa-sign-out-alt"></i> <span>Odhlásiť</span>
+        </a>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ─── Main Content ───────────────────────────────────────────────────── -->
+  <main class="main-content">
+
+    {% if not authenticated %}
+      <!-- ─── Login Obrazovka ─────────────────────────────────────────────── -->
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <div class="auth-icon"><i class="fas fa-shield-halved"></i></div>
+          <h1 class="auth-title">Drive Drop</h1>
+          <p class="auth-subtitle">Zadaj prístupové heslo pre vstup do priečinka <b>{{ folder_name }}</b>.</p>
+
+          <form id="loginForm" class="auth-form" method="POST" action="{{ url_for('login') }}">
+            <div class="input-group">
+              <input type="password" id="passwordInput" class="auth-input" placeholder="Zadaj heslo..." required autofocus autocomplete="current-password">
+              <button type="button" id="togglePw" class="input-toggle-pw" title="Zobraziť/skryť heslo">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            <button type="submit" class="btn-primary">
+              <i class="fas fa-arrow-right"></i> Prihlásiť sa
+            </button>
+          </form>
+        </div>
+      </div>
+
+    {% else %}
+      <!-- ─── File Uploader & Downloader Dashboard ────────────────────────── -->
+      
+      <!-- Upload Dropzone Card -->
+      <section class="upload-card">
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" multiple style="display: none;">
+          <div class="dropzone-icon">
+            <i class="fas fa-cloud-arrow-up"></i>
+          </div>
+          <h2 class="dropzone-title">Presuň sem akékoľvek súbory</h2>
+          <p class="dropzone-desc">Alebo klikni sem a vyber súbory zo svojho zariadenia (až do 2 GB).</p>
+          <div class="dropzone-actions">
+            <button type="button" class="btn-primary" onclick="document.getElementById('fileInput').click()">
+              <i class="fas fa-plus"></i> Vybrať súbory
+            </button>
+          </div>
+          <div class="paste-tip">
+            <i class="fas fa-lightbulb"></i> Tip: Snímku obrazovky alebo skopírovaný súbor môžeš priamo vložiť cez <kbd>Ctrl+V</kbd>
+          </div>
+        </div>
+
+        <!-- Real-time Upload Progress Panel -->
+        <div class="progress-panel" id="progressPanel">
+          <div class="progress-header">
+            <span class="progress-filename" id="progressFilename">Nahrávam súbor...</span>
+            <span class="progress-percent" id="progressPercent">0%</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Files Manager Section -->
+      <section class="files-section">
+        <div class="section-toolbar">
+          <div class="toolbar-left">
+            <h2 class="section-title">
+              <i class="fas fa-folder-open" style="color: var(--accent-cyan);"></i> Súbory v priečinku {{ folder_name }}
+            </h2>
+            <span class="stat-pill" id="statCount">Počet: 0</span>
+            <span class="stat-pill" id="statSize">Veľkosť: 0 B</span>
+          </div>
+
+          <div class="toolbar-right">
+            <div class="search-box">
+              <i class="fas fa-search search-icon"></i>
+              <input type="text" id="searchInput" class="search-input" placeholder="Hľadať súbor..." autocomplete="off">
+            </div>
+
+            <select id="sortSelect" class="sort-select" title="Zoradiť súbory">
+              <option value="newest">Najnovšie</option>
+              <option value="oldest">Najstaršie</option>
+              <option value="name">Názov (A-Z)</option>
+              <option value="size">Najväčšie</option>
+            </select>
+
+            <button type="button" id="btnRefresh" class="btn-icon" title="Obnoviť zoznam">
+              <i class="fas fa-rotate-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Files List Container -->
+        <div class="files-container" id="filesContainer">
+          <!-- Dynamicky naplnené cez app.js -->
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display: none;">
+          <div class="empty-icon"><i class="fas fa-box-open"></i></div>
+          <h3 class="empty-title">Priečinok {{ folder_name }} je prázdny</h3>
+          <p class="empty-desc">Nahraj svoj prvý súbor pretiahnutím do zóny vyššie.</p>
+        </div>
+      </section>
+
+    {% endif %}
+
+  </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

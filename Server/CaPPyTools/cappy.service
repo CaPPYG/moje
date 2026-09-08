@@ -1,0 +1,14 @@
+[Unit]
+Description=CaPPy Tools WEB
+After=network.target
+
+[Service]
+User=patrik
+WorkingDirectory=/home/patrik/cappy
+ExecStart=/home/patrik/cappy/venv/bin/python server.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

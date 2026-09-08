@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PasteBin – Zabezpečený Pastebin & Image Share</title>
+  <meta name="description" content="Bezpečné, anonymné a dočasné zdieľanie textu, kódu a obrázkov s expiráciou a funkciou zmazania po prečítaní.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <a href="{{ url_for('index') }}" class="brand">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <span class="brand-name">PasteBin</span>
+      </a>
+    </div>
+    <div class="header-right" style="display: flex; align-items: center; gap: 14px;">
+      <span style="font-size: 0.85em; color: var(--text-dim);">🔒 End-to-end dočasné zdieľanie</span>
+      <a href="{{ url_for('logout') }}" style="color: var(--text-dim); text-decoration: none; font-size: 0.85em; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05);" title="Odhlásiť sa">
+        <i class="fas fa-arrow-right-from-bracket"></i> Odhlásiť
+      </a>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <form id="pasteForm" class="card-paste">
+      <!-- Tabs Header -->
+      <div class="tabs-header">
+        <button type="button" class="tab-btn active" id="tabTextBtn">
+          <i class="fas fa-file-code"></i> Text / Kód
+        </button>
+        <button type="button" class="tab-btn" id="tabImageBtn">
+          <i class="fas fa-image"></i> Obrázok (až 10 MB)
+        </button>
+      </div>
+
+      <!-- Tab Content: Text -->
+      <div class="tab-content" id="textContentSection">
+        <textarea id="pasteTextarea" class="paste-textarea" placeholder="Sem napíš alebo vlož svoj text, logy, konfiguráciu alebo zdrojový kód..." autofocus></textarea>
+      </div>
+
+      <!-- Tab Content: Image -->
+      <div class="tab-content" id="imageContentSection" style="display: none;">
+        <div class="image-dropzone" id="imageDropzone">
+          <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display: none;">
+          <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+          <h3 style="font-size: 1.2em; font-weight: 600; color: #fff; margin-bottom: 6px;">Presuň obrázok sem alebo klikni pre výber</h3>
+          <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 14px;">Podporované formáty: PNG, JPG, WEBP, GIF (max. 10 MB)</p>
+          <div style="font-size: 0.84em; color: var(--text-dim); display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border-color);">
+            <i class="fas fa-lightbulb" style="color: var(--accent-fire);"></i> Alebo priamo vlož screenshot zo schránky cez <kbd style="color:var(--accent-cyan)">Ctrl+V</kbd>
+          </div>
+        </div>
+
+        <div class="image-preview-container" id="imagePreviewContainer">
+          <img id="imagePreviewImg" class="image-preview-img" src="" alt="Náhľad">
+          <div class="image-preview-info" id="imagePreviewInfo"></div>
+          <button type="button" class="btn-action" onclick="resetImage()" style="margin-top: 10px; color: var(--accent-red); border-color: rgba(239,68,68,0.3);">
+            <i class="fas fa-times"></i> Odstrániť obrázok
+          </button>
+        </div>
+      </div>
+
+      <!-- Options Toolbar -->
+      <div class="options-toolbar">
+        <div class="options-left">
+          <!-- TTL -->
+          <div class="option-group">
+            <i class="fas fa-clock" style="color: var(--accent-cyan);"></i>
+            <label for="ttlSelect">Expirácia:</label>
+            <select id="ttlSelect" class="option-select">
+              <option value="600">10 minút</option>
+              <option value="3600" selected>1 hodina</option>
+              <option value="86400">1 deň</option>
+              <option value="604800">7 dní</option>
+              <option value="0">Nikdy (bez expirácie)</option>
+            </select>
+          </div>
+
+          <!-- Burn after reading -->
+          <div class="option-group">
+            <label class="switch-label" title="Obsah sa po 1. úspešnom načítaní okamžite a natrvalo vymaže!">
+              <input type="checkbox" id="burnCheck">
+              <span>🔥 Zmazať po 1. otvorení</span>
+            </label>
+          </div>
+
+          <!-- Password -->
+          <div class="option-group">
+            <i class="fas fa-lock" style="color: var(--accent-purple);"></i>
+            <input type="password" id="passwordInput" class="option-input" placeholder="Heslo (voliteľné)" autocomplete="new-password">
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit" id="submitBtn">
+          <i class="fas fa-lock"></i> Vytvoriť bezpečný odkaz
+        </button>
+      </div>
+    </form>
+
+    <!-- Success Modal Box -->
+    <div class="success-modal" id="successModal">
+      <div class="success-header">
+        <i class="fas fa-check-circle"></i> Váš bezpečný odkaz je pripravený!
+      </div>
+      <div class="url-box">
+        <input type="text" id="generatedUrlInput" class="url-input" readonly>
+        <button type="button" class="btn-copy" id="btnCopyUrl">
+          <i class="fas fa-copy"></i> Kopírovať
+        </button>
+        <a id="btnOpenUrl" href="#" target="_blank" class="btn-action" style="background: rgba(255,255,255,0.06); padding: 10px 16px;">
+          <i class="fas fa-external-link-alt"></i> Otvoriť
+        </a>
+      </div>
+      <div class="success-details">
+        <span><i class="fas fa-shield-alt"></i> Šifrované uloženie</span>
+        <span><i class="fas fa-eye-slash"></i> Zmazanie po vypršaní platnosti</span>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

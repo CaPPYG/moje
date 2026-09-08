@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">BrainDump</string>
+    <string name="widget_name">BrainDump Úlohy</string>
+    <string name="widget_empty_text">Žiadne otvorené úlohy 🎉</string>
+    <string name="widget_loading">Načítavam úlohy…</string>
+    <string name="widget_add_task">Pridať</string>
+    <string name="widget_record_task">Hovoriť</string>
+    <string name="widget_refresh">Obnoviť</string>
+    <string name="permission_audio_rationale">BrainDump potrebuje prístup k mikrofónu pre hlasový prepis úloh.</string>
+</resources>

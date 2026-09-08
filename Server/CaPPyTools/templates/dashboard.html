@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+{% block title %}Studio – Dashboard{% endblock %}
+{% block content %}
+<nav class="navbar">
+  <div class="logo"><span class="mark">🔧</span> Studio</div>
+  <div class="nav-tabs" id="navTabs">
+    <div class="nav-tab active" data-tab="spoofer">Spoofer</div>
+    <div class="nav-tab" data-tab="frames">Frames</div>
+    <div class="nav-tab" data-tab="audio">Audio</div>
+    <div class="nav-tab" data-tab="cloaker">Cloaker</div>
+    <div class="nav-tab" data-tab="planner">Planner</div>
+    <div class="nav-tab" data-tab="reels">Reels</div>
+    {% if is_admin %}<div class="nav-tab" data-tab="admin">👑 Admin</div>{% endif %}
+  </div>
+  <div class="nav-right"><span><span class="user-dot"></span>{{ user }}</span> <a class="btn mini ghost" href="{{ url_for('logout') }}">Sign out</a></div>
+</nav>
+
+<div class="container">
+
+  <!-- ═══ SPOOFER ═══ -->
+  <section id="tab-spoofer" class="tabsec">
+    <div class="card">
+      <h2>⬆ <span class="hl">Source Media</span></h2>
+      <div class="drop" id="spoofDrop">
+        <div class="big">Pretiahni sem video/foto – aj celý priečinok</div>
+        <div class="small">MP4 · MOV · MKV · WebM · JPG · PNG</div>
+      </div>
+      <input type="file" id="spoofFile" hidden>
+      <input type="file" id="spoofFolder" hidden multiple webkitdirectory>
+      <div class="row">
+        <button class="btn ghost small" onclick="document.getElementById('spoofFile').click()">Vybrať súbor…</button>
+        <button class="btn ghost small" onclick="document.getElementById('spoofFolder').click()">📁 Vybrať priečinok…</button>
+        <span class="hint" id="spoofName">Žiadny súbor</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📍 <span class="hl">Location</span></h2>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="locEnabled" checked><span class="sl"></span></label>
+        <span class="hint">Zapísať GPS (exiftool)</span>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <div class="field"><label>Mesto</label>
+          <select id="locCity">
+            {% for c in cities %}<option value="{{ c[0] }}" {% if c[0]=='Los Angeles, CA' %}selected{% endif %}>{{ c[0] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Latitude</label><input type="number" step="any" id="locLat" value="34.0522"></div>
+        <div class="field"><label>Longitude</label><input type="number" step="any" id="locLon" value="-118.2437"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="width:190px"><label>Jitter between copies</label><input type="number" step="any" id="locJitter" value="0.0015"></div>
+        <div class="field" style="width:120px"><label>Kópie</label><input type="number" id="locCopies" value="1" min="1" max="20"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>🎛 <span class="hl">Randomization Filters</span></h2>
+      <div class="row" style="margin-bottom:12px">
+        <button class="btn small" onclick="filtersAll(true)">All On</button>
+        <button class="btn ghost small" onclick="filtersAll(false)">All Off</button>
+        <button class="btn ghost small" onclick="filtersReset()">Reset</button>
+      </div>
+      <div class="fgrid">
+        {% for f in filters %}
+        <div class="fcard">
+          <div class="fhead"><b>{{ f[1] }}</b>
+            <label class="switch"><input type="checkbox" id="f_{{ f[0] }}_enabled" checked><span class="sl"></span></label>
+          </div>
+          {% if f[4] %}
+          <div class="minmax">
+            <input type="number" step="any" id="f_{{ f[0] }}_min" value="{{ f[5] }}">
+            <input type="number" step="any" id="f_{{ f[0] }}_max" value="{{ f[6] }}">
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📱 <span class="hl">Device Fingerprint</span></h2>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="fpEnabled" checked><span class="sl"></span></label>
+        <span class="hint">Zapísať fingerprint (exiftool)</span>
+      </div>
+      <div class="grid3" style="margin-top:10px">
+        <div class="field"><label>Režim</label>
+          <select id="fpMode"><option value="random">Random unique</option><option value="same">Same device</option></select>
+        </div>
+        <div class="field"><label>Zariadenie</label>
+          <select id="fpDevice">
+            {% for d in devices %}<option value="{{ d[0] }}">{{ d[0] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field"><label>Creation date back (days)</label><input type="number" id="fpDays" value="30"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fpRandDate" checked> Random date</label>
+        <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fpRandUid" checked> Random UID</label>
+        <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="fpNoSig" checked> No ffmpeg signature</label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="fpTitle" placeholder="Title (voliteľné)" style="flex:1">
+        <input type="text" id="fpArtist" placeholder="Artist" style="flex:1">
+        <input type="text" id="fpComment" placeholder="Comment" style="flex:1">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚡ <span class="hl">Spracovať</span></h2>
+      <div class="row">
+        <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="origEnabled" checked> Spoofnúť aj originál bez zmeny kvality (len metadáta + nový hash)</label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="hint" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="driveOutput" checked> ☁ Výstup na Google Drive (0 € egress, šetrí disk)</label>
+      </div>
+      <div class="error-banner hidden" id="spoofErr"></div>
+      <button class="btn block" id="spoofBtn" onclick="runSpoof()">⚡ Spracovať</button>
+      <div class="progress hidden" id="spoofProgWrap"><div class="bar" id="spoofBar"></div></div>
+      <div class="log" id="spoofLog"></div>
+      <a class="btn block" id="spoofDl" style="display:none;margin-top:12px" download>⬇ Stiahnuť</a>
+    </div>
+  </section>
+
+  <!-- ═══ FRAMES ═══ -->
+  <section id="tab-frames" class="tabsec hidden">
+    <div class="card">
+      <h2>🖼 <span class="hl">Frame Extractor</span></h2>
+      <div class="hint">Extrahuj obrázky z videa – každých N s / N frameov celkom / jeden v čase T.</div>
+      <div class="drop" id="frameDrop">
+        <div class="big">Pretiahni sem video</div>
+        <div class="small">MP4 · MOV · MKV · WebM</div>
+      </div>
+      <input type="file" id="frameFile" hidden>
+      <div class="grid3" style="margin-top:12px">
+        <div class="field"><label>Režim</label>
+          <select id="frameMode">
+            <option value="interval">Každých N sekúnd</option>
+            <option value="count">N frameov celkom</option>
+            <option value="time">Jeden frame v čase T</option>
+          </select>
+        </div>
+        <div class="field"><label>Hodnota</label><input type="number" step="any" id="frameValue" value="5"></div>
+        <div class="field"><label>Formát</label>
+          <select id="frameFmt"><option value="jpg">JPG</option><option value="png">PNG</option></select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="width:220px"><label>Kvalita JPG (2 = najlepšia)</label><input type="number" id="frameQuality" value="2"></div>
+      </div>
+      <div class="error-banner hidden" id="frameErr"></div>
+      <button class="btn block" id="frameBtn" onclick="runFrames()">🖼 Extrahovať</button>
+      <div class="progress hidden" id="frameProgWrap"><div class="bar" id="frameBar"></div></div>
+      <div class="log" id="frameLog"></div>
+    </div>
+  </section>
+
+  <!-- ═══ AUDIO ═══ -->
+  <section id="tab-audio" class="tabsec hidden">
+    <div class="card">
+      <h2>🎵 <span class="hl">Audio Extractor</span></h2>
+      <div class="hint">Extrahuj audio stopu do MP3 / WAV / M4A / OGG / FLAC.</div>
+      <div class="drop" id="audioDrop">
+        <div class="big">Pretiahni sem video</div>
+        <div class="small">MP4 · MOV · MKV · WebM</div>
+      </div>
+      <input type="file" id="audioFile" hidden>
+      <div class="grid3" style="margin-top:12px">
+        <div class="field"><label>Formát</label>
+          <select id="audioFmt" onchange="audioFmtChanged()">
+            <option value="mp3">MP3</option><option value="wav">WAV</option>
+            <option value="m4a">M4A</option><option value="ogg">OGG</option>
+            <option value="flac">FLAC</option>
+          </select>
+        </div>
+        <div class="field"><label>Bitrate</label>
+          <select id="audioBitrate">
+            <option value="128k">128k</option><option value="192k" selected>192k</option>
+            <option value="256k">256k</option><option value="320k">320k</option>
+          </select>
+        </div>
+      </div>
+      <div class="error-banner hidden" id="audioErr"></div>
+      <button class="btn block" id="audioBtn" onclick="runAudio()">🎵 Extrahovať</button>
+      <div class="progress hidden" id="audioProgWrap"><div class="bar" id="audioBar"></div></div>
+      <div class="log" id="audioLog"></div>
+    </div>
+  </section>
+
+  <!-- ═══ CLOAKER ═══ -->
+  <section id="tab-cloaker" class="tabsec hidden">
+    <div class="card">
+      <h2>🔗 <span class="hl">Link Cloaker</span></h2>
+      <div class="hint">Slug + skutočný odkaz → cloaked link <b>BASE_URL/c/slug</b> (redirect už funguje).</div>
+      <div class="row" style="margin-bottom:12px">
+        <div class="field" style="flex:1"><label>Base URL</label><input type="text" id="cloakBase" value="{{ (st.cloaker or {}).get('base_url', base_url) }}"></div>
+      </div>
+      <div id="cloakList"></div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="cloakSlug" placeholder="slug (napr. pozri-video)" style="flex:1">
+        <input type="text" id="cloakUrl" placeholder="https://realny-odkaz.sk/…" style="flex:2">
+        <button class="btn small" onclick="cloakAdd()">＋ Pridať</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn block" onclick="cloakSave()">💾 Uložiť</button>
+        <button class="btn green block" onclick="cloakGenerate()">⚡ Vygenerovať linky</button>
+      </div>
+      <div class="log" id="cloakOut" style="height:120px"></div>
+    </div>
+  </section>
+
+  <!-- ═══ PLANNER ═══ -->
+  <section id="tab-planner" class="tabsec hidden">
+    <div class="card">
+      <h2>📱 <span class="hl">Content Planner</span></h2>
+      <div class="hint">Nahraj originálne videá → pridaj zariadenia → vygeneruj rozvrh. Každé zariadenie dostane každé video presne raz, bez kolízií v ten istý deň.</div>
+      <div class="grid3">
+        <div class="field"><label>Videí / deň min</label><input type="number" id="plVmin" value="1" min="1" max="10"></div>
+        <div class="field"><label>Videí / deň max</label><input type="number" id="plVmax" value="3" min="1" max="10"></div>
+        <div class="field"><label>Dátum začiatku</label><input type="date" id="plStart"></div>
+      </div>
+      <div class="hint" style="margin-top:14px">VAULT – originálne videá</div>
+      <div class="drop" id="plDrop">
+        <div class="big">Pretiahni sem videá</div>
+        <div class="small">MP4 · MOV · MKV · WebM</div>
+      </div>
+      <input type="file" id="plFile" multiple hidden>
+      <div id="plVideos"></div>
+      <div class="hint" style="margin-top:14px">PHONES – zariadenia</div>
+      <div id="plDevices"></div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="devName" placeholder="Názov – napr. Phone 1" style="flex:1">
+        <select id="devCity">
+          {% for c in cities %}<option value="{{ c[0] }}" {% if c[0]=='Los Angeles, CA' %}selected{% endif %}>{{ c[0] }}</option>{% endfor %}
+        </select>
+        <select id="devModel">
+          {% for d in devices %}<option value="{{ d[0] }}">{{ d[0] }}</option>{% endfor %}
+        </select>
+        <button class="btn small" onclick="devAdd()">＋ Pridať phone</button>
+      </div>
+      <div class="error-banner hidden" id="plErr"></div>
+      <div class="row" style="margin-top:14px">
+        <button class="btn block" onclick="plSave()">💾 Uložiť</button>
+        <button class="btn green block" onclick="plGenerate()">⚡ Generovať rozvrh</button>
+      </div>
+      <div class="progress hidden" id="plProgWrap"><div class="bar" id="plBar"></div></div>
+      <div class="log" id="plLog"></div>
+      <div id="plResult" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <!-- ═══ REELS ═══ -->
+  <section id="tab-reels" class="tabsec hidden">
+    <div class="card">
+      <h2>🎬 <span class="hl">Reels Downloader</span></h2>
+      <div class="hint">Vlož odkazy na Instagram Reels / YouTube Shorts (jeden na riadok). Stiahnu sa cez yt-dlp a nahrajú do Google Drive → priečinok <b>„AI RAK“</b>.</div>
+      <div class="field" style="margin-top:10px">
+        <textarea id="reelsUrls" rows="5" placeholder="https://www.instagram.com/reel/...&#10;https://youtube.com/shorts/..." style="width:100%;background:#12101a;color:#e2e8f0;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+      <div class="error-banner hidden" id="reelsErr"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn block" id="reelsBtn" onclick="runReels()">⬇ Stiahnuť reels → Google Drive</button>
+      </div>
+      <div class="progress hidden" id="reelsProgWrap"><div class="bar" id="reelsBar"></div></div>
+      <div class="log" id="reelsLog"></div>
+      <div id="reelsLinks" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
+      <div class="hint" style="margin-top:10px">⚠ Vyžaduje <b>yt-dlp</b> a <b>ffmpeg</b> na serveri (<code>pip install -U yt-dlp</code>). Google Drive musí byť pripojený (Admin → Google Drive).</div>
+    </div>
+  </section>
+
+  <!-- ═══ ADMIN ═══ -->
+  {% if is_admin %}
+  <section id="tab-admin" class="tabsec hidden">
+    <div class="card">
+      <h2>👑 <span class="hl">Admin – Užívatelia</span></h2>
+      <div class="hint" id="adminTotal"></div>
+      <div id="adminList"></div>
+    </div>
+    <div class="card">
+      <h2>☁️ <span class="hl">Google Drive</span></h2>
+      <div class="hint" id="driveStatus">Kontrolujem…</div>
+      <div class="row">
+        <a class="btn block" href="{{ url_for('drive_connect') }}">🔗 Pripojiť Google Drive</a>
+        <button class="btn green block" onclick="driveSync()">🔄 Vytvoriť priečinky pre všetkých</button>
+      </div>
+      <div class="log" id="driveLog" style="height:80px"></div>
+      <div class="hint" style="margin-top:10px">
+        Setup (raz): Google Cloud Console → projekt → zapni <b>Google Drive API</b> →
+        OAuth consent screen (External, pridaj test usera) → Credentials → <b>OAuth client ID → Desktop app</b> →
+        stiahni JSON a ulož ako <b>data/credentials.json</b> v priečinku s appkou.
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+</div>
+
+<script>
+window.INIT = {
+  base_url: {{ base_url | tojson }},
+  is_admin: {{ is_admin | tojson }},
+  cloaker: {{ (st.cloaker or {'base_url': base_url, 'links': []}) | tojson }},
+  planner: {{ (st.planner or {}) | tojson }}
+};
+</script>
+{% endblock %}
+
+
+

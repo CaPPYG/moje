@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloakHub – Link Cloaking & Bio Engine | GarcArzP HUB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #121826;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #f75ff2;
+      --accent-grad: linear-gradient(135deg, #f75ff2, #8b5cf6);
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
+
+    /* Top Bar */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 30px;
+      background: rgba(18, 24, 38, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .back-btn {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9em;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+    .back-btn:hover { color: #fff; }
+    .logo {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35em;
+      font-weight: 800;
+      background: var(--accent-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-preview {
+      background: rgba(247, 95, 242, 0.15);
+      border: 1px solid rgba(247, 95, 242, 0.35);
+      color: #f75ff2;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.88em;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.2s;
+    }
+    .btn-preview:hover {
+      background: var(--accent-grad);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 1320px;
+      width: 94%;
+      margin: 28px auto 0;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px 24px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--accent-grad);
+    }
+    .kpi-icon {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      display: grid;
+      place-items: center;
+      font-size: 1.5em;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .kpi-label { font-size: 0.82em; color: var(--text-dim); text-transform: uppercase; font-weight: 600; letter-spacing: .04em; }
+    .kpi-val { font-family: 'Outfit', sans-serif; font-size: 1.9em; font-weight: 800; color: #fff; margin-top: 2px; }
+
+    /* Content Layout */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 2fr 1.1fr;
+      gap: 24px;
+    }
+    @media (max-width: 960px) {
+      .content-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 24px;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .panel-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15em;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    /* Links Table */
+    .links-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    .links-table th {
+      font-size: 0.76em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .links-table td {
+      padding: 14px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 0.9em;
+      vertical-align: middle;
+    }
+    .link-dest {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82em;
+      color: #38bdf8;
+      max-width: 240px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+    }
+    .badge-adult {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 0.74em;
+      font-weight: 600;
+    }
+
+    /* Forms */
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .form-label {
+      font-size: 0.8em;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+    }
+    .form-input, .form-textarea {
+      background: #0b101c;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9px;
+      color: #fff;
+      padding: 10px 14px;
+      font-size: 0.9em;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus, .form-textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(247, 95, 242, 0.15);
+    }
+    .btn-submit {
+      background: var(--accent-grad);
+      color: #fff;
+      border: 0;
+      padding: 11px 20px;
+      border-radius: 9px;
+      font-weight: 700;
+      font-size: 0.92em;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      width: 100%;
+      transition: opacity 0.15s;
+    }
+    .btn-submit:hover { opacity: 0.92; }
+
+    .btn-del {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82em;
+    }
+    .btn-del:hover { background: rgba(239, 68, 68, 0.25); }
+
+    /* Bot block log */
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 0.84em;
+    }
+    .log-bot { color: #f87171; font-weight: 600; }
+    .log-human { color: #34d399; font-weight: 600; }
+    .log-time { color: var(--text-dim); font-size: 0.78em; }
+
+    /* Custom Domain Panel */
+    .domain-panel {
+      background: linear-gradient(145deg, #121826 0%, #171f33 100%);
+      border: 1px solid rgba(247, 95, 242, 0.25);
+      border-radius: 18px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .domain-panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--accent-grad);
+    }
+    .dns-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 14px;
+    }
+    @media (max-width: 768px) {
+      .dns-grid { grid-template-columns: 1fr; }
+    }
+    .dns-box {
+      background: #0b101c;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 0.88em;
+    }
+    .dns-box-head {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-dim);
+      font-size: 0.78em;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .dns-val {
+      font-family: 'JetBrains Mono', monospace;
+      color: #38bdf8;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.82em;
+      font-weight: 600;
+    }
+    .badge-ok {
+      background: rgba(52, 211, 153, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+    }
+    .badge-pending {
+      background: rgba(251, 191, 36, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> GarcArzP HUB</a>
+      <div class="logo"><i class="fas fa-shield-virus"></i> CloakHub</div>
+    </div>
+    <div class="topbar-right">
+      <a href="{{ prefix_api }}/clara" target="_blank" class="btn-preview">
+        <i class="fas fa-external-link"></i> Zobraziť Bio Stránku
+      </a>
+      <a href="{{ prefix_api }}/logout" class="btn-logout" title="Odhlásiť sa" style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-size: 0.88em; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: all 0.2s;">
+        <i class="fas fa-arrow-right-from-bracket"></i> Odhlásiť
+      </a>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- KPI Stats -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon"><i class="fas fa-eye"></i></div>
+        <div>
+          <div class="kpi-label">Celkové návštevy</div>
+          <div class="kpi-val">{{ stats.total_visits }}</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon" style="color: #34d399;"><i class="fas fa-arrow-pointer"></i></div>
+        <div>
+          <div class="kpi-label">Kliknutia na VIP Odkazy</div>
+          <div class="kpi-val">{{ stats.total_clicks }}</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon" style="color: #f87171;"><i class="fas fa-robot"></i></div>
+        <div>
+          <div class="kpi-label">Zablokované Roboty (Meta/TikTok)</div>
+          <div class="kpi-val">{{ stats.total_bots_blocked }}</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon" style="color: #38bdf8;"><i class="fas fa-mobile-screen"></i></div>
+        <div>
+          <div class="kpi-label">Mobilní Návštevníci</div>
+          <div class="kpi-val">{{ stats.devices.get('ios', 0) + stats.devices.get('android', 0) }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Custom Domain Configuration Panel -->
+    <section class="domain-panel">
+      <div class="panel-header" style="margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+        <div class="panel-title">
+          <i class="fas fa-globe" style="color: var(--accent);"></i>
+          Vlastná Doména (Custom Domain Cloaking)
+          {% if dns_info.is_pointing %}
+            <span class="badge-status badge-ok" id="badgeDns"><i class="fas fa-check-circle"></i> DNS Aktívne</span>
+          {% else %}
+            <span class="badge-status badge-pending" id="badgeDns"><i class="fas fa-clock"></i> Čaká na DNS</span>
+          {% endif %}
+          {% if dns_info.ssl_active %}
+            <span class="badge-status badge-ok" id="badgeSsl"><i class="fas fa-lock"></i> SSL Aktívne</span>
+          {% endif %}
+        </div>
+        {% if current_domain %}
+          <a href="https://{{ current_domain }}" target="_blank" class="btn-preview" style="font-size: 0.84em; padding: 6px 14px;">
+            <i class="fas fa-arrow-up-right-from-square"></i> Otvoriť https://{{ current_domain }}
+          </a>
+        {% endif %}
+      </div>
+
+      <p style="color: var(--text-dim); font-size: 0.9em; margin-bottom: 18px; line-height: 1.5;">
+        Sem zadajte svoju vlastnú doménu (napr. <code>claragarz.com</code>). Po nasmerovaní DNS na tento server bude bio stránka a cloaking fungovať priamo pod vašou doménou, bez akejkoľvek zmienky o hlavnom serveri.
+      </p>
+
+      <div style="display: flex; gap: 10px; align-items: center; max-width: 620px; margin-bottom: 22px;">
+        <input type="text" id="customDomainInput" class="form-input" value="{{ current_domain }}" placeholder="napr. claragarz.com" style="flex: 1; font-family: 'JetBrains Mono', monospace;">
+        <button type="button" class="btn-submit" onclick="saveCustomDomain()" id="btnSaveDomain" style="width: auto; padding: 11px 20px; white-space: nowrap;">
+          <i class="fas fa-save"></i> Uložiť doménu
+        </button>
+      </div>
+
+      <!-- DNS Configuration Instructions -->
+      <div style="background: rgba(0,0,0,0.28); border-radius: 14px; padding: 20px; border: 1px solid rgba(255,255,255,0.06);">
+        <div style="font-size: 0.86em; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px; display: flex; align-items: center; gap: 7px;">
+          <i class="fas fa-network-wired" style="color: #38bdf8;"></i> Nastavenie DNS u registrátora (Cloudflare, Websupport, GoDaddy, atď.):
+        </div>
+
+        <div class="dns-grid">
+          <div class="dns-box">
+            <div class="dns-box-head">
+              <span>Hlavná doména (@)</span>
+              <span style="color: #38bdf8; font-weight: 700;">Typ: A</span>
+            </div>
+            <div style="margin-bottom: 4px;">Host / Názov: <strong style="color: #fff;">@</strong> (alebo {{ current_domain }})</div>
+            <div>
+              Cieľová IP: <span class="dns-val" id="valServerIp">{{ server_ip }}</span>
+              <button type="button" onclick="navigator.clipboard.writeText('{{ server_ip }}'); alert('IP adresa skopírovaná: {{ server_ip }}');" style="background: none; border: 0; color: #38bdf8; cursor: pointer; margin-left: 6px;" title="Kopírovať IP">
+                <i class="fas fa-copy"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="dns-box">
+            <div class="dns-box-head">
+              <span>WWW subdoména</span>
+              <span style="color: #38bdf8; font-weight: 700;">Typ: A alebo CNAME</span>
+            </div>
+            <div style="margin-bottom: 4px;">Host / Názov: <strong style="color: #fff;">www</strong></div>
+            <div>Cieľ: <span class="dns-val">{{ server_ip }}</span> (alebo CNAME na @)</div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06);">
+          <div id="dnsStatusText" style="font-size: 0.88em; color: var(--text-dim); flex: 1; min-width: 260px;">
+            {% if dns_info.is_pointing %}
+              <span style="color: #34d399; font-weight: 600;"><i class="fas fa-circle-check"></i> DNS v poriadku: doména smeruje na <strong>{{ server_ip }}</strong>.</span>
+            {% else %}
+              <span style="color: #fbbf24;"><i class="fas fa-triangle-exclamation"></i> Aktuálne v DNS: {{ dns_info.root_ips | join(', ') or 'žiadna IP' }}. Nastavte A záznam na <strong>{{ server_ip }}</strong>.</span>
+            {% endif %}
+          </div>
+
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" class="btn-preview" onclick="checkDnsStatus()" id="btnCheckDns" style="cursor: pointer; border-color: rgba(255,255,255,0.2); color: #fff;">
+              <i class="fas fa-rotate"></i> Skontrolovať DNS
+            </button>
+            <button type="button" class="btn-submit" onclick="activateSsl()" id="btnActivateSsl" style="width: auto; padding: 9px 18px; font-size: 0.88em; background: linear-gradient(135deg, #10b981, #059669);" {% if not dns_info.is_pointing %}disabled title="Najprv musí DNS smerovať na tento server"{% endif %}>
+              <i class="fas fa-shield-halved"></i> Aktivovať SSL Certifikát (HTTPS)
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Panels -->
+    <div class="content-grid">
+
+      <!-- Panel 1: Cloaked Links Management -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><i class="fas fa-lock" style="color: var(--accent);"></i> Prémiové Cloaked Odkazy (Zobrazené iba reálnym ľuďom)</div>
+        </div>
+
+        <table class="links-table">
+          <thead>
+            <tr>
+              <th>Názov karty</th>
+              <th>Cieľová URL (OnlyFans / VIP)</th>
+              <th>18+ Zámok</th>
+              <th>Kliky</th>
+              <th>Akcie</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for l in cloaked_links %}
+              <tr>
+                <td>
+                  <strong>{{ l.title }}</strong><br>
+                  <small style="color: var(--text-dim);">Slug: /l/{{ l.slug }}</small>
+                </td>
+                <td>
+                  <span class="link-dest" title="{{ l.destination_url }}">{{ l.destination_url }}</span>
+                </td>
+                <td>
+                  {% if l.is_adult %}
+                    <span class="badge-adult">🔞 18+ Gate</span>
+                  {% else %}
+                    <span style="color: var(--text-dim); font-size: 0.8em;">Priamy</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <strong style="color: #34d399;">
+                    {% set ns = namespace(found=0) %}
+                    {% for st in stats.link_stats %}{% if st.id == l.id %}{% set ns.found = st.clicks %}{% endif %}{% endfor %}
+                    {{ ns.found }}
+                  </strong>
+                </td>
+                <td>
+                  <button class="btn-del" onclick="deleteLink({{ l.id }})"><i class="fas fa-trash-can"></i></button>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">
+                  Zatiaľ nemáte žiadne prémiové odkazy. Pridajte prvý vpravo.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Panel 2: Add Link Form -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title"><i class="fas fa-plus-circle" style="color: var(--accent);"></i> Pridať nový odkaz</div>
+        </div>
+
+        <form id="addLinkForm" onsubmit="handleAddLink(event)">
+          <div class="form-row">
+            <label class="form-label">Názov tlačidla / karty</label>
+            <input type="text" id="linkTitle" class="form-input" placeholder="napr. Exclusive VIP Fan Club 🔞" required>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">Cieľová URL (skutočný cieľ)</label>
+            <input type="url" id="linkDest" class="form-input" placeholder="https://onlyfans.com/..." required>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">Slug skratky (pre odkaz /l/...)</label>
+            <input type="text" id="linkSlug" class="form-input" placeholder="napr. of-vip" required>
+          </div>
+
+          <div class="form-row">
+            <label class="form-label">URL fotky (voliteľné, náhľad)</label>
+            <input type="url" id="linkPhoto" class="form-input" placeholder="https://.../photo.jpg">
+          </div>
+
+          <div class="form-row" style="flex-direction: row; align-items: center; gap: 10px; margin-top: 6px;">
+            <input type="checkbox" id="linkAdult" checked style="width: 18px; height: 18px; accent-color: var(--accent);">
+            <label for="linkAdult" style="font-size: 0.88em; cursor: pointer;">Aktivovať 18+ Age Gate varovanie</label>
+          </div>
+
+          <button type="submit" id="btnSaveLink" class="btn-submit" style="margin-top: 14px;">
+            <i class="fas fa-floppy-disk"></i> Uložiť odkaz
+          </button>
+        </form>
+      </section>
+
+    </div>
+
+    <!-- Live Activity Log -->
+    <section class="panel" style="margin-top: 6px;">
+      <div class="panel-header">
+        <div class="panel-title"><i class="fas fa-tower-broadcast" style="color: #38bdf8;"></i> Posledná aktivita & Detekcia robotov</div>
+      </div>
+      <div>
+        {% for log in stats.recent_logs %}
+          <div class="log-item">
+            <div>
+              {% if log.event_type == 'bot_blocked' %}
+                <span class="log-bot"><i class="fas fa-shield-halved"></i> Zablokovaný Bot</span>
+                <span style="color: var(--text-dim); margin-left: 6px;">({{ log.bot_reason }})</span>
+              {% elif log.event_type == 'click' %}
+                <span class="log-human"><i class="fas fa-check-circle"></i> Klik na VIP Link:</span>
+                <strong style="margin-left: 4px;">{{ log.link_title or 'Odkaz' }}</strong>
+              {% else %}
+                <span style="color: #38bdf8;"><i class="fas fa-user"></i> Návšteva stránky</span>
+              {% endif %}
+              <span style="color: var(--text-dim); margin-left: 8px; font-size: 0.82em;">[{{ log.device_type }}]</span>
+            </div>
+            <div class="log-time">{{ log.timestamp }}</div>
+          </div>
+        {% else %}
+          <div style="color: var(--text-dim); font-size: 0.88em; text-align: center; padding: 14px;">Žiadne záznamy.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const PREFIX = {{ prefix_api | tojson }};
+
+    async function handleAddLink(e) {
+      e.preventDefault();
+      const title = document.getElementById('linkTitle').value.trim();
+      const destination_url = document.getElementById('linkDest').value.trim();
+      const slug = document.getElementById('linkSlug').value.trim();
+      const photo_url = document.getElementById('linkPhoto').value.trim();
+      const is_adult = document.getElementById('linkAdult').checked ? 1 : 0;
+
+      const btn = document.getElementById('btnSaveLink');
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(PREFIX + '/api/admin/links', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, destination_url, slug, photo_url, is_adult })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          alert('Odkaz bol úspešne pridaný!');
+          window.location.reload();
+        } else {
+          alert(data.message || 'Chyba pri ukladaní odkazu.');
+        }
+      } catch (err) {
+        alert('Chyba spojenia: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function deleteLink(id) {
+      if (!confirm('Naozaj chcete vymazať tento cloaked odkaz?')) return;
+      try {
+        const res = await fetch(PREFIX + '/api/admin/links/' + id, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          window.location.reload();
+        } else {
+          alert(data.message || 'Chyba pri mazaní.');
+        }
+      } catch (err) {
+        alert('Chyba spojenia: ' + err.message);
+      }
+    }
+
+    async function saveCustomDomain() {
+      const domain = document.getElementById('customDomainInput').value.trim();
+      const btn = document.getElementById('btnSaveDomain');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ukladám...';
+
+      try {
+        const res = await fetch(PREFIX + '/api/admin/domain', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          alert(data.message || 'Doména bola úspešne uložená!');
+          window.location.reload();
+        } else {
+          alert(data.message || 'Chyba pri ukladaní domény.');
+        }
+      } catch (err) {
+        alert('Chyba spojenia: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save"></i> Uložiť doménu';
+      }
+    }
+
+    async function checkDnsStatus() {
+      const btn = document.getElementById('btnCheckDns');
+      const statusText = document.getElementById('dnsStatusText');
+      const btnSsl = document.getElementById('btnActivateSsl');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-rotate fa-spin"></i> Overujem...';
+
+      try {
+        const res = await fetch(PREFIX + '/api/admin/domain/check');
+        const data = await res.json();
+        if (res.ok && data.dns) {
+          const d = data.dns;
+          if (d.is_pointing) {
+            statusText.innerHTML = '<span style="color: #34d399; font-weight: 600;"><i class="fas fa-circle-check"></i> DNS v poriadku: doména smeruje na <strong>' + d.server_ip + '</strong>.</span>';
+            if (btnSsl) {
+              btnSsl.disabled = false;
+              btnSsl.title = 'Spustiť certbot pre vytvorenie SSL certifikátu';
+            }
+          } else {
+            const ips = (d.root_ips && d.root_ips.length) ? d.root_ips.join(', ') : 'žiadny záznam';
+            statusText.innerHTML = '<span style="color: #fbbf24;"><i class="fas fa-triangle-exclamation"></i> Aktuálne v DNS: ' + ips + '. Nastavte A záznam na <strong>' + d.server_ip + '</strong> a počkajte na propagáciu.</span>';
+            if (btnSsl) {
+              btnSsl.disabled = true;
+              btnSsl.title = 'Najprv musí DNS smerovať na tento server';
+            }
+          }
+        } else {
+          alert('Nepodarilo sa overiť DNS.');
+        }
+      } catch (err) {
+        alert('Chyba pri kontrole DNS: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rotate"></i> Skontrolovať DNS';
+      }
+    }
+
+    async function activateSsl() {
+      if (!confirm('Spustiť generovanie Let\'s Encrypt SSL certifikátu pre vašu doménu? Tento proces môže trvať 15-30 sekúnd.')) return;
+      const btn = document.getElementById('btnActivateSsl');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Zabezpečujem HTTPS...';
+
+      try {
+        const res = await fetch(PREFIX + '/api/admin/domain/activate-ssl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          alert('Úspech! ' + data.message);
+          window.location.reload();
+        } else {
+          alert('Chyba pri generovaní SSL: ' + (data.message || 'Neznáma chyba.'));
+        }
+      } catch (err) {
+        alert('Chyba spojenia: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-shield-halved"></i> Aktivovať SSL Certifikát (HTTPS)';
+      }
+    }
+  </script>
+</body>
+</html>

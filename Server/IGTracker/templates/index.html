@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IG Analytics Tracker – GarcArzP HUB</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <a href="{{ url_for('index') }}" class="brand">
+        <div class="brand-icon ig-gradient-icon"><i class="fab fa-instagram"></i></div>
+        <span class="brand-name">IG Analytics Tracker</span>
+      </a>
+    </div>
+    <div class="header-right">
+      <span class="badge-status-pill"><span class="dot-online"></span> Sledovanie aktívne</span>
+      <a href="{{ url_for('publisher_page') }}" class="btn-logout" title="Otvoriť Instagram Publisher Studio" style="background: linear-gradient(135deg, rgba(225,48,108,.2), rgba(131,58,180,.2)); border: 1px solid rgba(225,48,108,.4); color: #e1306c; font-weight: 600;">
+        <i class="fas fa-paper-plane"></i> Publisher
+      </a>
+      <a href="{{ url_for('logout') }}" class="btn-logout" title="Odhlásiť sa">
+        <i class="fas fa-arrow-right-from-bracket"></i> Odhlásiť
+      </a>
+    </div>
+  </header>
+
+  <main class="main-container">
+
+    <!-- Action Bar & Add Account Form -->
+    <section class="toolbar-section">
+      <div class="toolbar-left">
+        <form id="addAccountForm" class="add-account-form">
+          <div class="input-with-icon">
+            <span class="input-prefix">@</span>
+            <input type="text" id="usernameInput" placeholder="používateľské_meno (napr. cristiano)" required autocomplete="off">
+          </div>
+          <button type="submit" id="btnAddAccount" class="btn-add">
+            <i class="fas fa-plus"></i> Sledovať profil
+          </button>
+        </form>
+      </div>
+
+      <div class="toolbar-right" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="btnHealthCheck" class="btn-refresh" title="Overiť stav a tokeny všetkých účtov cez Meta Graph API" onclick="triggerHealthCheck()">
+          <i class="fas fa-heart-pulse" id="healthSpinner"></i> Health Check
+        </button>
+        <button id="btnSettingsModal" class="btn-refresh" title="Nastavenie webhookov a alertov (Discord / Telegram)" onclick="openSettingsModal()">
+          <i class="fas fa-bell"></i> Webhooky
+        </button>
+        <a href="/ig/connect" class="btn-add" style="background: linear-gradient(135deg, #e1306c, #833ab4); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem;" title="Pripojiť slovenský Instagram účet jedným klikom z mobilu">
+          🇸🇰 1-Klik SK Mobil
+        </a>
+        <a href="/ig/connect-us" class="btn-add" style="background: linear-gradient(135deg, #1d4ed8, #0ea5e9); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem;" title="Pripojiť US cloud mobil z Multiloginu cez oddelenú US Appku">
+          🇺🇸 1-Klik US Cloud Mobil
+        </a>
+        <button id="btnSyncAll" class="btn-refresh" title="Spustiť synchronizáciu všetkých profilov">
+          <i class="fas fa-rotate" id="syncSpinner"></i> Sync
+        </button>
+      </div>
+    </section>
+
+    <!-- Stat Summary Badges -->
+    <section class="stats-summary-row" id="statsSummaryRow">
+      <div class="stat-badge-card">
+        <div class="stat-badge-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-badge-info">
+          <span class="stat-badge-label">Sledované profily</span>
+          <span class="stat-badge-value" id="statAccountsCount">{{ accounts|length }}</span>
+        </div>
+      </div>
+
+      <div class="stat-badge-card">
+        <div class="stat-badge-icon ig-gradient-text"><i class="fab fa-instagram"></i></div>
+        <div class="stat-badge-info">
+          <span class="stat-badge-label">Celkový dosah (Followeri)</span>
+          <span class="stat-badge-value" id="statTotalFollowers">--</span>
+        </div>
+      </div>
+
+      <div class="stat-badge-card">
+        <div class="stat-badge-icon" style="color: #38bdf8;"><i class="fas fa-play"></i></div>
+        <div class="stat-badge-info">
+          <span class="stat-badge-label">Celkové zhliadnutia</span>
+          <span class="stat-badge-value" id="statTotalViews">--</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Table Card -->
+    <section class="table-card">
+      <div class="table-wrapper">
+        <table class="ig-table" id="igTable">
+          <thead>
+            <tr>
+              <th>Účet</th>
+              <th>Stav</th>
+              <th>Followeri (Δ)</th>
+              <th>Celkové Views</th>
+              <th>Priemer Views</th>
+              <th>Top Reel (Views / Likes)</th>
+              <th>Engagement</th>
+              <th>Posledný post</th>
+              <th style="text-align: center;">Akcie</th>
+            </tr>
+          </thead>
+          <tbody id="accountsTbody">
+            {% if accounts %}
+              {% for acc in accounts %}
+                <tr id="row-{{ acc.id }}">
+                  <!-- Účet -->
+                  <td>
+                    <div class="account-cell">
+                      <img src="{{ acc.avatar_url }}" alt="@{{ acc.username }}" class="account-avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ acc.username }}&background=random'">
+                      <div class="account-meta">
+                        <a href="https://www.instagram.com/{{ acc.username }}/" target="_blank" rel="noopener noreferrer" class="account-username">
+                          @{{ acc.username }}
+                          {% if acc.region == 'us' %}
+                            <span style="font-size: 0.72rem; margin-left: 3px;" title="US Profil (Oddelená US Appka)">🇺🇸</span>
+                          {% else %}
+                            <span style="font-size: 0.72rem; margin-left: 3px;" title="Slovenský profil">🇸🇰</span>
+                          {% endif %}
+                          <i class="fas fa-arrow-up-right-from-square external-link-icon"></i>
+                        </a>
+                        <span class="account-fullname">{{ acc.full_name }}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Stav (Health) -->
+                  <td>
+                    {% if acc.health_status == 'healthy' %}
+                      <span class="health-pill healthy" title="{{ acc.health_message or 'Účet je aktívny a pripravený na publikovanie' }}&#10;Posledná kontrola: {{ acc.last_health_check or 'Práve teraz' }}">
+                        <span class="health-dot healthy"></span> Ready
+                      </span>
+                    {% elif acc.health_status == 'action_required' %}
+                      <span class="health-pill warning" title="{{ acc.health_message or 'Vyžaduje akciu v Multilogine / 2FA' }}&#10;Posledná kontrola: {{ acc.last_health_check or 'Práve teraz' }}">
+                        <span class="health-dot warning"></span> Checkpoint / 2FA
+                      </span>
+                    {% elif '404' in (acc.health_message or '') or 'zmazaný' in (acc.health_message or '') %}
+                      <span class="health-pill error" title="{{ acc.health_message }}&#10;Posledná kontrola: {{ acc.last_health_check or 'Práve teraz' }}">
+                        <span class="health-dot error"></span> Banned / 404
+                      </span>
+                    {% else %}
+                      <span class="health-pill error" title="{{ acc.health_message or 'Neplatný alebo odvolaný token' }}&#10;Posledná kontrola: {{ acc.last_health_check or 'Práve teraz' }}">
+                        <span class="health-dot error"></span> Token / API Chyba
+                      </span>
+                    {% endif %}
+                  </td>
+
+                  <!-- Followeri (Δ) -->
+                  <td>
+                    <div class="followers-cell">
+                      <span class="followers-main">{{ acc.followers_fmt }}</span>
+                      {% if acc.delta_followers > 0 %}
+                        <span class="delta-badge delta-pos" title="Zmena od posledného dňa"><i class="fas fa-caret-up"></i> +{{ acc.delta_followers }}</span>
+                      {% elif acc.delta_followers < 0 %}
+                        <span class="delta-badge delta-neg" title="Zmena od posledného dňa"><i class="fas fa-caret-down"></i> {{ acc.delta_followers }}</span>
+                      {% else %}
+                        <span class="delta-badge delta-neutral" title="Žiadna zmena">0</span>
+                      {% endif %}
+                    </div>
+                  </td>
+
+                  <!-- Celkové Views -->
+                  <td>
+                    <span class="mono-stat">{{ acc.total_views_fmt }}</span>
+                  </td>
+
+                  <!-- Priemer Views -->
+                  <td>
+                    <span class="mono-stat">{{ acc.avg_views_fmt }}</span>
+                  </td>
+
+                  <!-- Top Reel (Views / Likes) -->
+                  <td>
+                    {% if acc.top_reel_url and acc.top_reel_views > 0 %}
+                      <a href="{{ acc.top_reel_url }}" target="_blank" rel="noopener noreferrer" class="top-reel-pill" title="Otvoriť Top Reel na Instagrame">
+                        <span class="reel-views"><i class="fas fa-eye"></i> {{ acc.top_reel_views_fmt }}</span>
+                        <span class="reel-sep">/</span>
+                        <span class="reel-likes"><i class="fas fa-heart"></i> {{ acc.top_reel_likes_fmt }}</span>
+                      </a>
+                    {% else %}
+                      <span class="text-dim">Profil bez reels</span>
+                    {% endif %}
+                  </td>
+
+                  <!-- Engagement -->
+                  <td>
+                    <div class="engagement-cell">
+                      {% if acc.engagement_rate and acc.engagement_rate > 0 %}
+                        <span class="engagement-value">{{ acc.engagement_rate }} %</span>
+                      {% else %}
+                        <span class="text-dim">-</span>
+                      {% endif %}
+                    </div>
+                  </td>
+
+                  <!-- Posledný post -->
+                  <td>
+                    <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
+                  </td>
+
+                  <!-- Akcie -->
+                  <td style="text-align: center; white-space: nowrap;">
+                    {% if acc.has_token %}
+                      <a href="/ig/publisher?account_id={{ acc.id }}" class="btn-pub-row" title="Otvoriť Publisher pre @{{ acc.username }}" style="display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:8px; background:linear-gradient(45deg, #f09433, #dc2743, #bc1888); color:#fff; text-decoration:none; margin-right:6px; font-size:12px; transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                        <i class="fas fa-paper-plane"></i>
+                      </a>
+                    {% endif %}
+                    <button class="btn-delete" onclick="deleteAccount({{ acc.id }}, '{{ acc.username }}')" title="Odstrániť účet zo sledovania">
+                      <i class="fas fa-trash-can"></i>
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr id="emptyRow">
+                <td colspan="9" class="empty-state-cell">
+                  <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fab fa-instagram"></i></div>
+                    <h3>Zatiaľ nesleduješ žiadne profily</h3>
+                    <p>Zadaj používateľské meno hore a klikni na <b>„Sledovať profil“</b>.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Token Management Modal -->
+  <div id="tokenModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fab fa-instagram ig-gradient-text"></i> Prepojenie Meta Tokenu
+        </div>
+        <button class="modal-close" onclick="closeTokenModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Prepojte Instagram Graph API Access Token pre účet <strong id="modalAccountUsername" style="color:#f472b6;">@...</strong>.
+          Umožní vám to sledovať živé Insights a publikovať fotky a Reely priamo z tohto účtu.
+        </p>
+        
+        <div class="form-group">
+          <label for="modalAccessToken" class="form-label">
+            <i class="fas fa-key"></i> Meta Access Token:
+          </label>
+          <textarea id="modalAccessToken" class="form-textarea" placeholder="Vložte sem token (začína sa na IGAAT... alebo EAAB...)" rows="3"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="modalUserId" class="form-label">
+            <i class="fas fa-id-badge"></i> Instagram User ID (voliteľné):
+          </label>
+          <input type="text" id="modalUserId" class="form-input" placeholder="Automaticky sa načíta z tokenu ak necháte prázdne">
+          <span class="form-hint">Ak nezadáte, zistíme ho automaticky zavolaním <code>/me</code> cez Meta Graph API.</span>
+        </div>
+
+        <div id="tokenVerifyStatus" class="token-verify-box" style="display: none;"></div>
+
+        <div class="modal-info-box">
+          <i class="fas fa-info-circle"></i>
+          <div>
+            <strong>Požiadavky na token pre postovanie:</strong><br>
+            1. Účet na Instagrame musí byť <b>Profesionálny / Tvorca (Creator)</b>.<br>
+            2. Token musí obsahovať oprávnenie (scope) <code>instagram_content_publish</code> a <code>instagram_basic</code>.<br>
+            3. V Meta Developer aplikácii v režime Development musí byť účet pridaný ako <b>Instagram Tester</b>.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btnUnlinkToken" class="btn-unlink" onclick="unlinkToken()" style="display: none;">
+          <i class="fas fa-link-slash"></i> Odpojiť token
+        </button>
+        <div style="flex: 1;"></div>
+        <button type="button" class="btn-cancel" onclick="closeTokenModal()">Zrušiť</button>
+        <button type="button" id="btnSaveToken" class="btn-save" onclick="saveToken()">
+          <i class="fas fa-check"></i> Overiť a Uložiť
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings & Webhook Alerts Modal -->
+  <div id="settingsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fas fa-bell ig-gradient-text"></i> Nastavenia Webhookov & Health Notifikácií
+        </div>
+        <button class="modal-close" onclick="closeSettingsModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Nastavte kanály pre okamžité upozornenia pri zmene stavu účtu (🟡 Checkpoint / 2FA výzva, 🔴 Expirovaný token / Ban, 🟢 Obnovenie zdravia).
+        </p>
+
+        <div class="form-group">
+          <label for="settingDiscordWebhook" class="form-label">
+            <i class="fab fa-discord" style="color: #5865f2;"></i> Discord Webhook URL:
+          </label>
+          <input type="url" id="settingDiscordWebhook" class="form-input" placeholder="https://discord.com/api/webhooks/...">
+          <span class="form-hint">Odošle bohaté Discord embed správy so semafórom a detailmi.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="settingTelegramToken" class="form-label">
+            <i class="fab fa-telegram" style="color: #229ed9;"></i> Telegram Bot Token:
+          </label>
+          <input type="text" id="settingTelegramToken" class="form-input" placeholder="napr. 123456789:ABCdefGHI...">
+        </div>
+
+        <div class="form-group">
+          <label for="settingTelegramChat" class="form-label">
+            <i class="fas fa-comments" style="color: #229ed9;"></i> Telegram Chat ID:
+          </label>
+          <input type="text" id="settingTelegramChat" class="form-input" placeholder="napr. -1001234567890 alebo tvoje ID">
+        </div>
+
+        <div class="form-group">
+          <label for="settingGenericWebhook" class="form-label">
+            <i class="fas fa-globe"></i> Všeobecný JSON Webhook:
+          </label>
+          <input type="url" id="settingGenericWebhook" class="form-input" placeholder="https://tvoja-sluzba.sk/webhook">
+        </div>
+
+        <div id="settingsStatusBox" class="token-verify-box" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="testWebhook()" style="background: rgba(88, 101, 242, 0.15); border-color: rgba(88, 101, 242, 0.3); color: #818cf8;">
+          <i class="fas fa-paper-plane"></i> Otestovať Webhook
+        </button>
+        <div style="flex: 1;"></div>
+        <button type="button" class="btn-cancel" onclick="closeSettingsModal()">Zavrieť</button>
+        <button type="button" id="btnSaveSettings" class="btn-save" onclick="saveSettings()">
+          <i class="fas fa-check"></i> Uložiť nastavenia
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

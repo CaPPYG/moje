@@ -1,0 +1,8 @@
+@echo off
+rem ===== Drive Drop (Local Launcher) =====
+cd /d "%~dp0"
+set "PY=C:\Users\patri\AppData\Local\Programs\Python\Python314\python.exe"
+if not exist "%PY%" set "PY=python"
+echo Spustam Drive Drop na http://127.0.0.1:5050 (Heslo: patrik3924)
+"%PY%" app.py
+pause

@@ -1,0 +1,5 @@
+flask>=3.0
+werkzeug>=3.0
+google-auth>=2.20
+google-auth-oauthlib>=1.2
+google-api-python-client>=2.100

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ dev }} · {{ date }}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0a10;color:#fff;font-family:system-ui,sans-serif;padding:16px;max-width:480px;margin:auto}
+h1{font-size:1.25rem;color:#c084fc;margin-bottom:2px}
+.sub{color:#555;font-size:.8rem;margin-bottom:18px}
+.card{background:#12101a;border:1px solid #3b2a5a;border-radius:10px;padding:14px;margin-bottom:10px}
+.name{font-weight:600;margin-bottom:8px;font-size:.95rem}
+.tag{color:#22c55e;font-size:.78rem;margin-bottom:6px}
+.btn{display:block;background:#a855f7;color:#fff;padding:11px;border-radius:8px;text-align:center;text-decoration:none;font-weight:600;box-shadow:0 0 14px rgba(168,85,247,.4)}
+.btn:active{background:#7c3aed}
+.pending{color:#888;font-size:.85rem}
+.empty{color:#555;text-align:center;padding:40px 0;font-size:.9rem}
+.date-nav{display:flex;gap:8px;margin-bottom:14px}
+.date-nav a{background:#1a1426;color:#aaa;padding:8px 12px;border-radius:8px;text-decoration:none;font-size:.8rem;flex:1;text-align:center;border:1px solid #3b2a5a}
+.date-nav a.today{background:#a855f7;color:#fff;border-color:#a855f7}
+</style>
+</head>
+<body>
+<h1>📱 {{ dev }}</h1>
+<div class="sub">{{ date }} · Studio Planner</div>
+<div class="date-nav">
+  <a href="{{ url_for('device_page', dev=dev, date=prev) }}">← {{ prev }}</a>
+  <a href="{{ url_for('device_page', dev=dev, date=today) }}" class="{{ 'today' if date==today else '' }}">Dnes</a>
+  <a href="{{ url_for('device_page', dev=dev, date=nxt) }}">{{ nxt }} →</a>
+</div>
+{% for item in items %}
+<div class="card">
+  <div class="tag">Video</div>
+  <div class="name">{{ item.name }}</div>
+  {% if item.exists %}
+  <a class="btn" href="{{ prefix }}{{ item.dl }}">⬇ Stiahnuť</a>
+  {% else %}
+  <div class="pending">⏳ spracúva sa…</div>
+  {% endif %}
+</div>
+{% endfor %}
+{% if not items %}
+<div class="empty">Žiadne videá na tento deň.</div>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vstup do CloakHub Admin</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #121826;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #f75ff2;
+      --accent-grad: linear-gradient(135deg, #f75ff2, #8b5cf6);
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 28px;
+      background: rgba(18, 24, 38, 0.85);
+      border-bottom: 1px solid var(--card-border);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .back-link {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 0.9em;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: #fff; }
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25em;
+      font-weight: 800;
+      background: var(--accent-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .center-card-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .center-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      max-width: 420px;
+      width: 100%;
+      padding: 36px 32px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      position: relative;
+      overflow: hidden;
+    }
+    .center-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--accent-grad);
+    }
+
+    .card-icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 20px auto;
+      border-radius: 18px;
+      background: var(--accent-grad);
+      display: grid;
+      place-items: center;
+      font-size: 1.8em;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(247, 95, 242, 0.35);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.6em;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .card-desc {
+      font-size: 0.9em;
+      color: var(--text-dim);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 10px 14px;
+      border-radius: 9px;
+      font-size: 0.88em;
+      margin-bottom: 20px;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .auth-input {
+      background: #0b101c;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      color: #fff;
+      padding: 12px 16px;
+      font-size: 0.95em;
+      font-family: inherit;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .auth-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(247, 95, 242, 0.18);
+    }
+
+    .btn-submit {
+      background: var(--accent-grad);
+      color: #fff;
+      border: 0;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.95em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s, transform 0.1s;
+      box-shadow: 0 4px 16px rgba(247, 95, 242, 0.35);
+    }
+    .btn-submit:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <div class="brand-title">
+        <i class="fas fa-shield-virus"></i> CloakHub
+      </div>
+    </div>
+  </header>
+
+  <main class="center-card-wrapper">
+    <div class="center-card">
+      <div class="card-icon">
+        <i class="fas fa-lock"></i>
+      </div>
+      <h1 class="card-title">CloakHub Správa</h1>
+      <p class="card-desc">Zadajte prístupové heslo pre vstup do správy odkazov a analytiky.</p>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for m in messages %}
+            <div class="alert-error">
+              {{ m }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" action="{{ prefix_api }}/login" class="login-form">
+        <input type="password" name="password" class="auth-input" placeholder="Zadaj heslo..." required autofocus>
+        <button type="submit" class="btn-submit">
+          <i class="fas fa-arrow-right"></i> Prihlásiť sa
+        </button>
+      </form>
+    </div>
+  </main>
+
+</body>
+</html>

@@ -1,0 +1,47 @@
+================================================================================
+  IG TRACKER & PUBLISHER — LOKÁLNY DESKTOP SPOOFER (NÁVOD NA POUŽITIE)
+================================================================================
+
+Tento balík vám umožňuje využiť plný výkon vášho osobného počítača (viacjadrový
+procesor + grafická karta Nvidia / AMD / Intel) na bleskové naspoofovanie
+desiatok až stoviek Reels videí naraz a ich okamžitý upload na váš 5 TB Google Drive.
+
+Vďaka tomu je záťaž na cloudový server rovná NULE (0 MB disk, 0% CPU záťaž).
+
+--------------------------------------------------------------------------------
+AKO POUŽIŤ NA AKOMKOĽVEK POČÍTAČI (WINDOWS):
+--------------------------------------------------------------------------------
+
+1. ROZBALENIE BALÍKA:
+   - Rozbaľte tento priečinok kdekoľvek na počítači.
+
+2. PRÍPRAVA VIDEÍ:
+   - Do zložky "videa_na_spoof" (vytvorí sa automaticky, alebo ju vytvorte)
+     vložte vaše pripravené MP4 / MOV videá.
+
+3. SPUSTENIE:
+   - Dvakrát kliknite na súbor:
+     run_spoofer.bat
+
+4. PRIEBEH:
+   - Skript automaticky:
+     a) Deteguje grafickú kartu (Nvidia NVENC / Intel QSV / CPU).
+     b) Opýta sa vás na cieľový región (USA: Los Angeles & Las Vegas alebo Slovensko).
+     c) Opýta sa, koľko unikátnych variantov z každého videa chcete vytvoriť.
+     d) Aplikuje náhodné pixelové filtre (farby, deband, micro-jitter).
+     e) Zapíše čistý smartfónový EXIF podpis (iPhone 15/16 Pro, Galaxy S24, Pixel 9)
+        a GPS súradnice hotspotov (Hollywood, Beverly Hills, Venice Beach, Bellagio atď.).
+     f) Automaticky nahrá hotové videá priamo do vášho Google Drive priečinka "IG_VAULT".
+
+5. ZOBRAZENIE NA WEBE:
+   - Otvorte webové rozhranie: https://garcarzp.online/ig/publisher
+   - Prejdite do záložky "🎬 Media Vault"
+   - Kliknite na tlačidlo: [🔄 Synchronizovať z Google Drive]
+   - Všetky videá sú okamžite pripravené v kalendári na publikovanie!
+
+--------------------------------------------------------------------------------
+POŽIADAVKY NA POČÍTAČI (AK CHÝBAJÚ):
+--------------------------------------------------------------------------------
+- Python 3.10+ (pri inštalácii zaškrtnite "Add python.exe to PATH")
+- FFmpeg (v príkazovom riadku napíšte: winget install Gyan.FFmpeg)
+- ExifTool (voliteľné pre GPS zápis: winget install PhilHarvey.ExifTool)

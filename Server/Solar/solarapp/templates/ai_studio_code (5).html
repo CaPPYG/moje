@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>☀️ Solar Monitor &amp; Energy Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-base:       #070a11;
+      --card-bg:       rgba(15, 23, 42, 0.75);
+      --card-elev:     rgba(22, 33, 58, 0.55);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus:  rgba(56, 189, 248, 0.35);
+    
+      --text-main:     #f8fafc;
+      --text-muted:    #94a3b8;
+      --text-dim:      #475569;
+    
+      /* Vetvy a farby */
+      --solar:         #f59e0b;
+      --solar-glow:    rgba(245, 158, 11, 0.32);
+      --battery:       #10b981;
+      --battery-glow:  rgba(16, 185, 129, 0.38);
+      --home:          #38bdf8;
+      --home-glow:     rgba(56, 189, 248, 0.3);
+    
+      --shadow-card:   0 16px 36px -10px rgba(0, 0, 0, 0.65);
+      --r-card:        16px;
+      --r-pill:        999px;
+      --ease:          cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: "Plus Jakarta Sans", -apple-system, sans-serif;
+      color: var(--text-main);
+      min-height: 100vh;
+      background-color: var(--bg-base);
+      background-image:
+        radial-gradient(circle at 18% 15%, rgba(245, 158, 11, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 82% 15%, rgba(56, 189, 248, 0.06) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 55%);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      font-size: 13.5px;
+    }
+    
+    h1, h2, h3, .num-font {
+      font-family: "Space Grotesk", sans-serif;
+    }
+
+    /* HEADER */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 32px;
+      border-bottom: 1px solid var(--border-subtle);
+      backdrop-filter: blur(20px);
+      background: rgba(7, 10, 17, 0.85);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .logo {
+      width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+      font-size: 1.25rem;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+    }
+    .brand h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; }
+    .brand .subtitle { color: var(--text-muted); font-size: 0.72rem; }
+    
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .badge {
+      padding: 5px 12px; border-radius: var(--r-pill); font-size: 0.72rem; font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+    .badge.online::before { 
+      background: var(--battery); 
+      box-shadow: 0 0 8px var(--battery); 
+      animation: pulse-dot 2.5s infinite;
+    }
+    .badge.active::before { 
+      background: var(--solar); 
+      box-shadow: 0 0 8px var(--solar); 
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    #clock { color: var(--text-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; font-family: "Space Grotesk"; }
+    
+    #refresh-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-subtle);
+      color: var(--text-muted); font-size: 1.1rem; cursor: pointer;
+      display: grid; place-items: center;
+      transition: all 0.2s var(--ease);
+    }
+    #refresh-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; transform: rotate(45deg); }
+    
+    /* HLAVNÝ KONTAJNER */
+    main { padding: 22px 32px; max-width: 1600px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+    
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--r-card);
+      padding: 18px 20px;
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+    
+    .card-head { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      margin-bottom: 14px; 
+    }
+    .card-head h3 { 
+      font-size: 0.82rem; 
+      font-weight: 600; 
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+    }
+    
+    .chip {
+      font-size: 0.68rem; font-weight: 600;
+      color: var(--battery); background: rgba(16, 185, 129, 0.12);
+      padding: 3px 9px; border-radius: var(--r-pill);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .chip.dim {
+      color: var(--text-muted); background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    /* ============================================================
+       1. VEĽKÝ ENERGY HUB S DOMINANTNOU BATÉRIOU
+       ============================================================ */
+    .energy-hub-card {
+      display: flex;
+      flex-direction: column;
+      padding: 24px 30px 20px;
+    }
+
+    .flow-stage-flex {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 10px 0 20px;
+    }
+
+    /* SATELLITY (PANELY A DOM) */
+    .hub-satellite {
+      background: var(--card-elev);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 20px 22px;
+      text-align: center;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+      min-width: 220px;
+      transition: all 0.25s var(--ease);
+      backdrop-filter: blur(10px);
+      flex-shrink: 0;
+    }
+    .hub-satellite:hover { transform: translateY(-3px); }
+
+    .hub-satellite.solar-node {
+      border-color: rgba(245, 158, 11, 0.35);
+      background: radial-gradient(circle at top, rgba(245, 158, 11, 0.08), rgba(22, 33, 58, 0.6));
+    }
+    .hub-satellite.home-node {
+      border-color: rgba(56, 189, 248, 0.35);
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), rgba(22, 33, 58, 0.6));
+    }
+
+    .hub-satellite .icon-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 1.35rem;
+      margin: 0 auto 10px;
+    }
+    .solar-node .icon-badge {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      box-shadow: 0 0 14px var(--solar-glow);
+    }
+    .home-node .icon-badge {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      box-shadow: 0 0 14px var(--home-glow);
+    }
+
+    .hub-satellite .node-title {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .hub-satellite .node-val {
+      font-size: 1.85rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .solar-node .node-val { color: var(--solar); text-shadow: 0 0 16px var(--solar-glow); }
+    .home-node .node-val { color: var(--home); text-shadow: 0 0 16px var(--home-glow); }
+
+    .hub-satellite .node-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* SPOJOVACIE LINKY */
+    .flow-connector {
+      flex: 1;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .flow-connector svg {
+      width: 100%;
+      height: 16px;
+      overflow: visible;
+    }
+    .flow-line {
+      fill: none;
+      stroke-width: 3.5;
+      stroke-linecap: round;
+      stroke-dasharray: 7 9;
+      animation: dash-flow 1s linear infinite;
+    }
+    .flow-line.solar-pipe { stroke: var(--solar); filter: drop-shadow(0 0 8px var(--solar-glow)); }
+    .flow-line.home-pipe { stroke: var(--home); filter: drop-shadow(0 0 8px var(--home-glow)); }
+    @keyframes dash-flow {
+      to { stroke-dashoffset: -32; }
+    }
+
+    /* CENTRÁLNY BATTERY HUB (EXTRA VEĽKÝ A DOMINANTNÝ) */
+    .center-battery-core {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    /* Ambientné svetlo presne za kruhom */
+    .center-battery-core::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 300px;
+      height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.16) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .gauge-big {
+      position: relative;
+      width: 320px;
+      height: 320px;
+      z-index: 1;
+    }
+    .gauge-big svg { 
+      width: 100%; 
+      height: 100%; 
+      transform: rotate(-90deg); 
+      overflow: visible;
+    }
+    .gauge-big .track { 
+      fill: none; 
+      stroke: rgba(255, 255, 255, 0.04); 
+      stroke-width: 6; 
+    }
+    .gauge-big .bar {
+      fill: none; 
+      stroke: url(#batteryGrad); 
+      stroke-width: 7.5; 
+      stroke-linecap: round;
+      stroke-dasharray: 326.7; 
+      stroke-dashoffset: 65.34;
+      transition: stroke-dashoffset 1s var(--ease);
+    }
+    
+    .gauge-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 2;
+    }
+    .gauge-center .num {
+      font-size: 7.2rem;
+      font-weight: 700;
+      line-height: 0.82;
+      color: #fff;
+      letter-spacing: -0.05em;
+      text-shadow: 0 0 35px rgba(255, 255, 255, 0.2);
+    }
+    .gauge-center small {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-top: 8px;
+    }
+    
+    .stat-second { 
+      font-size: 1.65rem; 
+      font-weight: 700; 
+      color: #fff; 
+      margin-top: 4px;
+      z-index: 2;
+    }
+    .stat-power.charge { 
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.92rem; 
+      font-weight: 700; 
+      padding: 5px 18px; 
+      border-radius: var(--r-pill);
+      color: var(--battery); 
+      border: 1px solid rgba(16, 185, 129, 0.4); 
+      background: rgba(16, 185, 129, 0.14);
+      box-shadow: 0 0 16px var(--battery-glow);
+      margin-top: 8px;
+      z-index: 2;
+    }
+
+    /* OBDĹŽNIKOVÁ LIŠTA DOLE S VEĽKOU VÝROBOU */
+    .hub-bottom-strip {
+      background: rgba(11, 16, 28, 0.88);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 14px 22px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      margin-top: 14px;
+    }
+
+    .strip-stat {
+      padding: 0 10px;
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .strip-stat .lbl {
+      display: block;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 3px;
+    }
+    .strip-stat .val {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: baseline;
+      gap: 3px;
+    }
+    .strip-stat .val small {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* HLAVNÝ BLOK VÝROBY (VÝRAZNE VÄČŠÍ) */
+    .strip-daily-block {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
+      border: 1px solid rgba(245, 158, 11, 0.38);
+      border-radius: 12px;
+      padding: 10px 22px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.12);
+    }
+    .strip-daily-block .main-prod {
+      display: flex;
+      flex-direction: column;
+    }
+    .strip-daily-block .main-prod .lbl {
+      color: var(--solar);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .strip-daily-block .main-prod .val {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+    .strip-daily-block .main-prod .val small {
+      font-size: 1.05rem;
+      color: var(--solar);
+      margin-left: 4px;
+      font-weight: 600;
+    }
+    .strip-daily-block .total-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      border-left: 1px solid rgba(245, 158, 11, 0.28);
+      padding-left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .strip-daily-block .total-sub .lbl-sub {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .strip-daily-block .total-sub span.num-font {
+      color: #fff;
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+
+    /* ============================================================
+       2. ČLÁNKY BATÉRIE (MENŠIE, KOMPAKTNÝ BMS PACK)
+       ============================================================ */
+    .battery-cells-rack {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .cell-battery-pod {
+      position: relative;
+      background: rgba(13, 20, 35, 0.75);
+      border: 1.2px solid rgba(16, 185, 129, 0.3);
+      border-radius: 10px;
+      padding: 6px 4px 6px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 94px;
+      transition: all 0.2s var(--ease);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    }
+    .cell-battery-pod:hover {
+      transform: translateY(-2px);
+      border-color: var(--battery);
+    }
+
+    /* Menší pól akumulátora */
+    .cell-battery-pod::before {
+      content: "";
+      position: absolute;
+      top: -4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 15px;
+      height: 3.5px;
+      background: rgba(16, 185, 129, 0.55);
+      border-radius: 2px 2px 0 0;
+      border: 1px solid rgba(16, 185, 129, 0.6);
+      border-bottom: none;
+    }
+
+    .cell-battery-pod .c-name {
+      color: var(--text-muted);
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .cell-battery-pod .c-volt {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 1px 0 3px;
+    }
+
+    /* Menší blok naplnenia */
+    .cell-tank {
+      width: 78%;
+      height: 30px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 5px;
+      padding: 1.5px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      overflow: hidden;
+    }
+    .cell-tank-fill {
+      width: 100%;
+      height: 80%;
+      background: linear-gradient(180deg, #34d399, #10b981);
+      border-radius: 3.5px;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+      transition: height 0.5s var(--ease);
+    }
+
+    .cell-battery-pod .c-bolt {
+      font-size: 0.72rem;
+      color: var(--battery);
+      margin-top: 3px;
+      line-height: 1;
+    }
+
+    /* Stavy pre MAX a MIN */
+    .cell-battery-pod.hi {
+      border-color: rgba(16, 185, 129, 0.6);
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .cell-battery-pod.hi::before { background: var(--battery); }
+    .cell-battery-pod.hi .c-volt { color: var(--battery); }
+    .cell-battery-pod.hi .cell-tank-fill { height: 92%; }
+
+    .cell-battery-pod.low {
+      border-color: rgba(245, 158, 11, 0.5);
+      background: rgba(245, 158, 11, 0.05);
+    }
+    .cell-battery-pod.low::before { background: var(--solar); border-color: var(--solar); }
+    .cell-battery-pod.low .c-name { color: var(--solar); }
+    .cell-battery-pod.low .c-volt { color: var(--solar); }
+    .cell-battery-pod.low .cell-tank-fill {
+      height: 65%;
+      background: linear-gradient(180deg, #fbbf24, #f59e0b);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);
+    }
+    .cell-battery-pod.low .c-bolt { color: var(--solar); }
+
+    /* ============================================================
+       3. SPODNÉ 3 KARTY
+       ============================================================ */
+    .grid-bottom-3 { 
+      display: grid; 
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px; 
+    }
+    
+    dl { 
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .dl-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 8px;
+      border-radius: 8px;
+      transition: background 0.15s var(--ease);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+    }
+    .dl-row:last-child { border-bottom: none; }
+    .dl-row:hover { background: rgba(255, 255, 255, 0.035); }
+    
+    dt {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+    dd {
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.85rem;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    dd .u {
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      font-weight: 400;
+      margin-left: 2px;
+    }
+
+    /* RESPONSIVE */
+    @media (max-width: 1250px) {
+      .battery-cells-rack { grid-template-columns: repeat(4, 1fr); }
+      .grid-bottom-3 { grid-template-columns: 1fr; }
+      .hub-bottom-strip { grid-template-columns: repeat(2, 1fr); }
+      .strip-daily-block { grid-column: 1 / -1; }
+    }
+    @media (max-width: 768px) {
+      header { padding: 12px 18px; }
+      main { padding: 14px; }
+      .flow-stage-flex { flex-direction: column; gap: 16px; }
+      .flow-connector { width: 100%; transform: rotate(90deg); height: 35px; }
+      .battery-cells-rack { grid-template-columns: repeat(2, 1fr); }
+      .hub-bottom-strip { grid-template-columns: 1fr; }
+      .gauge-big { width: 260px; height: 260px; }
+      .gauge-center .num { font-size: 5.6rem; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">☀️</div>
+      <div class="brand-text">
+        <h1>Solar Monitor</h1>
+        <div class="subtitle">Siseli PV · live hub</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="status-badge" class="badge online">Online</span>
+      <span id="mode-badge" class="badge active">Generating</span>
+      <span id="clock">14:32:05</span>
+      <button id="refresh-btn" title="Obnoviť dáta">↻</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1. VEĽKÝ ENERGY HUB S DOMINANTNOU BATÉRIOU A TOKOM -->
+    <article class="card energy-hub-card">
+      <div class="card-head" style="margin-bottom: 2px;">
+        <h3>⚡ Živý tok energie &amp; Batéria</h3>
+        <span class="chip" id="flow-time">Aktuálne</span>
+      </div>
+
+      <!-- TOKOVÁ SCÉNA -->
+      <div class="flow-stage-flex">
+        
+        <!-- VĽAVO: PANELY -->
+        <div class="hub-satellite solar-node">
+          <div class="icon-badge">☀️</div>
+          <div class="node-title">Panely</div>
+          <div class="node-val num-font" id="f-pv-kw">2.84 kW</div>
+          <div class="node-sub">Napätie: <b class="num-font" id="hero-pv-v">340 V</b></div>
+        </div>
+
+        <!-- SPOJNICA ZO SOLÁRU DO BATÉRIE -->
+        <div class="flow-connector">
+          <svg viewBox="0 0 120 16" preserveAspectRatio="none">
+            <line x1="0" y1="8" x2="120" y2="8" class="flow-line solar-pipe" />
+          </svg>
+        </div>
+
+        <!-- STRED: CENTRÁLNA BATÉRIA % (MAXI VEĽKOSŤ) -->
+        <div class="center-battery-core">
+          <div class="gauge-big">
+            <svg viewBox="0 0 120 120">
+              <defs>
+                <linearGradient id="batteryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#10b981" />
+                  <stop offset="100%" stop-color="#38bdf8" />
+                </linearGradient>
+              </defs>
+              <circle class="track" cx="60" cy="60" r="52"></circle>
+              <circle class="bar" id="soc-bar" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div class="gauge-center">
+              <span class="num num-font" id="bat-soc">80</span>
+              <small>SOC %</small>
+            </div>
+          </div>
+          <div class="stat-second num-font" id="bat-voltage">53.2 V</div>
+          <div class="stat-power charge num-font" id="bat-power">⚡ +1.45 kW</div>
+        </div>
+
+        <!-- SPOJNICA Z BATÉRIE DO DOMU -->
+        <div class="flow-connector">
+          <svg viewBox="0 0 120 16" preserveAspectRatio="none">
+            <line x1="0" y1="8" x2="120" y2="8" class="flow-line home-pipe" />
+          </svg>
+        </div>
+
+        <!-- VPRAVO: DOM -->
+        <div class="hub-satellite home-node">
+          <div class="icon-badge">🏠</div>
+          <div class="node-title">Spotreba Domu</div>
+          <div class="node-val num-font" id="f-load-kw">1.39 kW</div>
+          <div class="node-sub">Sieť: <b class="num-font" id="hero-load-v">231 V</b></div>
+        </div>
+
+      </div>
+
+      <!-- OBDĹŽNIKOVÁ LIŠTA DOLE S VEĽKÝM ZVÝRAZNENÍM VÝROBY -->
+      <div class="hub-bottom-strip">
+        <div class="strip-stat">
+          <span class="lbl">PV Výkon</span>
+          <div class="val num-font"><span id="hero-pv-w">2.84</span><small>kW</small></div>
+        </div>
+        <div class="strip-stat">
+          <span class="lbl">Dom Odber</span>
+          <div class="val num-font"><span id="hero-load-w">1.39</span><small>kW</small></div>
+        </div>
+        <div class="strip-stat">
+          <span class="lbl">Batéria Tok</span>
+          <div class="val num-font" style="color: var(--battery);"><span id="f-bat-kw">+1.45</span><small>kW</small></div>
+        </div>
+        <div class="strip-stat" style="border-right: none;">
+          <span class="lbl">Batéria Volt</span>
+          <div class="val num-font"><span id="b-voltage-mini">53.2</span><small>V</small></div>
+        </div>
+        
+        <!-- HLAVNÝ BLOK: DNES VYROBENÉ & CELKOM (ZVÄČŠENÉ) -->
+        <div class="strip-daily-block">
+          <div class="main-prod">
+            <span class="lbl">📈 Dnes vyrobené</span>
+            <div class="val num-font"><span id="daily-kwh">14.6</span><small>kWh</small></div>
+          </div>
+          <div class="total-sub">
+            <span class="lbl-sub">Celkom vygenerované</span>
+            <span class="num-font" id="daily-sub">11.42 MWh</span>
+          </div>
+        </div>
+      </div>
+
+    </article>
+
+    <!-- 2. ČLÁNKY BATÉRIE (MENŠIE A KOMPAKTNÉ) -->
+    <article class="card">
+      <div class="card-head">
+        <h3>🔋 Články batérie (BMS Balancér)</h3>
+        <span class="chip" id="cell-range">Δ 12 mV</span>
+      </div>
+      
+      <div class="battery-cells-rack">
+        <!-- C01 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C01</span>
+          <span class="c-volt num-font">3.328</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 78%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C02 (MAX) -->
+        <div class="cell-battery-pod hi">
+          <span class="c-name">C02</span>
+          <span class="c-volt num-font">3.334</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 92%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C03 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C03</span>
+          <span class="c-volt num-font">3.329</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 80%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C04 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C04</span>
+          <span class="c-volt num-font">3.330</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 82%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C05 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C05</span>
+          <span class="c-volt num-font">3.327</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 76%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C06 (MIN) -->
+        <div class="cell-battery-pod low">
+          <span class="c-name">C06</span>
+          <span class="c-volt num-font">3.322</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 65%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C07 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C07</span>
+          <span class="c-volt num-font">3.331</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 84%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+
+        <!-- C08 -->
+        <div class="cell-battery-pod">
+          <span class="c-name">C08</span>
+          <span class="c-volt num-font">3.328</span>
+          <div class="cell-tank"><div class="cell-tank-fill" style="height: 78%;"></div></div>
+          <span class="c-bolt">⚡</span>
+        </div>
+      </div>
+    </article>
+
+    <!-- 3. SPODNÉ 3 KARTY -->
+    <section class="grid-bottom-3">
+      
+      <!-- Karta 1: Detaily batérie -->
+      <div class="card">
+        <div class="card-head">
+          <h3>🔋 Batéria detaily</h3>
+          <span class="chip" id="charge-chip">Nabíjanie</span>
+        </div>
+        <dl>
+          <div class="dl-row"><dt>Napätie</dt><dd class="num-font" id="b-voltage">53.24 <span class="u">V</span></dd></div>
+          <div class="dl-row"><dt>Prúd</dt><dd class="num-font" id="b-current">+27.2 <span class="u">A</span></dd></div>
+          <div class="dl-row"><dt>Výkon</dt><dd class="num-font" id="b-power">1448 <span class="u">W</span></dd></div>
+          <div class="dl-row"><dt>SOH (Zdravie)</dt><dd class="num-font" id="b-soh">98 <span class="u">%</span></dd></div>
+          <div class="dl-row"><dt>Kapacita (zost.)</dt><dd class="num-font" id="b-rem">240 <span class="u">Ah</span></dd></div>
+          <div class="dl-row"><dt>Nominálna kap.</dt><dd class="num-font" id="b-nom">300 <span class="u">Ah</span></dd></div>
+          <div class="dl-row"><dt>Počet cyklov</dt><dd class="num-font" id="b-cycles">142</dd></div>
+        </dl>
+      </div>
+
+      <!-- Karta 2: Teploty & Balancovanie -->
+      <div class="card">
+        <div class="card-head">
+          <h3>🌡️ Teploty &amp; Bal.</h3>
+          <span class="chip dim">BMS</span>
+        </div>
+        <dl>
+          <div class="dl-row"><dt>MOS Tranzistor</dt><dd class="num-font" id="b-tmos">28.4 <span class="u">°C</span></dd></div>
+          <div class="dl-row"><dt>Senzor Teplota 1</dt><dd class="num-font" id="b-t1">22.1 <span class="u">°C</span></dd></div>
+          <div class="dl-row"><dt>Senzor Teplota 2</dt><dd class="num-font" id="b-t2">21.8 <span class="u">°C</span></dd></div>
+          <div class="dl-row"><dt>Balanc. prúd</dt><dd class="num-font" id="b-balcur">0.45 <span class="u">A</span></dd></div>
+          <div class="dl-row"><dt>Balanc. akcia</dt><dd class="num-font" id="b-balact" style="color: var(--battery);">Aktívne</dd></div>
+          <div class="dl-row"><dt>Nabíjací MOS</dt><dd class="num-font" id="b-chg" style="color: var(--battery);">ZAP</dd></div>
+          <div class="dl-row"><dt>Vybíjací MOS</dt><dd class="num-font" id="b-dchg" style="color: var(--battery);">ZAP</dd></div>
+          <div class="dl-row"><dt>Stav porúch</dt><dd class="num-font" id="b-err" style="color: var(--battery);">0x0000 (OK)</dd></div>
+        </dl>
+      </div>
+
+      <!-- Karta 3: Panely & Invertor -->
+      <div class="card">
+        <div class="card-head">
+          <h3>☀️ Panely &amp; Inv.</h3>
+          <span class="chip dim">Invertor</span>
+        </div>
+        <dl>
+          <div class="dl-row"><dt>Aktuálny výkon</dt><dd class="num-font" id="pv-detail">2840 <span class="u">W</span></dd></div>
+          <div class="dl-row"><dt>Inštalovaný výkon</dt><dd class="num-font" id="pv-cap">5.4 <span class="u">kWp</span></dd></div>
+          <div class="dl-row"><dt>Dnes</dt><dd class="num-font" id="pv-daily">14.6 <span class="u">kWh</span></dd></div>
+          <div class="dl-row"><dt>Aktuálny mesiac</dt><dd class="num-font" id="pv-monthly">312.4 <span class="u">kWh</span></dd></div>
+          <div class="dl-row"><dt>Tento rok</dt><dd class="num-font" id="pv-yearly">2.84 <span class="u">MWh</span></dd></div>
+          <div class="dl-row"><dt>Celkovo</dt><dd class="num-font" id="pv-total">11.42 <span class="u">MWh</span></dd></div>
+          <div class="dl-row"><dt>Zariadenia</dt><dd class="num-font" id="devices">1 Online</dd></div>
+          <div class="dl-row"><dt>Posledná synchronizácia</dt><dd class="num-font" id="vendor-ts" style="color: var(--text-muted);">Pred 2s</dd></div>
+        </dl>
+      </div>
+
+    </section>
+
+    <!-- Skryté ID pre JS kompatibilitu -->
+    <div style="display:none;" aria-hidden="true">
+      <span id="f-grid-kw"></span>
+      <span id="f-pv-v"></span>
+      <span id="f-load-v"></span>
+      <span id="f-bat-v"></span>
+    </div>
+  </main>
+</body>
+</html>

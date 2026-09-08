@@ -1,0 +1,2689 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IG Publisher — @{{ profile.get('username') or (selected_account.get('username') if selected_account else 'Studio') }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* ── Publisher Studio Styling ── */
+    :root {
+      --ig-gradient: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+      --card-bg: #151b26;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent: #e1306c;
+      --accent-glow: rgba(225, 48, 108, 0.25);
+    }
+
+    body {
+      background: #0b0f19;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding-bottom: 60px;
+    }
+
+    /* ── Account Selector Strip ── */
+    .accounts-strip {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 4px 2px 16px 2px;
+      margin-bottom: 22px;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+    .accounts-strip::-webkit-scrollbar { height: 5px; }
+    .accounts-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    .account-card-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--card-bg);
+      border: 1.5px solid var(--card-border);
+      border-radius: 14px;
+      padding: 8px 14px;
+      cursor: pointer;
+      text-decoration: none;
+      color: #f1f5f9;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .account-card-chip:hover {
+      border-color: rgba(225, 48, 108, 0.5);
+      background: #1c2433;
+      transform: translateY(-1px);
+    }
+    .account-card-chip.active {
+      border-color: var(--accent);
+      background: rgba(225, 48, 108, 0.12);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+    .chip-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--accent);
+    }
+    .chip-info { display: flex; flex-direction: column; text-align: left; }
+    .chip-name { font-weight: 700; font-size: 0.88rem; color: #fff; }
+    .chip-status { font-size: 0.68rem; color: #10b981; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+
+    .chip-add-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1.5px dashed rgba(255, 255, 255, 0.22);
+      border-radius: 14px;
+      padding: 8px 16px;
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.84rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .chip-add-btn:hover {
+      border-color: var(--accent);
+      color: #fff;
+      background: rgba(225, 48, 108, 0.12);
+    }
+
+    /* ── Main Grid ── */
+    .studio-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      .studio-grid { grid-template-columns: 1fr; }
+    }
+
+    .studio-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    .studio-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--ig-gradient);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #f1f5f9;
+    }
+
+    /* ── Tabs ── */
+    .studio-tabs {
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .studio-tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .studio-tab:hover { color: #fff; }
+    .studio-tab.active {
+      background: rgba(225, 48, 108, 0.22);
+      color: #fff;
+      border: 1px solid rgba(225, 48, 108, 0.4);
+      box-shadow: 0 2px 10px rgba(225, 48, 108, 0.2);
+    }
+
+    /* ── Dropzone & Upload ── */
+    .dropzone {
+      border: 2px dashed rgba(255, 255, 255, 0.18);
+      border-radius: 16px;
+      padding: 34px 20px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(255, 255, 255, 0.02);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(225, 48, 108, 0.08);
+      transform: scale(1.005);
+    }
+    .dropzone-icon {
+      font-size: 2.5rem;
+      color: var(--accent);
+      margin-bottom: 12px;
+      transition: transform 0.2s;
+    }
+    .dropzone:hover .dropzone-icon {
+      transform: scale(1.1);
+    }
+    .dropzone-text {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .dropzone-sub {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 5px;
+    }
+    .file-input-hidden { display: none; }
+
+    /* Media Mode Toggle (File vs URL) */
+    .media-source-toggle {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 8px;
+      font-size: 0.78rem;
+    }
+    .media-source-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+      text-decoration: underline;
+      transition: color 0.15s;
+    }
+    .media-source-btn:hover { color: #fff; }
+
+    /* Preview Container */
+    .preview-box {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 14px;
+      display: none;
+      background: #000;
+      max-height: 360px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      text-align: center;
+    }
+    .preview-box img, .preview-box video {
+      width: 100%;
+      height: 100%;
+      max-height: 360px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+    .preview-badge-info {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      color: #f1f5f9;
+      font-size: 0.74rem;
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preview-remove-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s;
+      z-index: 5;
+    }
+    .preview-remove-btn:hover {
+      background: #ef4444;
+      border-color: #ef4444;
+      transform: scale(1.1);
+    }
+
+    /* URL Input Row (Optional) */
+    .url-input-box {
+      display: none;
+      margin-top: 10px;
+    }
+    .url-input-field {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      color: #fff;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .url-input-field:focus {
+      border-color: var(--accent);
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-top: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      text-align: left;
+    }
+    .form-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .input-caption {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      padding: 12px 14px;
+      min-height: 90px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-caption:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(225, 48, 108, 0.15);
+    }
+
+    /* Quick Hashtag & Emoji Tools */
+    .quick-tools-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+      align-items: center;
+    }
+    .quick-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      padding: 3px 8px;
+      border-radius: 8px;
+      font-size: 0.74rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .quick-pill:hover {
+      background: rgba(225, 48, 108, 0.2);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .emoji-pill {
+      font-size: 0.9rem;
+      padding: 2px 6px;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .emoji-pill:hover {
+      transform: scale(1.25);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    /* Toggle row */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-top: 14px;
+      font-size: 0.88rem;
+    }
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background-color: #334155; border-radius: 24px; transition: .3s;
+    }
+    .toggle-slider:before {
+      position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+      background-color: white; border-radius: 50%; transition: .3s;
+    }
+    input:checked + .toggle-slider { background-color: var(--accent); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+    /* Publish Button */
+    .btn-submit-publish {
+      margin-top: 22px;
+      width: 100%;
+      background: var(--ig-gradient);
+      border: none;
+      border-radius: 14px;
+      color: #fff;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 1.05rem;
+      padding: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(225, 48, 108, 0.35);
+      transition: all 0.2s ease;
+    }
+    .btn-submit-publish:hover {
+      opacity: 0.95;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(225, 48, 108, 0.45);
+    }
+    .btn-submit-publish:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Live Progress Card */
+    .publish-progress-box {
+      margin-top: 18px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1.5px solid rgba(225, 48, 108, 0.4);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: none;
+      text-align: left;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+    }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.88rem;
+      color: #e2e8f0;
+      margin: 8px 0;
+    }
+    .step-spinner { color: var(--accent); font-size: 1.1rem; }
+
+    /* Profile Card on Right */
+    .profile-banner {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .profile-hero-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid transparent;
+      background: linear-gradient(#151b26,#151b26) padding-box, var(--ig-gradient) border-box;
+    }
+    .profile-hero-name { font-size: 1.15rem; font-weight: 700; color: #fff; }
+    .profile-hero-user { font-size: 0.85rem; color: #94a3b8; }
+    .profile-stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .stat-box {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat-val { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 700; color: #fff; }
+    .stat-lbl { font-size: 0.68rem; color: #94a3b8; text-transform: uppercase; margin-top: 2px; }
+
+    /* Recent Media Grid */
+    .media-scroller {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+      gap: 8px;
+      margin-top: 14px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .media-scroller::-webkit-scrollbar { width: 4px; }
+    .media-scroller::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+    .media-cell {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      background: #1f2937;
+      text-decoration: none;
+    }
+    .media-cell img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.2s; }
+    .media-cell:hover img { transform: scale(1.08); }
+    .media-badge-reel {
+      position: absolute;
+      top: 5px; right: 5px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font-size: 9px;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    /* ── Main View Switcher Tabs ── */
+    .view-tabs-container {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 22px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      max-width: 650px;
+    }
+    .view-tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 0.88rem;
+      padding: 10px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+    .view-tab-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+    .view-tab-btn.active {
+      background: var(--ig-gradient);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(225, 48, 108, 0.35);
+    }
+
+    /* ── Vault & Planner UI Styles ── */
+    .section-banner {
+      background: #151b26;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .section-title-wrap h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 0 0 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title-wrap p {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin: 0;
+      max-width: 680px;
+      line-height: 1.45;
+    }
+
+    /* Vault Grid */
+    .vault-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .vault-card {
+      background: #151b26;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .vault-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(225, 48, 108, 0.4);
+    }
+    .vault-thumb-wrap {
+      position: relative;
+      aspect-ratio: 9/16;
+      max-height: 260px;
+      background: #000;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .vault-thumb-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.2s;
+    }
+    .vault-thumb-wrap:hover img { transform: scale(1.05); }
+    .vault-play-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 2rem;
+      opacity: 0.75;
+      transition: opacity 0.2s;
+    }
+    .vault-thumb-wrap:hover .vault-play-overlay { opacity: 1; transform: scale(1.1); }
+    .vault-meta {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+    }
+    .vault-name {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vault-badges {
+      display: flex;
+      gap: 6px;
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+    .vault-badge {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 2px 7px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .vault-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Planner Timeline & Cards */
+    .planner-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .planner-post-card {
+      background: #151b26;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 22px;
+      position: relative;
+      transition: all 0.2s;
+    }
+    @media (max-width: 768px) {
+      .planner-post-card { grid-template-columns: 1fr; }
+    }
+    .planner-post-card:hover {
+      border-color: rgba(225, 48, 108, 0.35);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+    .planner-video-col {
+      aspect-ratio: 9/16;
+      max-height: 330px;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .planner-video-col video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .planner-info-col {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+    .planner-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .peak-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .jitter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fbbf24;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .spoof-breakdown {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 4px 0;
+    }
+    .spoof-tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      color: #cbd5e1;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+    }
+    .planner-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-publish-reel-now {
+      background: var(--ig-gradient);
+      border: none;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(225, 48, 108, 0.35);
+      transition: all 0.2s;
+    }
+    .btn-publish-reel-now:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-publish-reel-now:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── Vault Picker & Tag Badges Styling ── */
+    .btn-vault-picker-trigger {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      background: linear-gradient(135deg, rgba(225, 48, 108, 0.12), rgba(56, 189, 248, 0.12));
+      border: 1.5px solid rgba(56, 189, 248, 0.35);
+      border-radius: 14px;
+      padding: 12px 16px;
+      cursor: pointer;
+      color: #fff;
+      transition: all 0.2s ease;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    .btn-vault-picker-trigger:hover {
+      background: linear-gradient(135deg, rgba(225, 48, 108, 0.22), rgba(56, 189, 248, 0.22));
+      border-color: rgba(56, 189, 248, 0.6);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(56, 189, 248, 0.15);
+    }
+    .vault-filter-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94a3b8;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .vault-filter-pill:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .vault-filter-pill.active {
+      background: var(--ig-gradient);
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 2px 8px rgba(225, 48, 108, 0.35);
+    }
+    .vault-picker-card {
+      background: #151b26;
+      border: 1.5px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .vault-picker-card:hover {
+      border-color: rgba(56, 189, 248, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    }
+    .vault-tag-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .vault-tag-used {
+      background: rgba(168, 85, 247, 0.2);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
+    .vault-tag-free {
+      background: rgba(16, 185, 129, 0.18);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navbar -->
+  <header class="header">
+    <div class="header-left">
+      <a href="{{ url_for('index') }}" class="back-link" title="Späť do IG Analytics Tracker">
+        <i class="fas fa-arrow-left"></i> Tracker
+      </a>
+      <div class="brand">
+        <div class="brand-icon ig-gradient-icon"><i class="fab fa-instagram"></i></div>
+        <span class="brand-name">Instagram Publisher Studio</span>
+      </div>
+    </div>
+    <div class="header-right" style="display: flex; align-items: center; gap: 8px;">
+      <a href="/ig/connect" class="btn-add" style="background: var(--ig-gradient); text-decoration: none; font-size: 0.78rem; padding: 7px 11px;" title="Pripojiť slovenský mobil">
+        🇸🇰 + SK
+      </a>
+      <a href="/ig/connect-us" class="btn-add" style="background: linear-gradient(135deg, #1d4ed8, #0ea5e9); text-decoration: none; font-size: 0.78rem; padding: 7px 11px;" title="Pripojiť US cloud mobil v Multilogine (oddelená US Appka)">
+        🇺🇸 + US
+      </a>
+      <a href="{{ url_for('logout') }}" class="btn-logout" title="Odhlásiť sa">
+        <i class="fas fa-arrow-right-from-bracket"></i>
+      </a>
+    </div>
+  </header>
+
+  <main class="main-container">
+
+    <!-- ── Account Selector Strip ── -->
+    <div class="accounts-strip">
+      {% if accounts_with_tokens %}
+        {% for acc in accounts_with_tokens %}
+          <a href="{{ url_for('publisher_page') }}?account_id={{ acc.id }}" class="account-card-chip {% if current_account_id == acc.id %}active{% endif %}">
+            <img src="{{ acc.avatar_url or 'https://ui-avatars.com/api/?name=' + acc.username }}" class="chip-avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ acc.username }}'">
+            <div class="chip-info">
+              <span class="chip-name">
+                @{{ acc.username }}
+                {% if acc.get('region') == 'us' %}
+                  <span style="font-size:0.75rem; margin-left:2px;" title="US Profil (Oddelená US Appka)">🇺🇸</span>
+                {% else %}
+                  <span style="font-size:0.75rem; margin-left:2px;" title="Slovenský profil">🇸🇰</span>
+                {% endif %}
+              </span>
+              {% if acc.get('health_status') == 'healthy' %}
+                <span class="chip-status" style="color: #10b981;"><span class="health-dot healthy"></span> Ready</span>
+              {% elif acc.get('health_status') == 'action_required' %}
+                <span class="chip-status" style="color: #fbbf24;"><span class="health-dot warning"></span> Checkpoint / 2FA</span>
+              {% elif '404' in (acc.get('health_message') or '') or 'zmazaný' in (acc.get('health_message') or '') %}
+                <span class="chip-status" style="color: #ef4444;"><span class="health-dot error"></span> Banned / 404</span>
+              {% else %}
+                <span class="chip-status" style="color: #f87171;" title="{{ acc.get('health_message') }}"><span class="health-dot error"></span> Token / API Chyba</span>
+              {% endif %}
+            </div>
+          </a>
+        {% endfor %}
+      {% endif %}
+
+      <!-- Connect buttons for SK and US -->
+      <a href="/ig/connect" class="chip-add-btn" title="Otvoriť 1-klikové prihlásenie pre slovenský mobil">
+        🇸🇰 + SK Mobil
+      </a>
+      <a href="/ig/connect-us" class="chip-add-btn" style="border-color: rgba(56, 189, 248, 0.4); color: #38bdf8;" title="Otvoriť v US cloud mobile v Multilogine (oddelená US Meta Appka)">
+        🇺🇸 + US Cloud Mobil
+      </a>
+    </div>
+
+    <!-- ── Main View Switcher Tabs ── -->
+    <div class="view-tabs-container">
+      <button type="button" class="view-tab-btn active" id="viewBtnManual" onclick="switchMainView('manual')">
+        <i class="fas fa-paper-plane"></i> 🚀 Manuálne štúdio
+      </button>
+      <button type="button" class="view-tab-btn" id="viewBtnVault" onclick="switchMainView('vault')">
+        <i class="fas fa-film"></i> 🎬 Media Vault (<span id="vaultCountBadge">0</span>)
+      </button>
+      <button type="button" class="view-tab-btn" id="viewBtnPlanner" onclick="switchMainView('planner')">
+        <i class="fas fa-calendar-alt"></i> 📅 Auto-Planner & Kalendár
+      </button>
+    </div>
+
+    <!-- ── View 1: Manual Studio ── -->
+    <div id="viewManual" class="view-panel">
+      <div class="studio-grid">
+
+      <!-- Left Column: Publisher Card -->
+      <div class="studio-card">
+        <div class="card-title">
+          <i class="fas fa-paper-plane" style="color: var(--accent);"></i>
+          Vytvoriť a publikovať príspevok
+        </div>
+
+        <!-- Mode Tabs (Foto vs Reel) -->
+        <div class="studio-tabs">
+          <button type="button" class="studio-tab active" id="tabBtnPhoto" onclick="switchTab('photo')">
+            <i class="fas fa-image"></i> Fotografia
+          </button>
+          <button type="button" class="studio-tab" id="tabBtnReel" onclick="switchTab('reel')">
+            <i class="fas fa-clapperboard"></i> Instagram Reel
+          </button>
+        </div>
+
+        <!-- Hidden file input -->
+        <input type="file" id="filePicker" class="file-input-hidden" accept="image/*">
+
+        <!-- Vault Picker Quick Button -->
+        <button type="button" class="btn-vault-picker-trigger" id="btnOpenVaultPicker" onclick="openVaultPickerModal()">
+          <i class="fab fa-google-drive" style="color: #38bdf8; font-size: 1.35rem;"></i>
+          <div style="flex: 1;">
+            <div style="font-weight: 700; font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+              <span>🎬 Vybrať z Media Vaultu (Google Drive)</span>
+              <span class="vault-tag-badge" style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-size: 0.68rem;">Cloud 5 TB</span>
+            </div>
+            <div style="font-size: 0.76rem; color: #94a3b8; margin-top: 2px;">
+              Vyberte Reel alebo fotku bez sťahovania do PC • Po použití sa automaticky priradí tag účtu
+            </div>
+          </div>
+          <i class="fas fa-chevron-right" style="color: #38bdf8; font-size: 0.9rem;"></i>
+        </button>
+
+        <!-- Upload Dropzone (Interactive Drag & Drop) -->
+        <div class="dropzone" id="dropzoneBox" onclick="document.getElementById('filePicker').click()">
+          <div class="dropzone-icon" id="dropzoneIcon"><i class="fas fa-cloud-arrow-up"></i></div>
+          <div class="dropzone-text" id="dropzoneText">Ťukni sem a vyber fotku z PC alebo ju sem pretiahni (Drag & Drop)</div>
+          <div class="dropzone-sub" id="dropzoneSub">Podporované formáty: JPG, PNG, WEBP (max 10 MB)</div>
+        </div>
+
+        <!-- Media Source Toggle (File vs Direct URL) -->
+        <div class="media-source-toggle" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+          <button type="button" class="media-source-btn" id="btnToggleUrlMode" onclick="toggleUrlInput()">
+            <i class="fas fa-link"></i> Alebo vložiť priamy odkaz na súbor (URL)
+          </button>
+        </div>
+
+        <!-- Direct URL Input Field (Optional) -->
+        <div class="url-input-box" id="urlInputBox">
+          <input type="url" id="manualMediaUrl" class="url-input-field" placeholder="https://priklad.com/subor.jpg (musí byť verejná https linka)" oninput="handleManualUrl(this.value)">
+        </div>
+
+        <!-- Live Preview Area -->
+        <div class="preview-box" id="previewBox">
+          <button type="button" class="preview-remove-btn" onclick="clearSelectedFile()" title="Odstrániť vybraný súbor">&times;</button>
+          <img id="imagePreviewEl" style="display: none;" alt="Náhľad fotky">
+          <video id="videoPreviewEl" controls style="display: none;"></video>
+          <div class="preview-badge-info" id="previewBadgeInfo">
+            <i class="fas fa-check-circle" style="color: #10b981;"></i>
+            <span id="previewBadgeText">Pripravené na publikovanie</span>
+          </div>
+        </div>
+
+        <!-- Caption Field -->
+        <div class="form-group">
+          <label for="postCaption" class="form-label">
+            <span>Popis príspevku (Caption)</span>
+            <span id="charCount">0 / 2200</span>
+          </label>
+          <textarea id="postCaption" class="input-caption" placeholder="Napíš niečo k príspevku..."></textarea>
+
+          <!-- Quick Tools (Hashtags & Emojis) -->
+          <div class="quick-tools-bar">
+            <span style="font-size: 0.72rem; color: #64748b; font-weight: 600; margin-right: 2px;">Rýchle tagy:</span>
+            <span class="quick-pill" onclick="appendTag('#fyp')">#fyp</span>
+            <span class="quick-pill" onclick="appendTag('#foryou')">#foryou</span>
+            <span class="quick-pill" onclick="appendTag('#explore')">#explore</span>
+            <span class="quick-pill" onclick="appendTag('#viral')">#viral</span>
+            <span class="quick-pill" onclick="appendTag('#reels')">#reels</span>
+            <span class="quick-pill" onclick="appendTag('#model')">#model</span>
+            <span class="quick-pill" onclick="appendTag('#fashion')">#fashion</span>
+            <span style="margin-left: 6px; font-size: 0.72rem; color: #64748b; font-weight: 600;">Emoji:</span>
+            <span class="emoji-pill" onclick="appendEmoji('🔥')">🔥</span>
+            <span class="emoji-pill" onclick="appendEmoji('✨')">✨</span>
+            <span class="emoji-pill" onclick="appendEmoji('📸')">📸</span>
+            <span class="emoji-pill" onclick="appendEmoji('🎬')">🎬</span>
+            <span class="emoji-pill" onclick="appendEmoji('🖤')">🖤</span>
+            <span class="emoji-pill" onclick="appendEmoji('😍')">😍</span>
+            <span class="emoji-pill" onclick="appendEmoji('👇')">👇</span>
+          </div>
+        </div>
+
+        <!-- Reels Toggle (Share to Feed) -->
+        <div class="toggle-row" id="reelFeedRow" style="display: none;">
+          <div>
+            <div style="font-weight: 600; color: #fff;">Zdieľať aj do profilového feedu</div>
+            <div style="font-size: 0.76rem; color: #94a3b8;">Zobrazí Reel aj v hlavnej mriežke príspevkov na profile</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="shareToFeedToggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <!-- Progress status -->
+        <div class="publish-progress-box" id="progressBox">
+          <div class="progress-step" id="stepUpload">
+            <i class="fas fa-spinner fa-spin step-spinner"></i>
+            <span id="stepUploadText">Krok 1/3: Nahrávam médiá na server...</span>
+          </div>
+          <div class="progress-step" id="stepMeta" style="display: none;">
+            <i class="fas fa-spinner fa-spin step-spinner"></i>
+            <span id="stepMetaText">Krok 2/3: Meta Graph API overuje a spracováva kontajner...</span>
+          </div>
+          <div class="progress-step" id="stepDone" style="display: none;">
+            <i class="fas fa-circle-check" style="color: #10b981; font-size: 1.1rem;"></i>
+            <span id="stepDoneText" style="color: #10b981; font-weight: 600;">Krok 3/3: Úspešne publikované na Instagrame! 🎉</span>
+          </div>
+        </div>
+
+        <!-- Publish Action Button -->
+        <button type="button" class="btn-submit-publish" id="btnSubmitPublish" onclick="submitPost()">
+          <i class="fas fa-paper-plane"></i> Zverejniť na @{{ profile.get('username') or (selected_account.get('username') if selected_account else 'Instagram') }}
+        </button>
+      </div>
+
+      <!-- Right Column: Profile & Recent Posts -->
+      <div class="studio-card">
+        <div class="card-title">
+          <i class="fas fa-user-check" style="color: #10b981;"></i>
+          Aktívny profil
+        </div>
+
+        {% if profile %}
+          <div class="profile-banner">
+            <img src="{{ profile.get('profile_picture_url') or 'https://ui-avatars.com/api/?name=' + profile.get('username', 'user') }}" class="profile-hero-avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ profile.get('username', 'user') }}'">
+            <div>
+              <div class="profile-hero-name">{{ profile.get('name') or profile.get('username') }}</div>
+              <div class="profile-hero-user">@{{ profile.get('username') }} · <span style="color:#10b981; font-weight: 600;">Prepojené</span></div>
+              {% if profile.get('biography') %}
+                <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 4px;">{{ profile.get('biography')[:85] }}{% if profile.get('biography')|length > 85 %}…{% endif %}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="profile-stats-row">
+            <div class="stat-box">
+              <div class="stat-val">{{ profile.get('followers_count', 0) }}</div>
+              <div class="stat-lbl">Followers</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val">{{ profile.get('follows_count', 0) }}</div>
+              <div class="stat-lbl">Following</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val">{{ profile.get('media_count', 0) }}</div>
+              <div class="stat-lbl">Príspevky</div>
+            </div>
+          </div>
+        {% else %}
+          <div style="padding: 24px; text-align: center; color: #94a3b8; background: rgba(255,255,255,0.02); border-radius: 12px;">
+            <i class="fas fa-triangle-exclamation" style="color: #f59e0b; font-size: 1.8rem; margin-bottom: 8px;"></i>
+            <p style="margin: 0; font-weight: 600; color: #fff;">Tento profil zatiaľ nemá pripojený token.</p>
+            <p style="font-size: 0.8rem; margin-top: 6px; color: #94a3b8;">Pripojte ho 1-klikom z mobilu cez tlačidlo nižšie.</p>
+            <a href="/ig/connect" class="btn-add" style="margin-top: 10px; display: inline-flex; text-decoration: none; font-size: 0.82rem; background: var(--ig-gradient);">
+              <i class="fas fa-mobile-screen"></i> Pripojiť cez mobil
+            </a>
+          </div>
+        {% endif %}
+
+        <!-- Recent posts list -->
+        <div class="card-title" style="margin-top: 24px;">
+          <i class="fas fa-table-cells" style="color: var(--accent);"></i>
+          Posledné príspevky profilu
+        </div>
+
+        {% if media %}
+          <div class="media-scroller">
+            {% for m in media %}
+              <a href="{{ m.get('permalink', '#') }}" target="_blank" rel="noopener noreferrer" class="media-cell" title="{{ m.get('caption', '')[:60] }}">
+                <img src="{{ m.get('thumbnail_url') or m.get('media_url', '') }}" alt="Post" loading="lazy">
+                {% if m.get('media_type') == 'VIDEO' %}
+                  <span class="media-badge-reel"><i class="fas fa-play"></i> Reel</span>
+                {% endif %}
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="font-size: 0.82rem; color: #64748b; padding: 15px 0;">Zatiaľ žiadne načítané posty.</div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div> <!-- /#viewManual -->
+
+  <!-- ── View 2: Media Vault ── -->
+  <div id="viewVault" class="view-panel" style="display: none;">
+    <div class="section-banner">
+      <div class="section-title-wrap">
+        <h2><i class="fas fa-film ig-gradient-text"></i> Media Vault — Centrálne úložisko master videí & fotografií</h2>
+        <p>
+          Nahrajte surové (master) videá alebo fotky. Všetky médiá sú bezpečne uložené priamo na vašom <strong>Google Drive (5 TB)</strong>, takže nezaťažujú obmedzené úložisko servera (0 MB na VPS disku). Z Vaultu môžete priamo publikovať v Manuálnom štúdiu alebo nechať Auto-Planner rozvrhnúť posty.
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn-save" onclick="document.getElementById('vaultFilePicker').click()">
+          <i class="fas fa-cloud-arrow-up"></i> Nahrať médiá
+        </button>
+        <button type="button" class="btn-save" id="btnSyncGDriveTop" onclick="syncGDriveVault()" style="background: linear-gradient(135deg, #0284c7, #0369a1);">
+          <i class="fas fa-arrows-rotate"></i> Synchronizovať z Google Drive
+        </button>
+        <a href="/ig/api/download/desktop-spoofer" class="btn-save" style="background: linear-gradient(135deg, #7c3aed, #4f46e5); text-decoration: none;" title="Stiahnuť PC Spoofer (.zip) pre bleskový export 50+ videí">
+          <i class="fas fa-download"></i> 💻 Stiahnuť PC Spoofer
+        </a>
+        <button type="button" class="btn-cancel" onclick="switchMainView('planner')">
+          <i class="fas fa-calendar-plus"></i> Prejsť na Auto-Planner
+        </button>
+      </div>
+    </div>
+
+    <!-- Google Drive Cloud Status Card -->
+    <div id="gdriveVaultBanner" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(56, 189, 248, 0.08)); border: 1.5px solid rgba(56, 189, 248, 0.25); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: #38bdf8;">
+          <i class="fab fa-google-drive"></i>
+        </div>
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-weight: 700; font-size: 0.95rem; color: #fff;">Google Drive Cloud Vault</span>
+            <span id="gdriveStatusBadge" class="vault-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
+              <i class="fas fa-circle-check"></i> Overujem...
+            </span>
+            <span id="gdriveZeroDiskBadge" class="vault-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">
+              <i class="fas fa-shield-halved"></i> 0 MB zaťaženie VPS disku
+            </span>
+          </div>
+          <div id="gdriveStorageText" style="font-size: 0.8rem; color: #94a3b8; margin-top: 3px;">
+            <i class="fas fa-spinner fa-spin"></i> Načítavam kapacitu úložiska...
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <a href="/ig/api/download/desktop-spoofer" class="btn-save" style="background: linear-gradient(135deg, #7c3aed, #4f46e5); font-size: 0.84rem; padding: 7px 14px; text-decoration: none;" title="Stiahnuť PC Spoofer (.zip) pre bleskový export 50+ videí na počítači">
+          <i class="fas fa-download"></i> 💻 PC Spoofer (.zip)
+        </a>
+        <button type="button" class="btn-save" id="btnSyncGDrive" onclick="syncGDriveVault()" style="background: linear-gradient(135deg, #0284c7, #0369a1); font-size: 0.84rem; padding: 7px 14px;">
+          <i class="fas fa-arrows-rotate"></i> Synchronizovať z Google Drive
+        </button>
+        <a id="gdriveFolderLink" href="https://drive.google.com/drive/folders/1NyPnFW4O8NYd_BEzMf5c43XWQlr8zsSJ" target="_blank" class="btn-cancel" style="font-size: 0.84rem; padding: 7px 14px; text-decoration: none;">
+          <i class="fas fa-arrow-up-right-from-square"></i> Otvoriť Google Drive priečinok (IG_VAULT)
+        </a>
+      </div>
+    </div>
+
+    <!-- Hidden Vault File Picker (Reels + Photos) -->
+    <input type="file" id="vaultFilePicker" multiple accept="video/mp4,video/quicktime,image/jpeg,image/png,image/webp" class="file-input-hidden" onchange="handleVaultFilePicker(this.files)">
+
+    <!-- Vault Dropzone -->
+    <div class="dropzone" id="vaultDropzone" onclick="document.getElementById('vaultFilePicker').click()">
+      <div class="dropzone-icon"><i class="fas fa-cloud-arrow-up" style="color: #38bdf8;"></i></div>
+      <div class="dropzone-text">Ťukni sem a vyber Master Reels videá alebo Fotografie (MP4/MOV/JPG/PNG)</div>
+      <div class="dropzone-sub">Všetky súbory sa uložia na Google Drive (0 MB záťaž VPS disku). Podporované je aj nahratie priamo cez Google Drive priečinok a kliknutie na "Synchronizovať z Google Drive".</div>
+    </div>
+
+    <!-- Vault Upload Status / Progress -->
+    <div id="vaultUploadProgress" class="token-verify-box" style="display: none; margin-top: 14px;"></div>
+
+    <!-- Filter & Search Toolbar for Media Vault -->
+    <div class="vault-toolbar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 20px; background: #151b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 10px 16px;">
+      <div class="vault-filter-tabs" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button type="button" class="vault-filter-pill active" id="vTabAll" onclick="setVaultFilter('all')">
+          Všetky (<span id="vCountAll">0</span>)
+        </button>
+        <button type="button" class="vault-filter-pill" id="vTabFree" onclick="setVaultFilter('free')">
+          <i class="fas fa-circle-check" style="color: #10b981;"></i> Len voľné (<span id="vCountFree">0</span>)
+        </button>
+        <button type="button" class="vault-filter-pill" id="vTabUsed" onclick="setVaultFilter('used')">
+          <i class="fas fa-tag" style="color: #c084fc;"></i> Už použité (<span id="vCountUsed">0</span>)
+        </button>
+        <button type="button" class="vault-filter-pill" id="vTabVideo" onclick="setVaultFilter('video')">
+          <i class="fas fa-clapperboard" style="color: #38bdf8;"></i> Videá (<span id="vCountVideo">0</span>)
+        </button>
+        <button type="button" class="vault-filter-pill" id="vTabPhoto" onclick="setVaultFilter('photo')">
+          <i class="fas fa-image" style="color: #fbbf24;"></i> Fotky (<span id="vCountPhoto">0</span>)
+        </button>
+      </div>
+      <div style="position: relative; min-width: 240px;">
+        <i class="fas fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.82rem;"></i>
+        <input type="text" id="vaultSearchInput" class="form-input" placeholder="Hľadať podľa názvu alebo tagu..." style="padding-left: 32px; font-size: 0.82rem; height: 36px;" oninput="handleVaultSearch(this.value)">
+      </div>
+    </div>
+
+    <!-- Vault Video Grid -->
+    <div class="vault-grid" id="vaultGridContainer">
+      <!-- Rendered dynamically by JS -->
+    </div>
+  </div>
+
+  <!-- ── View 3: Auto-Planner & Kalendár ── -->
+  <div id="viewPlanner" class="view-panel" style="display: none;">
+    <div class="section-banner">
+      <div class="section-title-wrap">
+        <h2><i class="fas fa-calendar-alt ig-gradient-text"></i> Auto-Planner — US Peak Scheduler & Spoofing Matrix</h2>
+        <p>
+          Rozvrh cieliaci na americké špičky (US Lunch 13:15 EST / Evening 19:30 EST) prepočítané na stredoeurópsky čas s náhodným rozptylom (±7–23 min anti-bot jitter). Žiadne dva profily nepostnú rovnaký master v rovnaký deň.
+        </p>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <input type="date" id="plannerDateInput" class="form-input" style="width: auto; padding: 7px 12px;" onchange="loadPlannerPosts()">
+        <button type="button" class="btn-save" onclick="openPlanGeneratorModal()">
+          <i class="fas fa-wand-magic-sparkles"></i> 🤖 Generovať denný Auto-Plan
+        </button>
+        <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť zoznam">
+          <i class="fas fa-rotate"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Planner Posts Timeline Container -->
+    <div id="plannerTimelineContainer" class="planner-timeline">
+      <!-- Rendered dynamically by JS -->
+    </div>
+  </div>
+
+  </main>
+
+  <!-- Vault Picker Modal for Manual Studio -->
+  <div id="vaultPickerModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 820px; width: 95%; max-height: 90vh; display: flex; flex-direction: column; padding: 22px;">
+      <div class="modal-header" style="margin-bottom: 14px;">
+        <div>
+          <div class="modal-title" style="font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+            <i class="fab fa-google-drive" style="color: #38bdf8;"></i>
+            <span>Vybrať médium z Media Vaultu</span>
+          </div>
+          <div style="font-size: 0.78rem; color: #94a3b8; margin-top: 3px;">
+            Vyberte master Reel alebo fotku priamo z Google Drive. Po zverejnení sa automaticky označí tagom účtu.
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeVaultPickerModal()">&times;</button>
+      </div>
+
+      <!-- Search & Filters in Picker -->
+      <div style="display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06);">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="vault-filter-pill active" id="vpTabAll" onclick="setPickerFilter('all')">Všetky</button>
+          <button type="button" class="vault-filter-pill" id="vpTabFree" onclick="setPickerFilter('free')"><i class="fas fa-circle-check" style="color:#10b981;"></i> Len voľné</button>
+          <button type="button" class="vault-filter-pill" id="vpTabUsed" onclick="setPickerFilter('used')"><i class="fas fa-tag" style="color:#c084fc;"></i> Použité</button>
+          <button type="button" class="vault-filter-pill" id="vpTabVideo" onclick="setPickerFilter('video')"><i class="fas fa-clapperboard" style="color:#38bdf8;"></i> Reely</button>
+          <button type="button" class="vault-filter-pill" id="vpTabPhoto" onclick="setPickerFilter('photo')"><i class="fas fa-image" style="color:#fbbf24;"></i> Fotky</button>
+        </div>
+        <div style="position: relative; min-width: 200px; flex: 1; max-width: 280px;">
+          <i class="fas fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #64748b; font-size: 0.75rem;"></i>
+          <input type="text" id="vaultPickerSearchInput" class="form-input" placeholder="Hľadať názov / tag..." style="padding-left: 28px; font-size: 0.8rem; height: 32px;" oninput="handlePickerSearch(this.value)">
+        </div>
+      </div>
+
+      <!-- Picker Grid -->
+      <div id="vaultPickerGrid" style="flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; padding-right: 4px; min-height: 250px;">
+        <!-- Dynamically rendered -->
+      </div>
+
+      <div class="modal-footer" style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 0.76rem; color: #94a3b8;">
+          <i class="fas fa-info-circle" style="color: #38bdf8;"></i> Zvolené médium sa okamžite načíta do Manuálneho štúdia.
+        </div>
+        <button type="button" class="btn-cancel" onclick="closeVaultPickerModal()">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vault Tag Editor Modal -->
+  <div id="vaultTagModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 440px; padding: 20px;">
+      <div class="modal-header">
+        <div class="modal-title" style="font-size: 1rem;"><i class="fas fa-tag ig-gradient-text"></i> Upraviť Tag média</div>
+        <button class="modal-close" onclick="closeVaultTagModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="margin-top: 12px;">
+        <p style="font-size: 0.82rem; color: #94a3b8; margin: 0 0 12px 0;" id="vaultTagModalSubtitle">
+          Nastavte štítok pre toto médium (napr. Voľné, Outfit 1, Dovolenka, Archív, Použité):
+        </p>
+        <input type="hidden" id="vaultTagVideoId">
+        <input type="text" id="vaultTagInput" class="form-input" placeholder="Zadajte tag (napr. Voľné, Outfit 1...)">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;">
+          <span style="font-size: 0.72rem; color: #64748b; align-self: center;">Rýchle tagy:</span>
+          <button type="button" class="quick-pill" onclick="document.getElementById('vaultTagInput').value='Voľné'">Voľné</button>
+          <button type="button" class="quick-pill" onclick="document.getElementById('vaultTagInput').value='Rezerva'">Rezerva</button>
+          <button type="button" class="quick-pill" onclick="document.getElementById('vaultTagInput').value='Outfit 1'">Outfit 1</button>
+          <button type="button" class="quick-pill" onclick="document.getElementById('vaultTagInput').value='Promo'">Promo</button>
+          <button type="button" class="quick-pill" onclick="document.getElementById('vaultTagInput').value='Archív'">Archív</button>
+        </div>
+      </div>
+      <div class="modal-footer" style="margin-top: 18px;">
+        <button type="button" class="btn-cancel" onclick="closeVaultTagModal()">Zrušiť</button>
+        <button type="button" class="btn-save" onclick="saveVaultTag()">Uložiť tag</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vault Video Preview Modal -->
+  <div id="vaultPreviewModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 440px; padding: 18px; text-align: center;">
+      <div class="modal-header" style="margin-bottom: 12px;">
+        <div class="modal-title" id="vaultModalTitle" style="font-size: 1rem;">Náhľad média</div>
+        <button class="modal-close" onclick="closeVaultPreviewModal()">&times;</button>
+      </div>
+      <div style="aspect-ratio: 9/16; background: #000; border-radius: 12px; overflow: hidden; max-height: 480px; margin-bottom: 14px; display: flex; align-items: center; justify-content: center;">
+        <video id="vaultModalVideo" controls style="width: 100%; height: 100%; object-fit: contain; display: none;"></video>
+        <img id="vaultModalImage" style="width: 100%; height: 100%; object-fit: contain; display: none;" alt="Náhľad">
+      </div>
+      <div class="modal-footer" style="padding-top: 0; justify-content: space-between; align-items: center;">
+        <a id="vaultModalDriveLink" href="#" target="_blank" class="btn-save" style="display: none; text-decoration: none; font-size: 0.82rem; padding: 6px 12px; background: linear-gradient(135deg, #0284c7, #0369a1);">
+          <i class="fab fa-google-drive"></i> Otvoriť na Drive
+        </a>
+        <button type="button" class="btn-cancel" onclick="closeVaultPreviewModal()">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auto-Plan Generator Modal -->
+  <div id="planGeneratorModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i class="fas fa-wand-magic-sparkles ig-gradient-text"></i> Vygenerovať Auto-Plan & Metadata Spoofing
+        </div>
+        <button class="modal-close" onclick="closePlanGeneratorModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Systém vyberie master videá z Vaultu, aplikuje mikro-filtre a EXIF/GPS spoofing, a naplánuje publikovanie do US peak okien.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Cieľový dátum rozvrhu:</label>
+          <input type="date" id="planGenDate" class="form-input">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Frekvencia publikovania na účet:</label>
+          <div style="display: flex; gap: 12px; margin-top: 4px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; color: #f1f5f9;">
+              <input type="radio" name="planGenFreq" value="1" checked> 1 Reel / deň (US Evening Peak ~19:30 EST)
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; color: #f1f5f9;">
+              <input type="radio" name="planGenFreq" value="2"> 2 Reely / deň (Lunch + Evening Peak)
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Zahrnúť účty (chránené semafórom):</label>
+          <div id="planGenAccountsList" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Predvolený popis (Caption):</label>
+          <textarea id="planGenCaption" class="form-input" style="min-height: 60px;" placeholder="Napíš text k postu..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Predvolené hashtagy:</label>
+          <input type="text" id="planGenHashtags" class="form-input" placeholder="#fyp #foryou #viral #explore #reels" value="#fyp #foryou #viral #explore #reels">
+        </div>
+
+        <div class="modal-info-box" style="margin-top: 14px;">
+          <i class="fas fa-shield-halved" style="color: #10b981; font-size: 1.2rem;"></i>
+          <div>
+            <strong>Automatická ochrana & Spoofing:</strong><br>
+            • Účty v stave 🟡 (Checkpoint) alebo 🔴 (Error) sú vynechané.<br>
+            • Žiadne dva účty nebudú mať rovnaké master video v tom istom okne.<br>
+            • Každý video súbor dostane unikátny odtlačok cez FFmpeg mikro-kontrast a EXIF smartfónu.<br>
+            • Pre US profily sa generuje náhodná GPS poloha priamo v <b>Los Angeles, CA</b> alebo <b>Las Vegas, NV</b>.
+          </div>
+        </div>
+
+        <div id="planGenStatusBox" class="token-verify-box" style="display: none; margin-top: 10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-cancel" onclick="closePlanGeneratorModal()">Zrušiť</button>
+        <button type="button" id="btnExecutePlanGen" class="btn-save" onclick="executePlanGeneration()">
+          <i class="fas fa-rocket"></i> Spustiť Spoofing & Generovať
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    const PWD = {{ master_password | tojson }};
+    const ACCOUNT_ID = {{ (current_account_id or 0) | tojson }};
+    const PREFIX = window.location.pathname.split('/').filter(Boolean)[0] === 'ig' ? '/ig' : '';
+
+    let currentTab = 'photo';
+    let selectedFile = null;
+    let uploadedMediaUrl = null;
+    let selectedVaultVideoId = null;
+    let selectedVaultVideoObj = null;
+
+    let allVaultVideosList = [];
+    let currentVaultFilter = 'all';
+    let currentVaultSearch = '';
+    let currentPickerFilter = 'all';
+    let currentPickerSearch = '';
+
+    // ── Toast Helper ──
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span> <span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    // ── Tab Switcher (Photo vs Reel) ──
+    function switchTab(tab) {
+      currentTab = tab;
+      const btnPhoto = document.getElementById('tabBtnPhoto');
+      const btnReel = document.getElementById('tabBtnReel');
+      const dropText = document.getElementById('dropzoneText');
+      const dropSub = document.getElementById('dropzoneSub');
+      const filePicker = document.getElementById('filePicker');
+      const reelFeedRow = document.getElementById('reelFeedRow');
+
+      if (tab === 'photo') {
+        btnPhoto.classList.add('active');
+        btnReel.classList.remove('active');
+        dropText.textContent = 'Ťukni sem a vyber fotku alebo ju sem pretiahni (Drag & Drop)';
+        dropSub.textContent = 'Podporované formáty: JPG, PNG, WEBP (max 10 MB)';
+        filePicker.accept = 'image/*';
+        reelFeedRow.style.display = 'none';
+      } else {
+        btnReel.classList.add('active');
+        btnPhoto.classList.remove('active');
+        dropText.textContent = 'Ťukni sem a vyber Reel video (MP4) alebo ho sem pretiahni';
+        dropSub.textContent = 'Podporované formáty: MP4, MOV (vertikálne 9:16 odporúčané, max 50 MB)';
+        filePicker.accept = 'video/mp4,video/mov';
+        reelFeedRow.style.display = 'flex';
+      }
+
+      clearSelectedFile();
+    }
+
+    // ── Character Counter ──
+    const captionEl = document.getElementById('postCaption');
+    const charCountEl = document.getElementById('charCount');
+    captionEl.addEventListener('input', () => {
+      charCountEl.textContent = `${captionEl.value.length} / 2200`;
+    });
+
+    // ── Quick Helpers (Hashtags & Emojis) ──
+    function appendTag(tag) {
+      if (captionEl.value.trim().length > 0 && !captionEl.value.endsWith(' ')) {
+        captionEl.value += ' ' + tag + ' ';
+      } else {
+        captionEl.value += tag + ' ';
+      }
+      captionEl.dispatchEvent(new Event('input'));
+      captionEl.focus();
+    }
+
+    function appendEmoji(emoji) {
+      const start = captionEl.selectionStart || captionEl.value.length;
+      const end = captionEl.selectionEnd || captionEl.value.length;
+      const text = captionEl.value;
+      captionEl.value = text.substring(0, start) + emoji + text.substring(end);
+      captionEl.selectionStart = captionEl.selectionEnd = start + emoji.length;
+      captionEl.dispatchEvent(new Event('input'));
+      captionEl.focus();
+    }
+
+    // ── Drag & Drop Event Listeners ──
+    const dropzone = document.getElementById('dropzoneBox');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropzone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      }, false);
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length > 0) {
+        handleFileSelect(dt.files[0]);
+      }
+    });
+
+    // ── File Picker Event ──
+    const filePicker = document.getElementById('filePicker');
+    filePicker.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFileSelect(e.target.files[0]);
+      }
+    });
+
+    function handleFileSelect(file) {
+      // Validácia veľkosti
+      const maxMb = currentTab === 'photo' ? 12 : 55;
+      const fileMb = (file.size / (1024 * 1024)).toFixed(1);
+      if (file.size > maxMb * 1024 * 1024) {
+        showToast(`Súbor je príliš veľký (${fileMb} MB). Maximálna povolená veľkosť je ${maxMb} MB.`, 'error');
+        return;
+      }
+
+      selectedFile = file;
+      uploadedMediaUrl = null;
+      selectedVaultVideoId = null;
+      selectedVaultVideoObj = null;
+
+      const previewBox = document.getElementById('previewBox');
+      const imgEl = document.getElementById('imagePreviewEl');
+      const videoEl = document.getElementById('videoPreviewEl');
+      const badgeText = document.getElementById('previewBadgeText');
+
+      dropzone.style.display = 'none';
+      previewBox.style.display = 'block';
+      badgeText.textContent = `${file.name} (${fileMb} MB)`;
+
+      const fileUrl = URL.createObjectURL(file);
+      if (file.type.startsWith('video/')) {
+        imgEl.style.display = 'none';
+        videoEl.style.display = 'block';
+        videoEl.src = fileUrl;
+      } else {
+        videoEl.style.display = 'none';
+        imgEl.style.display = 'block';
+        imgEl.src = fileUrl;
+      }
+    }
+
+    function clearSelectedFile() {
+      selectedFile = null;
+      uploadedMediaUrl = null;
+      selectedVaultVideoId = null;
+      selectedVaultVideoObj = null;
+      document.getElementById('filePicker').value = '';
+      document.getElementById('manualMediaUrl').value = '';
+      document.getElementById('previewBox').style.display = 'none';
+      document.getElementById('dropzoneBox').style.display = 'block';
+      const videoEl = document.getElementById('videoPreviewEl');
+      videoEl.pause();
+      videoEl.src = '';
+    }
+
+    // ── Optional Direct URL Mode ──
+    function toggleUrlInput() {
+      const box = document.getElementById('urlInputBox');
+      box.style.display = box.style.display === 'block' ? 'none' : 'block';
+      if (box.style.display === 'block') {
+        document.getElementById('manualMediaUrl').focus();
+      }
+    }
+
+    function handleManualUrl(url) {
+      url = url.trim();
+      if (!url) return;
+      if (!url.startsWith('https://')) {
+        showToast('URL musí začínať na https://', 'error');
+        return;
+      }
+      uploadedMediaUrl = url;
+      selectedFile = null;
+      selectedVaultVideoId = null;
+      selectedVaultVideoObj = null;
+
+      const previewBox = document.getElementById('previewBox');
+      const imgEl = document.getElementById('imagePreviewEl');
+      const videoEl = document.getElementById('videoPreviewEl');
+      const badgeText = document.getElementById('previewBadgeText');
+
+      dropzone.style.display = 'none';
+      previewBox.style.display = 'block';
+      badgeText.textContent = `URL: ${url.substring(0, 35)}...`;
+
+      if (currentTab === 'photo') {
+        videoEl.style.display = 'none';
+        imgEl.style.display = 'block';
+        imgEl.src = url;
+      } else {
+        imgEl.style.display = 'none';
+        videoEl.style.display = 'block';
+        videoEl.src = url;
+      }
+    }
+
+    // ── Submit & Post to Instagram ──
+    async function submitPost() {
+      if (!selectedFile && !uploadedMediaUrl) {
+        showToast('Najprv vyberte fotku/video alebo vložte linku na zverejnenie.', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitPublish');
+      const progressBox = document.getElementById('progressBox');
+      const stepUpload = document.getElementById('stepUpload');
+      const stepMeta = document.getElementById('stepMeta');
+      const stepDone = document.getElementById('stepDone');
+      const caption = captionEl.value.trim();
+
+      btn.disabled = true;
+      progressBox.style.display = 'block';
+      stepUpload.style.display = 'flex';
+      stepUpload.innerHTML = '<i class="fas fa-spinner fa-spin step-spinner"></i> <span id="stepUploadText">Krok 1/3: Pripravujem médium pre Meta API...</span>';
+      stepMeta.style.display = 'none';
+      stepDone.style.display = 'none';
+
+      try {
+        // 1. Upload súboru na server (ak už nemáme verejnú linku z Vaultu alebo URL)
+        if (!uploadedMediaUrl && selectedFile) {
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+
+          const upRes = await fetch(`${PREFIX}/api/ig-publisher/upload`, {
+            method: 'POST',
+            headers: { 'X-Master-Password': PWD },
+            body: formData
+          });
+          const upData = await upRes.json();
+          if (!upRes.ok || upData.status !== 'ok') {
+            throw new Error(upData.message || 'Zlyhal upload na server.');
+          }
+          uploadedMediaUrl = upData.url;
+        }
+
+        stepUpload.innerHTML = '<i class="fas fa-circle-check" style="color:#10b981; font-size:1.1rem;"></i> <span>Krok 1/3: Médium pripravené na verejnom HTTPS</span>';
+        stepMeta.style.display = 'flex';
+
+        // 2. Publikovanie na Instagram cez Meta API
+        if (currentTab === 'photo') {
+          stepMeta.querySelector('span').textContent = 'Krok 2/3: Meta Graph API publikuje fotografiu...';
+          const pubRes = await fetch(`${PREFIX}/api/ig-publisher/publish-photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+            body: JSON.stringify({
+              image_url: uploadedMediaUrl,
+              caption: caption,
+              account_id: ACCOUNT_ID,
+              vault_video_id: selectedVaultVideoId
+            })
+          });
+          const pubData = await pubRes.json();
+          if (!pubRes.ok || pubData.status !== 'ok') {
+            throw new Error(pubData.message || 'Instagram zamietol publikovanie fotky.');
+          }
+        } else {
+          stepMeta.querySelector('span').textContent = 'Krok 2/3: Meta spracováva Reel kontajner... (trvá 15–30s)';
+          const shareToFeed = document.getElementById('shareToFeedToggle').checked;
+          const pubRes = await fetch(`${PREFIX}/api/ig-publisher/publish-reel`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+            body: JSON.stringify({
+              video_url: uploadedMediaUrl,
+              caption: caption,
+              share_to_feed: shareToFeed,
+              account_id: ACCOUNT_ID,
+              vault_video_id: selectedVaultVideoId
+            })
+          });
+          const pubData = await pubRes.json();
+          if (!pubRes.ok || pubData.status !== 'ok') {
+            throw new Error(pubData.message || 'Instagram zamietol publikovanie Reelu.');
+          }
+        }
+
+        // Úspech!
+        stepMeta.style.display = 'none';
+        stepDone.style.display = 'flex';
+        showToast('Príspevok bol úspešne publikovaný na Instagrame! 🎉', 'success');
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 2500);
+
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Vyskytla sa chyba pri zverejňovaní.', 'error');
+        stepMeta.style.display = 'none';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Vault Picker Modal Logic (for Manual Studio) ──
+    function openVaultPickerModal() {
+      const modal = document.getElementById('vaultPickerModal');
+      if (modal) modal.style.display = 'flex';
+      loadVaultVideosForPicker();
+    }
+
+    function closeVaultPickerModal() {
+      const modal = document.getElementById('vaultPickerModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function loadVaultVideosForPicker() {
+      const grid = document.getElementById('vaultPickerGrid');
+      if (!grid) return;
+      grid.innerHTML = '<div style="grid-column: 1/-1; color:#94a3b8; padding:30px; text-align:center;"><i class="fas fa-spinner fa-spin"></i> Načítavam médiá z Vaultu...</div>';
+
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/videos`, {
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          allVaultVideosList = data.videos || [];
+          renderVaultPickerGrid();
+        } else {
+          grid.innerHTML = `<div style="grid-column: 1/-1; color:#ef4444; padding:20px; text-align:center;">Chyba: ${data.message}</div>`;
+        }
+      } catch (err) {
+        console.error(err);
+        grid.innerHTML = '<div style="grid-column: 1/-1; color:#ef4444; padding:20px; text-align:center;">Chyba komunikácie so serverom.</div>';
+      }
+    }
+
+    function setPickerFilter(tab) {
+      currentPickerFilter = tab;
+      ['all', 'free', 'used', 'video', 'photo'].forEach(t => {
+        const btn = document.getElementById(`vpTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn) btn.classList.toggle('active', t === tab);
+      });
+      renderVaultPickerGrid();
+    }
+
+    function handlePickerSearch(query) {
+      currentPickerSearch = (query || '').toLowerCase().trim();
+      renderVaultPickerGrid();
+    }
+
+    function renderVaultPickerGrid() {
+      const grid = document.getElementById('vaultPickerGrid');
+      if (!grid) return;
+
+      let filtered = allVaultVideosList.filter(v => {
+        if (currentPickerFilter === 'free' && v.is_used) return false;
+        if (currentPickerFilter === 'used' && !v.is_used) return false;
+        if (currentPickerFilter === 'video' && v.media_type !== 'video') return false;
+        if (currentPickerFilter === 'photo' && v.media_type !== 'photo') return false;
+
+        if (currentPickerSearch) {
+          const matchName = (v.original_name || '').toLowerCase().includes(currentPickerSearch);
+          const matchTag = (v.tag || '').toLowerCase().includes(currentPickerSearch);
+          const matchAccounts = (v.used_by_accounts || '').toLowerCase().includes(currentPickerSearch);
+          if (!matchName && !matchTag && !matchAccounts) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px 10px; color: #94a3b8;">
+            <i class="fas fa-filter-circle-xmark" style="font-size: 2rem; color: #64748b; margin-bottom: 8px;"></i>
+            <div style="color: #fff; font-weight: 600;">Žiadne médiá nevyhovujú filtru</div>
+            <div style="font-size: 0.8rem; margin-top: 4px;">Skúste zmeniť filter alebo nahrať nové videá / fotky do Vaultu.</div>
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(v => {
+        const isPhoto = (v.media_type === 'photo');
+        const durationFmt = v.duration_seconds ? `${Math.round(v.duration_seconds)}s` : '';
+        const thumbHtml = v.thumbnail_url 
+          ? `<img src="${v.thumbnail_url}" style="width:100%;height:100%;object-fit:cover;" alt="${escapeHtml(v.original_name)}">`
+          : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0f172a;color:#38bdf8;font-size:1.8rem;"><i class="${isPhoto ? 'fas fa-image' : 'fab fa-google-drive'}"></i></div>`;
+
+        const typeBadge = isPhoto
+          ? `<span class="vault-badge" style="background:rgba(251,191,36,0.15);color:#fbbf24;font-size:0.68rem;"><i class="fas fa-image"></i> Foto</span>`
+          : `<span class="vault-badge" style="background:rgba(56,189,248,0.15);color:#38bdf8;font-size:0.68rem;"><i class="fas fa-clapperboard"></i> ${durationFmt}</span>`;
+
+        const tagBadge = v.is_used || (v.tag && v.tag !== 'Voľné')
+          ? `<span class="vault-tag-badge vault-tag-used" style="font-size:0.68rem;"><i class="fas fa-tag"></i> ${escapeHtml(v.tag)}</span>`
+          : `<span class="vault-tag-badge vault-tag-free" style="font-size:0.68rem;"><i class="fas fa-circle-check"></i> Voľné</span>`;
+
+        const usedAccHtml = v.used_by_accounts
+          ? `<div style="font-size:0.68rem;color:#f472b6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(v.used_by_accounts)}"><i class="fab fa-instagram"></i> ${escapeHtml(v.used_by_accounts)}</div>`
+          : '';
+
+        return `
+          <div class="vault-picker-card">
+            <div style="aspect-ratio: 9/16; max-height: 180px; position: relative; background: #000; overflow: hidden; cursor: pointer;" onclick="previewVaultVideo('${v.url}', '${escapeHtml(v.original_name)}', '${v.gdrive_link || ''}', ${isPhoto})">
+              ${thumbHtml}
+              <div style="position: absolute; top: 6px; left: 6px; display: flex; gap: 4px;">
+                ${typeBadge}
+              </div>
+              <div style="position: absolute; bottom: 6px; left: 6px; right: 6px; display: flex; justify-content: space-between; align-items: center;">
+                ${tagBadge}
+              </div>
+            </div>
+            <div style="padding: 10px; display: flex; flex-direction: column; gap: 4px; flex: 1;">
+              <div style="font-size: 0.8rem; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(v.original_name)}">
+                ${escapeHtml(v.original_name)}
+              </div>
+              <div style="font-size: 0.7rem; color: #94a3b8; display: flex; justify-content: space-between;">
+                <span>${v.file_size_fmt}</span>
+                <span>${v.is_gdrive ? 'Google Drive' : 'Lokálne'}</span>
+              </div>
+              ${usedAccHtml}
+              <button type="button" class="btn-save" style="margin-top: 6px; padding: 6px 10px; font-size: 0.78rem; width: 100%;" onclick="selectMediaFromVault(${v.id})">
+                <i class="fas fa-check"></i> Vybrať
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectMediaFromVault(id) {
+      const v = allVaultVideosList.find(item => item.id === id);
+      if (!v) return;
+
+      selectedVaultVideoId = v.id;
+      selectedVaultVideoObj = v;
+      selectedFile = null;
+
+      // Prepneme záložku podľa typu média
+      if (v.media_type === 'photo') {
+        switchTab('photo');
+      } else {
+        switchTab('reel');
+      }
+
+      // Verejná HTTPS adresa videa/fotky cez stream endpoint (pre Meta Graph API)
+      const host = window.location.host || 'garcarzp.online';
+      uploadedMediaUrl = v.public_stream_url || (`https://${host}${PREFIX}/api/vault/stream/${v.id}`);
+
+      const previewBox = document.getElementById('previewBox');
+      const imgEl = document.getElementById('imagePreviewEl');
+      const videoEl = document.getElementById('videoPreviewEl');
+      const badgeText = document.getElementById('previewBadgeText');
+      const dropzone = document.getElementById('dropzoneBox');
+
+      dropzone.style.display = 'none';
+      previewBox.style.display = 'block';
+
+      const tagBadgeHtml = (v.tag && v.tag !== 'Voľné')
+        ? `<span class="vault-tag-badge vault-tag-used" style="font-size:0.72rem; margin-left:6px;"><i class="fas fa-tag"></i> ${escapeHtml(v.tag)}</span>`
+        : `<span class="vault-tag-badge vault-tag-free" style="font-size:0.72rem; margin-left:6px;"><i class="fas fa-circle-check"></i> Voľné</span>`;
+
+      badgeText.innerHTML = `
+        <span class="vault-badge" style="background:rgba(56,189,248,0.2);color:#38bdf8;font-weight:700;"><i class="fab fa-google-drive"></i> Media Vault</span>
+        <span style="color:#fff;font-weight:600;margin-left:4px;">${escapeHtml(v.original_name)}</span>
+        ${tagBadgeHtml}
+      `;
+
+      if (v.media_type === 'photo') {
+        videoEl.style.display = 'none';
+        videoEl.pause();
+        imgEl.style.display = 'block';
+        imgEl.src = v.url;
+      } else {
+        imgEl.style.display = 'none';
+        videoEl.style.display = 'block';
+        videoEl.src = v.url;
+      }
+
+      closeVaultPickerModal();
+      showToast(`Vybrané z Vaultu: ${v.original_name}`, 'success');
+    }
+
+    function useVaultItemInManual(id) {
+      selectMediaFromVault(id);
+      switchMainView('manual');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ─── MEDIA VAULT & AUTO-PLANNER MODULES ──────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+
+    const ALL_ACCOUNTS = {{ all_accounts | tojson }};
+
+    // ── Main View Switcher ──
+    function switchMainView(view) {
+      const views = ['manual', 'vault', 'planner'];
+      views.forEach(v => {
+        const btn = document.getElementById(`viewBtn${v.charAt(0).toUpperCase() + v.slice(1)}`);
+        const panel = document.getElementById(`view${v.charAt(0).toUpperCase() + v.slice(1)}`);
+        if (btn) btn.classList.toggle('active', v === view);
+        if (panel) panel.style.display = (v === view) ? 'block' : 'none';
+      });
+
+      if (view === 'vault') {
+        loadVaultVideos();
+      } else if (view === 'planner') {
+        loadPlannerPosts();
+      }
+    }
+
+    // ── Media Vault & Google Drive Logic ──
+    async function loadGDriveStatus() {
+      const badge = document.getElementById('gdriveStatusBadge');
+      const text = document.getElementById('gdriveStorageText');
+      const link = document.getElementById('gdriveFolderLink');
+      if (!badge || !text) return;
+
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/gdrive-status`, {
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.connected) {
+          badge.className = 'vault-badge';
+          badge.style.background = 'rgba(16, 185, 129, 0.2)';
+          badge.style.color = '#10b981';
+          badge.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+          badge.innerHTML = `<i class="fas fa-circle-check"></i> Pripojené: ${data.user_email || 'Google Drive'}`;
+
+          text.innerHTML = `
+            <strong>Kapacita:</strong> ${data.storage_used_fmt} z ${data.storage_total_fmt} (${data.storage_percent}% využité) • 
+            <span style="color:#10b981; font-weight:600;"><i class="fas fa-shield-halved"></i> 0 MB VPS záťaž</span>
+          `;
+          if (link && data.folder_link) {
+            link.href = data.folder_link;
+          }
+        } else {
+          badge.className = 'vault-badge';
+          badge.style.background = 'rgba(239, 68, 68, 0.2)';
+          badge.style.color = '#ef4444';
+          badge.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          badge.innerHTML = `<i class="fas fa-circle-xmark"></i> Nepripojené`;
+          text.innerHTML = `<span style="color:#ef4444;">${data.message || 'Google Drive token chýba.'}</span>`;
+        }
+      } catch (err) {
+        console.error('GDrive status error:', err);
+      }
+    }
+
+    async function syncGDriveVault() {
+      const btn1 = document.getElementById('btnSyncGDrive');
+      const btn2 = document.getElementById('btnSyncGDriveTop');
+      const originalHtml1 = btn1 ? btn1.innerHTML : '';
+      const originalHtml2 = btn2 ? btn2.innerHTML : '';
+
+      if (btn1) {
+        btn1.disabled = true;
+        btn1.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synchronizujem...';
+      }
+      if (btn2) {
+        btn2.disabled = true;
+        btn2.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synchronizujem...';
+      }
+
+      showToast('Prehľadávam priečinok IG_VAULT na Google Drive...', 'info');
+
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/sync-gdrive`, {
+          method: 'POST',
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message || 'Synchronizácia úspešná!', 'success');
+          loadVaultVideos();
+        } else {
+          showToast(data.message || 'Synchronizácia zlyhala.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia pri synchronizácii.', 'error');
+      } finally {
+        if (btn1) {
+          btn1.disabled = false;
+          btn1.innerHTML = originalHtml1;
+        }
+        if (btn2) {
+          btn2.disabled = false;
+          btn2.innerHTML = originalHtml2;
+        }
+      }
+    }
+
+    function setVaultFilter(tab) {
+      currentVaultFilter = tab;
+      ['all', 'free', 'used', 'video', 'photo'].forEach(t => {
+        const btn = document.getElementById(`vTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        if (btn) btn.classList.toggle('active', t === tab);
+      });
+      renderVaultGrid();
+    }
+
+    function handleVaultSearch(query) {
+      currentVaultSearch = (query || '').toLowerCase().trim();
+      renderVaultGrid();
+    }
+
+    function renderVaultGrid() {
+      const container = document.getElementById('vaultGridContainer');
+      const badge = document.getElementById('vaultCountBadge');
+      if (!container) return;
+
+      const allCount = allVaultVideosList.length;
+      const freeCount = allVaultVideosList.filter(v => !v.is_used).length;
+      const usedCount = allVaultVideosList.filter(v => v.is_used).length;
+      const videoCount = allVaultVideosList.filter(v => v.media_type === 'video').length;
+      const photoCount = allVaultVideosList.filter(v => v.media_type === 'photo').length;
+
+      if (badge) badge.textContent = allCount;
+      const cAll = document.getElementById('vCountAll'); if (cAll) cAll.textContent = allCount;
+      const cFree = document.getElementById('vCountFree'); if (cFree) cFree.textContent = freeCount;
+      const cUsed = document.getElementById('vCountUsed'); if (cUsed) cUsed.textContent = usedCount;
+      const cVideo = document.getElementById('vCountVideo'); if (cVideo) cVideo.textContent = videoCount;
+      const cPhoto = document.getElementById('vCountPhoto'); if (cPhoto) cPhoto.textContent = photoCount;
+
+      if (allCount === 0) {
+        container.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px 20px; background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px dashed rgba(255,255,255,0.1);">
+            <div style="font-size: 2.2rem; color: #38bdf8; margin-bottom: 10px;"><i class="fab fa-google-drive"></i></div>
+            <h3 style="color: #fff; margin: 0 0 6px 0;">Media Vault je zatiaľ prázdny</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 16px 0;">Nahrajte prvé master videá alebo fotky, alebo ich vložte priamo do priečinka <strong>IG_VAULT</strong> na Google Drive a kliknite na "Synchronizovať z Google Drive".</p>
+            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+              <button type="button" class="btn-save" onclick="document.getElementById('vaultFilePicker').click()">
+                <i class="fas fa-cloud-arrow-up"></i> Nahrať prvé médiá
+              </button>
+              <button type="button" class="btn-save" onclick="syncGDriveVault()" style="background: linear-gradient(135deg, #0284c7, #0369a1);">
+                <i class="fas fa-arrows-rotate"></i> Synchronizovať z Google Drive
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      let filtered = allVaultVideosList.filter(v => {
+        if (currentVaultFilter === 'free' && v.is_used) return false;
+        if (currentVaultFilter === 'used' && !v.is_used) return false;
+        if (currentVaultFilter === 'video' && v.media_type !== 'video') return false;
+        if (currentVaultFilter === 'photo' && v.media_type !== 'photo') return false;
+
+        if (currentVaultSearch) {
+          const matchName = (v.original_name || '').toLowerCase().includes(currentVaultSearch);
+          const matchTag = (v.tag || '').toLowerCase().includes(currentVaultSearch);
+          const matchAccounts = (v.used_by_accounts || '').toLowerCase().includes(currentVaultSearch);
+          if (!matchName && !matchTag && !matchAccounts) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px 20px; background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px dashed rgba(255,255,255,0.1);">
+            <div style="font-size: 2rem; color: #64748b; margin-bottom: 8px;"><i class="fas fa-filter-circle-xmark"></i></div>
+            <h3 style="color: #fff; margin: 0 0 6px 0;">Žiadne médiá nevyhovujú filtru</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0;">Skúste zmeniť filter alebo hľadaný výraz.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(v => {
+        const isPhoto = (v.media_type === 'photo');
+        const durationFmt = v.duration_seconds ? `${Math.round(v.duration_seconds)}s` : '--';
+        const thumbImg = v.thumbnail_url 
+          ? `<img src="${v.thumbnail_url}" alt="${escapeHtml(v.original_name)}">`
+          : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#0f172a;color:#38bdf8;font-size:2rem;"><i class="${isPhoto ? 'fas fa-image' : 'fab fa-google-drive'}"></i></div>`;
+
+        const typeBadge = isPhoto
+          ? `<span class="vault-badge" style="background:rgba(251,191,36,0.15);color:#fbbf24;"><i class="fas fa-image"></i> Foto</span>`
+          : `<span class="vault-badge" style="background:rgba(56,189,248,0.15);color:#38bdf8;"><i class="fas fa-clapperboard"></i> Reel (${durationFmt})</span>`;
+
+        const gdriveBadge = v.is_gdrive 
+          ? `<span class="vault-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);"><i class="fab fa-google-drive"></i> G-Drive</span>`
+          : `<span class="vault-badge" style="color: #94a3b8;">Lokálne</span>`;
+
+        const tagBadge = v.is_used || (v.tag && v.tag !== 'Voľné')
+          ? `<span class="vault-tag-badge vault-tag-used" title="${escapeHtml(v.tag)}"><i class="fas fa-tag"></i> ${escapeHtml(v.tag)}</span>`
+          : `<span class="vault-tag-badge vault-tag-free"><i class="fas fa-circle-check"></i> Voľné</span>`;
+
+        const accountsUsedBadge = v.used_by_accounts
+          ? `<span class="vault-badge" style="background: rgba(236, 72, 153, 0.15); color: #f472b6; font-size:0.7rem;" title="Použité: ${escapeHtml(v.used_by_accounts)}"><i class="fab fa-instagram"></i> ${escapeHtml(v.used_by_accounts)} (${v.used_count}x)</span>`
+          : '';
+
+        const driveOpenBtn = v.gdrive_link 
+          ? `<a href="${v.gdrive_link}" target="_blank" class="btn-cancel" style="padding: 4px 8px; font-size: 0.74rem; text-decoration: none;" title="Otvoriť v Google Drive"><i class="fab fa-google-drive"></i></a>`
+          : '';
+
+        return `
+          <div class="vault-card" id="vault-card-${v.id}">
+            <div class="vault-thumb-wrap" onclick="previewVaultVideo('${v.url}', '${escapeHtml(v.original_name)}', '${v.gdrive_link || ''}', ${isPhoto})">
+              ${thumbImg}
+              <div class="vault-play-overlay"><i class="${isPhoto ? 'fas fa-magnifying-glass-plus' : 'fas fa-circle-play'}"></i></div>
+            </div>
+            <div class="vault-meta">
+              <div class="vault-name" title="${escapeHtml(v.original_name)}">${escapeHtml(v.original_name)}</div>
+              <div class="vault-badges" style="flex-wrap: wrap;">
+                ${typeBadge}
+                <span class="vault-badge"><i class="fas fa-hard-drive"></i> ${v.file_size_fmt}</span>
+                ${gdriveBadge}
+              </div>
+              <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
+                ${tagBadge}
+                ${accountsUsedBadge}
+              </div>
+              <div class="vault-actions" style="margin-top: 8px;">
+                <button type="button" class="btn-save" style="padding: 4px 8px; font-size: 0.74rem; background: var(--ig-gradient);" onclick="useVaultItemInManual(${v.id})" title="Použiť toto médium v Manuálnom štúdiu">
+                  <i class="fas fa-paper-plane"></i> Použiť
+                </button>
+                <button type="button" class="btn-cancel" style="padding: 4px 8px; font-size: 0.74rem;" onclick="openVaultTagModal(${v.id}, '${escapeHtml(v.tag || '')}', '${escapeHtml(v.original_name)}')" title="Upraviť tag média">
+                  <i class="fas fa-tag"></i> Tag
+                </button>
+                <button type="button" class="btn-cancel" style="padding: 4px 8px; font-size: 0.74rem;" onclick="previewVaultVideo('${v.url}', '${escapeHtml(v.original_name)}', '${v.gdrive_link || ''}', ${isPhoto})" title="Prehrať / Zväčšiť">
+                  <i class="fas fa-eye"></i>
+                </button>
+                ${driveOpenBtn}
+                <button type="button" class="btn-unlink" style="padding: 4px 8px; font-size: 0.74rem;" onclick="deleteVaultVideo(${v.id}, '${escapeHtml(v.original_name)}')">
+                  <i class="fas fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function loadVaultVideos() {
+      const container = document.getElementById('vaultGridContainer');
+      if (!container) return;
+
+      loadGDriveStatus();
+      container.innerHTML = '<div style="color:#94a3b8; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Načítavam médiá z Vaultu...</div>';
+
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/videos`, {
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          allVaultVideosList = data.videos || [];
+          renderVaultGrid();
+        } else {
+          container.innerHTML = `<div style="color:#ef4444; padding:20px;">Chyba načítania vaultu: ${data.message}</div>`;
+        }
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div style="color:#ef4444; padding:20px;">Chyba spojenia pri načítavaní médií.</div>';
+      }
+    }
+
+    function openVaultTagModal(id, currentTag, title) {
+      const modal = document.getElementById('vaultTagModal');
+      const idEl = document.getElementById('vaultTagVideoId');
+      const inputEl = document.getElementById('vaultTagInput');
+      const subEl = document.getElementById('vaultTagModalSubtitle');
+
+      if (idEl) idEl.value = id;
+      if (inputEl) inputEl.value = currentTag || '';
+      if (subEl) subEl.textContent = `Štítok pre: "${title}"`;
+      if (modal) modal.style.display = 'flex';
+      setTimeout(() => { if (inputEl) inputEl.focus(); }, 100);
+    }
+
+    function closeVaultTagModal() {
+      const modal = document.getElementById('vaultTagModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function saveVaultTag() {
+      const idEl = document.getElementById('vaultTagVideoId');
+      const inputEl = document.getElementById('vaultTagInput');
+      const id = idEl ? idEl.value : null;
+      const newTag = inputEl ? inputEl.value.trim() : '';
+
+      if (!id || !newTag) {
+        showToast('Zadajte platný tag.', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/videos/${id}/tag`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ tag: newTag })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(`Tag úspešne upravený: ${newTag}`, 'success');
+          const item = allVaultVideosList.find(x => x.id === parseInt(id));
+          if (item) item.tag = newTag;
+          closeVaultTagModal();
+          renderVaultGrid();
+        } else {
+          showToast(data.message || 'Chyba pri ukladaní tagu.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia pri ukladaní tagu.', 'error');
+      }
+    }
+
+    function previewVaultVideo(url, title, gdriveLink, isPhoto = false) {
+      const modal = document.getElementById('vaultPreviewModal');
+      const videoEl = document.getElementById('vaultModalVideo');
+      const imgEl = document.getElementById('vaultModalImage');
+      const titleEl = document.getElementById('vaultModalTitle');
+      const driveLinkBtn = document.getElementById('vaultModalDriveLink');
+
+      if (titleEl) titleEl.textContent = title;
+
+      if (isPhoto) {
+        if (videoEl) { videoEl.pause(); videoEl.style.display = 'none'; }
+        if (imgEl) { imgEl.src = url; imgEl.style.display = 'block'; }
+      } else {
+        if (imgEl) { imgEl.style.display = 'none'; }
+        if (videoEl) {
+          videoEl.style.display = 'block';
+          videoEl.src = url;
+          videoEl.play().catch(() => {});
+        }
+      }
+
+      if (driveLinkBtn) {
+        if (gdriveLink) {
+          driveLinkBtn.href = gdriveLink;
+          driveLinkBtn.style.display = 'inline-flex';
+        } else {
+          driveLinkBtn.style.display = 'none';
+        }
+      }
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeVaultPreviewModal() {
+      const modal = document.getElementById('vaultPreviewModal');
+      const videoEl = document.getElementById('vaultModalVideo');
+      const imgEl = document.getElementById('vaultModalImage');
+      if (videoEl) {
+        videoEl.pause();
+        videoEl.src = '';
+      }
+      if (imgEl) imgEl.src = '';
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function deleteVaultVideo(id, name) {
+      if (!confirm(`Naozaj chcete zmazať médium "${name}" z trezoru?`)) return;
+      try {
+        const res = await fetch(`${PREFIX}/api/vault/videos/${id}`, {
+          method: 'DELETE',
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Médium bolo zmazané z Vaultu aj Google Drive.', 'info');
+          allVaultVideosList = allVaultVideosList.filter(x => x.id !== id);
+          renderVaultGrid();
+        } else {
+          showToast(data.message || 'Chyba pri mazaní média.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    // ── Auto-Planner Logic ──
+    async function loadPlannerPosts() {
+      const container = document.getElementById('plannerTimelineContainer');
+      const dateInput = document.getElementById('plannerDateInput');
+      if (!container) return;
+
+      if (dateInput && !dateInput.value) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        dateInput.value = todayStr;
+      }
+      const selectedDate = dateInput ? dateInput.value : '';
+
+      container.innerHTML = '<div style="color:#94a3b8; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Načítavam naplánovaný rozvrh...</div>';
+
+      try {
+        const url = `${PREFIX}/api/planner/posts?date=${encodeURIComponent(selectedDate)}`;
+        const res = await fetch(url, { headers: { 'X-Master-Password': PWD } });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          const posts = data.posts || [];
+          if (posts.length === 0) {
+            container.innerHTML = `
+              <div style="text-align: center; padding: 44px 20px; background: rgba(255,255,255,0.02); border-radius: 18px; border: 1px dashed rgba(255,255,255,0.1);">
+                <div style="font-size: 2.2rem; color: #64748b; margin-bottom: 12px;"><i class="fas fa-calendar-xmark"></i></div>
+                <h3 style="color: #fff; margin: 0 0 8px 0;">Pre dátum ${selectedDate} zatiaľ nie je vygenerovaný rozvrh</h3>
+                <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 18px 0;">Spustite Auto-Planner so spoofing engine, ktorý namapuje master videá na US Peak okná vašich profilov.</p>
+                <button type="button" class="btn-save" onclick="openPlanGeneratorModal()">
+                  <i class="fas fa-wand-magic-sparkles"></i> 🤖 Vygenerovať Auto-Plan pre tento deň
+                </button>
+              </div>
+            `;
+            return;
+          }
+
+          container.innerHTML = posts.map(p => {
+            const isScheduled = p.status === 'scheduled';
+            const isPublished = p.status === 'published';
+            const isFailed = p.status === 'failed';
+
+            const statusBadge = isPublished
+              ? '<span class="health-pill healthy"><i class="fas fa-circle-check"></i> Publikované</span>'
+              : isFailed
+                ? `<span class="health-pill error"><i class="fas fa-triangle-exclamation"></i> Chyba: ${escapeHtml(p.error_message || '')}</span>`
+                : '<span class="health-pill warning"><i class="fas fa-hourglass-half"></i> Pripravené na publikovanie</span>';
+
+            const regionFlag = p.region === 'us' ? '🇺🇸' : '🇸🇰';
+            const timeFormatted = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '--:--';
+
+            return `
+              <div class="planner-post-card" id="planner-card-${p.id}">
+                <!-- Left Video Preview -->
+                <div class="planner-video-col">
+                  <video src="${p.video_url}" controls preload="metadata"></video>
+                </div>
+
+                <!-- Right Metadata & Editor -->
+                <div class="planner-info-col">
+                  <div class="planner-header-row">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <span style="font-weight: 700; font-size: 1.05rem; color: #fff;">
+                        ${regionFlag} @${escapeHtml(p.username)}
+                      </span>
+                      <span class="peak-badge">
+                        <i class="fas fa-sun"></i> ${escapeHtml(p.target_peak || 'Peak Window')} (~${timeFormatted} CET)
+                      </span>
+                      <span class="jitter-pill">
+                        <i class="fas fa-shuffle"></i> Jitter ±${p.jitter_minutes || 0}m
+                      </span>
+                    </div>
+                    <div>${statusBadge}</div>
+                  </div>
+
+                  <!-- Spoofing details pills -->
+                  <div class="spoof-breakdown">
+                    <span class="spoof-tag-pill" title="FFmpeg micro-contrast, deband a farebný jitter"><i class="fas fa-palette" style="color:#38bdf8;"></i> Pixel Spoof</span>
+                    <span class="spoof-tag-pill" title="Spoofovaný model smartfónu"><i class="fas fa-mobile-screen" style="color:#ec4899;"></i> EXIF Device</span>
+                    <span class="spoof-tag-pill" title="GPS lokácia náhodne v Los Angeles alebo Las Vegas"><i class="fas fa-location-dot" style="color:#10b981;"></i> GPS LA / Vegas</span>
+                    <span class="spoof-tag-pill" title="Pôvodné master video"><i class="fas fa-film" style="color:#f59e0b;"></i> Master: ${escapeHtml(p.original_video_name || '')}</span>
+                  </div>
+
+                  <!-- In-line Editable Caption & Hashtags -->
+                  <div class="form-group" style="margin-top: 6px;">
+                    <label class="form-label" style="font-size: 0.72rem;">Popis & Hashtagy (môžete kedykoľvek upraviť):</label>
+                    <textarea id="planCaption-${p.id}" class="form-input" style="min-height: 70px;" placeholder="Popis príspevku...">${escapeHtml(p.caption || '')}</textarea>
+                    <input type="text" id="planHashtags-${p.id}" class="form-input" style="margin-top: 6px;" value="${escapeHtml(p.hashtags || '')}" placeholder="#hashtagy">
+                  </div>
+
+                  <!-- Action Buttons -->
+                  <div class="planner-actions">
+                    <button type="button" class="btn-cancel" onclick="savePlannedPostCaption(${p.id})">
+                      <i class="fas fa-floppy-disk"></i> Uložiť zmeny
+                    </button>
+
+                    ${isScheduled ? `
+                      <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})">
+                        <i class="fas fa-paper-plane"></i> Publikovať Reel teraz
+                      </button>
+                    ` : ''}
+
+                    <div style="flex: 1;"></div>
+                    <button type="button" class="btn-unlink" onclick="deletePlannedPost(${p.id})" title="Zmazať tento naplánovaný slot">
+                      <i class="fas fa-trash-can"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          container.innerHTML = `<div style="color:#ef4444; padding:20px;">Chyba načítania rozvrhu: ${data.message}</div>`;
+        }
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = '<div style="color:#ef4444; padding:20px;">Chyba komunikácie pri načítaní rozvrhu.</div>';
+      }
+    }
+
+    // Generator Modal
+    function openPlanGeneratorModal() {
+      const modal = document.getElementById('planGeneratorModal');
+      const dateEl = document.getElementById('planGenDate');
+      const listEl = document.getElementById('planGenAccountsList');
+      const filterDate = document.getElementById('plannerDateInput');
+
+      if (dateEl) {
+        dateEl.value = filterDate && filterDate.value ? filterDate.value : new Date().toISOString().split('T')[0];
+      }
+
+      if (listEl) {
+        listEl.innerHTML = ALL_ACCOUNTS.map(a => {
+          const isHealthy = (a.health_status === 'healthy' || !a.health_status);
+          const flag = a.region === 'us' ? '🇺🇸' : '🇸🇰';
+          const checkedAttr = (isHealthy && a.has_token) ? 'checked' : '';
+          const disabledAttr = !isHealthy ? 'disabled' : '';
+
+          let statusBadge = '<span class="health-pill healthy" style="font-size:0.7rem;"><span class="health-dot healthy"></span> Ready</span>';
+          if (a.health_status === 'action_required') {
+            statusBadge = '<span class="health-pill warning" style="font-size:0.7rem;"><span class="health-dot warning"></span> Checkpoint (Vynechaný)</span>';
+          } else if (a.health_status === 'error') {
+            statusBadge = '<span class="health-pill error" style="font-size:0.7rem;"><span class="health-dot error"></span> Error (Vynechaný)</span>';
+          }
+
+          return `
+            <label style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 10px; cursor: ${isHealthy ? 'pointer' : 'not-allowed'}; opacity: ${isHealthy ? '1' : '0.6'};">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" name="planGenAcc" value="${a.id}" ${checkedAttr} ${disabledAttr}>
+                <span style="font-weight: 600; color: #fff;">${flag} @${escapeHtml(a.username)}</span>
+              </div>
+              <div>${statusBadge}</div>
+            </label>
+          `;
+        }).join('');
+      }
+
+      const statusBox = document.getElementById('planGenStatusBox');
+      if (statusBox) statusBox.style.display = 'none';
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closePlanGeneratorModal() {
+      const modal = document.getElementById('planGeneratorModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    async function executePlanGeneration() {
+      const btn = document.getElementById('btnExecutePlanGen');
+      const dateEl = document.getElementById('planGenDate');
+      const statusBox = document.getElementById('planGenStatusBox');
+      const captionEl = document.getElementById('planGenCaption');
+      const hashtagsEl = document.getElementById('planGenHashtags');
+      const freqRadio = document.querySelector('input[name="planGenFreq"]:checked');
+
+      const checkedAccs = Array.from(document.querySelectorAll('input[name="planGenAcc"]:checked')).map(cb => parseInt(cb.value));
+
+      if (!checkedAccs || checkedAccs.length === 0) {
+        showToast('Vyberte aspoň jeden zdravý profil pre generovanie.', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Spúšťam FFmpeg Spoofing Engine...';
+
+      if (statusBox) {
+        statusBox.style.display = 'block';
+        statusBox.className = 'token-verify-box';
+        statusBox.style.background = 'rgba(56, 189, 248, 0.15)';
+        statusBox.style.color = '#38bdf8';
+        statusBox.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Spoofujem videá (FFmpeg mikro-kontrast, EXIF stripping, GPS jitter)... Môže to trvať 10–25 sekúnd.';
+      }
+
+      try {
+        const payload = {
+          target_date: dateEl ? dateEl.value : '',
+          posts_per_account: freqRadio ? parseInt(freqRadio.value) : 1,
+          account_ids: checkedAccs,
+          caption: captionEl ? captionEl.value.trim() : '',
+          hashtags: hashtagsEl ? hashtagsEl.value.trim() : ''
+        };
+
+        const res = await fetch(`${PREFIX}/api/planner/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message || 'Auto-Plan úspešne vygenerovaný so spoofingom!', 'success');
+          if (statusBox) {
+            statusBox.className = 'token-verify-box ok';
+            statusBox.style.background = '';
+            statusBox.style.color = '';
+            statusBox.textContent = `✅ ${data.message}`;
+          }
+          setTimeout(() => {
+            closePlanGeneratorModal();
+            const dateInput = document.getElementById('plannerDateInput');
+            if (dateInput && dateEl) dateInput.value = dateEl.value;
+            loadPlannerPosts();
+          }, 1000);
+        } else {
+          showToast(data.message || 'Chyba pri generovaní plánu.', 'error');
+          if (statusBox) {
+            statusBox.className = 'token-verify-box err';
+            statusBox.style.background = '';
+            statusBox.style.color = '';
+            statusBox.textContent = '❌ ' + (data.message || 'Zlyhalo generovanie plánu');
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia so spoofing modulom.', 'error');
+        if (statusBox) {
+          statusBox.className = 'token-verify-box err';
+          statusBox.style.background = '';
+          statusBox.style.color = '';
+          statusBox.textContent = '❌ Chyba spojenia so serverom.';
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-rocket"></i> Spustiť Spoofing & Generovať';
+      }
+    }
+
+    async function savePlannedPostCaption(postId) {
+      const capEl = document.getElementById(`planCaption-${postId}`);
+      const tagEl = document.getElementById(`planHashtags-${postId}`);
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/posts/${postId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({
+            caption: capEl ? capEl.value : '',
+            hashtags: tagEl ? tagEl.value : ''
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Popis a hashtagy boli úspešne uložené!', 'success');
+        } else {
+          showToast(data.message || 'Chyba pri ukladaní popisu.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    async function publishPlannedPost(postId) {
+      const btn = document.getElementById(`btnPubNow-${postId}`);
+      if (!confirm('Naozaj chcete okamžite zverejniť toto naspoofované Reel video na Instagram profil?')) return;
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Meta API publikuje Reel...';
+      }
+
+      showToast('Odosielam naspoofované Reel video do Meta Graph API kontajnera...', 'info');
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/posts/${postId}/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Reel bol úspešne zverejnený na Instagrame! 🎉', 'success');
+          loadPlannerPosts();
+        } else {
+          showToast(data.message || 'Instagram zamietol publikovanie.', 'error');
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-triangle-exclamation"></i> Skúsiť znova';
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia pri publikovaní.', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-paper-plane"></i> Publikovať Reel teraz';
+        }
+      }
+    }
+
+    async function deletePlannedPost(postId) {
+      if (!confirm('Naozaj chcete zmazať tento naplánovaný slot?')) return;
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/posts/${postId}`, {
+          method: 'DELETE',
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Slot bol zmazaný.', 'info');
+          const card = document.getElementById(`planner-card-${postId}`);
+          if (card) card.remove();
+        } else {
+          showToast(data.message || 'Chyba pri mazaní slotu.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Auto-select tab if in query params
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam && ['manual', 'vault', 'planner'].includes(tabParam)) {
+        switchMainView(tabParam);
+      }
+    });
+  </script>
+</body>
+</html>
+

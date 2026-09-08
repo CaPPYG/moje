@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#1a202c</color>
+    <color name="bg_surface">#2d3748</color>
+    <color name="accent">#4299e1</color>
+    <color name="accent_pressed">#3182ce</color>
+    
+    <!-- Widget colors -->
+    <color name="widget_bg">#E6151B26</color>
+    <color name="widget_border">#26FFFFFF</color>
+    <color name="widget_text_primary">#FFFFFF</color>
+    <color name="widget_text_secondary">#94A3B8</color>
+    <color name="widget_button_bg">#26FFFFFF</color>
+    <color name="widget_button_bg_accent">#334299E1</color>
+    
+    <!-- Category colors -->
+    <color name="cat_work">#4299e1</color>
+    <color name="cat_groceries">#10b981</color>
+    <color name="cat_personal">#a78bfa</color>
+    <color name="cat_other">#f59e0b</color>
+</resources>

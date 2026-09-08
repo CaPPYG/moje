@@ -1,0 +1,16 @@
+[Unit]
+Description=Drive Drop - Google Drive File Uploader & Downloader
+After=network.target
+
+[Service]
+User=patrik
+WorkingDirectory=/home/patrik/server/Drive
+ExecStart=/home/patrik/server/Drive/venv/bin/python app.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=DRIVE_PORT=5050
+Environment=DRIVE_HOST=127.0.0.1
+
+[Install]
+WantedBy=multi-user.target

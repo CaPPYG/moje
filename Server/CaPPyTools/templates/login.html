@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio – Prihlásenie</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-left">
+    <div class="logo"><span class="mark">🔧</span> Studio</div>
+
+    <div class="features">
+      <div class="feature"><span><span class="ico">🎞️</span><span class="nm">Image / Reel Spoofer</span></span><span class="tag">video • photo</span></div>
+      <div class="feature"><span><span class="ico">🖼️</span><span class="nm">Frame Extractor</span></span><span class="tag">jpg • png</span></div>
+      <div class="feature"><span><span class="ico">🎵</span><span class="nm">Audio Extractor</span></span><span class="tag">mp3 • wav • flac</span></div>
+      <div class="feature"><span><span class="ico">📱</span><span class="nm">Content Planner</span></span><span class="tag">multi-device</span></div>
+      <div class="feature"><span><span class="ico">🔗</span><span class="nm">Link Cloaker</span></span><span class="tag">redirect</span></div>
+    </div>
+    <div class="cloud">
+      <span class="pill">No-loss re-encode</span>
+      <span class="pill">Fresh hash</span>
+      <span class="pill">GPS spoof</span>
+      <span class="pill">Neon UI</span>
+      <span class="pill">Per-user data</span>
+    </div>
+    <div class="login-foot">🔗 Studio · lokálny server</div>
+  </div>
+  <div class="login-right">
+    <div class="login-card">
+      <h1>Sign in</h1>
+      <div class="sub">Pokračuj do svojho účtu</div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <button class="btn block" type="button" onclick="alert('Google OAuth príde neskôr – teraz použite meno/email a heslo.')" style="background:#1f1b2e;box-shadow:none;border:1px solid var(--border)">
+        <span style="font-weight:700;color:#4285f4">G</span> Continue with Google
+      </button>
+      <div class="or">OR</div>
+
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="field">
+          <label>Meno alebo Email</label>
+          <input type="text" name="email" required autofocus autocomplete="username" autocapitalize="none" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>Heslo</label>
+          <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <input type="hidden" name="action" value="login">
+        <button class="btn block" type="submit">Sign in</button>
+      </form>
+
+      <div class="or"></div>
+      <form method="POST" action="{{ url_for('login') }}">
+        <input type="hidden" name="email" value="" id="reg-email">
+        <input type="hidden" name="password" value="" id="reg-pass">
+        <input type="hidden" name="action" value="register">
+        <button class="btn ghost block" type="submit" onclick="reg()">Vytvoriť nový účet</button>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function reg() {
+  var e = prompt("Meno alebo email pre nový účet:");
+  if (!e) { event.preventDefault(); return; }
+  var p = prompt("Heslo (min 4 znaky):");
+  if (!p || p.length < 4) { alert("Heslo musí mať aspoň 4 znaky."); event.preventDefault(); return; }
+  document.getElementById('reg-email').value = e.trim();
+  document.getElementById('reg-pass').value = p;
+}
+</script>
+</body>
+</html>

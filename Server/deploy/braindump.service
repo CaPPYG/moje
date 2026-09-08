@@ -1,0 +1,28 @@
+[Unit]
+Description=BrainDump — Voice Task Manager API (FastAPI/Uvicorn)
+After=network.target
+
+[Service]
+Type=exec
+User=patrik
+Group=patrik
+WorkingDirectory=/home/patrik/server/BrainDump/backend
+
+# Load .env file
+EnvironmentFile=/home/patrik/server/BrainDump/backend/.env
+
+# Ultra-light: single worker, limited concurrency
+ExecStart=/home/patrik/server/BrainDump/venv/bin/uvicorn main:app --host 127.0.0.1 --port 5090 --workers 1 --limit-concurrency 20 --timeout-keep-alive 30 --log-level warning --no-access-log
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=braindump
+
+# Memory protection — kill if exceeds 80 MB
+MemoryMax=80M
+MemorySwapMax=0
+
+[Install]
+WantedBy=multi-user.target

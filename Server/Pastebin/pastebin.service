@@ -1,0 +1,16 @@
+[Unit]
+Description=PasteBin - Secure Paste & Image Share
+After=network.target
+
+[Service]
+User=patrik
+WorkingDirectory=/home/patrik/server/Pastebin
+ExecStart=/home/patrik/server/Pastebin/venv/bin/python app.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PASTEBIN_PORT=5060
+Environment=PASTEBIN_HOST=127.0.0.1
+
+[Install]
+WantedBy=multi-user.target

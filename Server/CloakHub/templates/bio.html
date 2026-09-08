@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>{{ profile.name }} – My Links</title>
+  <meta property="og:type" content="profile">
+  <meta property="og:title" content="{{ profile.name }}">
+  <meta property="og:description" content="Tap to see my links">
+  <meta property="og:image" content="{{ profile.avatar_url }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <style>
+    :root {
+      --accent: {{ profile.accent_color or '#f75ff2' }};
+      --bg: #0a0710;
+      --card: rgba(255,255,255,.045);
+      --line: rgba(255,255,255,.09);
+      --txt: #f4f2fa;
+      --txt-dim: #b3a9cd;
+      --fd: "Space Grotesk", -apple-system, sans-serif;
+      --fb: "Plus Jakarta Sans", -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; }
+    body {
+      padding: 50px 18px 46px;
+      background: radial-gradient(145% 100% at 50% -8%, transparent 52%, rgba(3,2,9,.62)), var(--bg);
+      color: var(--txt);
+      font: 15.5px/1.55 var(--fb);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      justify-content: center;
+      overflow-x: hidden;
+    }
+    /* Aurora glow */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -25%;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        radial-gradient(30% 26% at 22% 12%, color-mix(in srgb, var(--accent) 64%, transparent), transparent 66%),
+        radial-gradient(30% 26% at 82% 8%, color-mix(in srgb, var(--accent) 30%, #7c46e0), transparent 64%),
+        radial-gradient(34% 34% at 84% 78%, color-mix(in srgb, var(--accent) 48%, transparent), transparent 68%),
+        radial-gradient(40% 36% at 10% 84%, rgba(66,92,224,.42), transparent 66%);
+      filter: blur(52px) saturate(135%);
+      animation: drift 26s ease-in-out infinite alternate;
+    }
+    /* Film grain */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 160px 160px;
+      opacity: .35;
+      mix-blend-mode: soft-light;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: min(460px, 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Avatar & Badge */
+    .ava {
+      position: relative;
+      margin-bottom: 2px;
+      animation: pop .6s cubic-bezier(.2,.8,.2,1) both;
+    }
+    .ava::before {
+      content: "";
+      position: absolute;
+      inset: -6px;
+      border-radius: 50%;
+      background: conic-gradient(from 210deg, var(--accent), color-mix(in srgb, var(--accent) 30%, #fff), var(--accent));
+      filter: blur(2px);
+      opacity: .95;
+    }
+    .avatar {
+      position: relative;
+      z-index: 1;
+      width: 146px;
+      height: 146px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 4px solid var(--bg);
+      background: #161226;
+      box-shadow: 0 20px 50px rgba(0,0,0,.6);
+      display: block;
+    }
+    .ava::after {
+      content: "";
+      position: absolute;
+      z-index: 3;
+      right: 7%;
+      bottom: 7%;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #2fd27f;
+      border: 3.5px solid var(--bg);
+      box-shadow: 0 0 12px rgba(47,210,127,.8);
+      animation: onlinepulse 2s ease-out infinite;
+    }
+
+    .online {
+      margin-top: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .03em;
+      color: #9dedb9;
+      padding: 4px 13px 4px 11px;
+      border-radius: 999px;
+      background: rgba(47,210,127,.12);
+      border: 1px solid rgba(47,210,127,.32);
+    }
+    .online i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #2fd27f;
+      box-shadow: 0 0 8px #2fd27f;
+      animation: blink 1.5s ease-in-out infinite;
+      display: inline-block;
+    }
+
+    .uname {
+      margin: 5px 0 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: color-mix(in srgb, var(--accent) 35%, var(--txt-dim));
+    }
+
+    h1 {
+      margin: 16px 0 0;
+      font-family: var(--fd);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      text-align: center;
+      line-height: 1.15;
+      background: linear-gradient(180deg, #fff, color-mix(in srgb, var(--accent) 34%, #fff));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .vbadge {
+      color: #3897f0;
+      font-size: 0.72em;
+    }
+
+    .followers {
+      margin: 10px 0 0;
+      font-size: 14.5px;
+      color: var(--txt-dim);
+    }
+    .followers b {
+      font-family: var(--fd);
+      font-weight: 600;
+      color: color-mix(in srgb, var(--accent) 45%, #fff);
+    }
+
+    .bio {
+      margin: 12px 0 0;
+      font-size: 14px;
+      color: var(--txt-dim);
+      text-align: center;
+      max-width: 32ch;
+      line-height: 1.5;
+    }
+
+    /* Links Cards */
+    .links {
+      width: 100%;
+      margin-top: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .links a.card {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      border-radius: 24px;
+      text-decoration: none;
+      color: #fff;
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+      background: #12101d;
+      box-shadow: 0 10px 30px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08);
+      transition: transform .18s ease, box-shadow .22s ease, border-color .22s ease;
+    }
+    .links a.card:hover {
+      transform: translateY(-3px);
+      border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+      box-shadow: 0 20px 50px rgba(0,0,0,.52), 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .card .ph {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16/9;
+      object-fit: cover;
+      transition: transform .4s ease;
+    }
+    .card:hover .ph {
+      transform: scale(1.04);
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: linear-gradient(to top, rgba(6,4,12,.92) 5%, rgba(6,4,12,.4) 40%, transparent 68%);
+    }
+    .card .badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 3;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #fff));
+      box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 45%, transparent);
+    }
+    .card .cap {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      z-index: 3;
+      font-family: var(--fd);
+      font-size: 19px;
+      font-weight: 700;
+      line-height: 1.2;
+      text-shadow: 0 2px 14px rgba(0,0,0,.7);
+    }
+    .card .cap::after {
+      content: " ›";
+      color: color-mix(in srgb, var(--accent) 40%, #fff);
+      font-weight: 600;
+      display: inline-block;
+      transition: transform .2s ease;
+    }
+    .card:hover .cap::after {
+      transform: translateX(5px);
+    }
+
+    /* Plain button card (fallback & social) */
+    .card.plain {
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 16px 20px;
+      gap: 16px;
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 25%, #141021), color-mix(in srgb, var(--accent) 10%, #141021));
+    }
+    .card.plain::after { display: none; }
+    .card.plain .badge { position: static; width: 40px; height: 40px; flex-shrink: 0; }
+    .card.plain .cap { position: static; flex: 1; font-size: 16px; }
+
+    /* 18+ Overlay Modal */
+    .ovl {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      padding: 20px;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4,3,10,.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      animation: ovlfade .2s ease both;
+    }
+    .ovl-card {
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+      padding: 26px 22px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, #191228, #120d1f);
+      box-shadow: 0 30px 80px rgba(0,0,0,.7);
+    }
+    .ovl-lock { font-size: 40px; margin-bottom: 8px; }
+    .ovl-card h2 { margin: 10px 0 6px; font-family: var(--fd); font-size: 21px; font-weight: 700; color: #fff; }
+    .ovl-card p { margin: 0 0 20px; color: var(--txt-dim); font-size: 14px; }
+    .ovl-yes {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-radius: 12px;
+      cursor: pointer;
+      font: 700 15px/1 var(--fd);
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #fff));
+      box-shadow: 0 10px 25px color-mix(in srgb, var(--accent) 40%, transparent);
+    }
+    .ovl-no {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      border: 0;
+      background: none;
+      color: var(--txt-dim);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    @keyframes drift { 0% { transform: translate3d(-2%,-1%,0) scale(1.02); } 100% { transform: translate3d(3%,2%,0) scale(1.08); } }
+    @keyframes pop { from { opacity: 0; transform: scale(.88); } to { opacity: 1; transform: none; } }
+    @keyframes onlinepulse { 0% { box-shadow: 0 0 12px rgba(47,210,127,.8); } 70% { box-shadow: 0 0 12px rgba(47,210,127,.8), 0 0 11px rgba(47,210,127,0); } 100% { box-shadow: 0 0 12px rgba(47,210,127,.8); } }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+    @keyframes ovlfade { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <main class="wrap">
+    <!-- Avatar Section -->
+    <div class="ava">
+      <img src="{{ profile.avatar_url }}" alt="{{ profile.name }}" class="avatar" onerror="this.src='https://ui-avatars.com/api/?name={{ profile.name | urlencode }}&background=random'">
+    </div>
+
+    <div class="online"><i></i> ONLINE NOW</div>
+
+    {% if profile.handle %}
+      <div class="uname">{{ profile.handle }}</div>
+    {% endif %}
+
+    <h1>
+      {{ profile.name }}
+      <i class="fas fa-circle-check vbadge" title="Verified Creator"></i>
+    </h1>
+
+    <div class="followers">
+      <b>{{ profile.followers_text }}</b> followers · {{ profile.age_text }} y/o
+    </div>
+
+    {% if profile.bio %}
+      <p class="bio">{{ profile.bio }}</p>
+    {% endif %}
+
+    <!-- Link Container (#linksWrap) -->
+    <nav class="links" id="linksWrap">
+      <!-- Safe links (shown initially to bots & crawlers) -->
+      {% for s in safe_links %}
+        <a class="card plain" href="{{ s.url }}" target="_blank" rel="noopener" style="--accent: {{ s.accent_color }}">
+          <span class="badge">
+            {% if s.platform == 'instagram' %}<i class="fab fa-instagram"></i>
+            {% elif s.platform == 'tiktok' %}<i class="fab fa-tiktok"></i>
+            {% elif s.platform == 'x' %}<i class="fab fa-x-twitter"></i>
+            {% elif s.platform == 'youtube' %}<i class="fab fa-youtube"></i>
+            {% elif s.platform == 'facebook' %}<i class="fab fa-facebook-f"></i>
+            {% else %}<i class="fas fa-link"></i>{% endif %}
+          </span>
+          <span class="cap">{{ s.title }}</span>
+        </a>
+      {% endfor %}
+    </nav>
+  </main>
+
+  <!-- 18+ Adult Modal -->
+  <div id="ovl" class="ovl" aria-hidden="true">
+    <div class="ovl-card">
+      <div class="ovl-lock">🔞</div>
+      <h2>18+ only</h2>
+      <p>This link contains adult & exclusive VIP content.</p>
+      <button id="ovlyes" class="ovl-yes">Continue ›</button>
+      <button id="ovlno" class="ovl-no">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Cloak & IAB Escape Script -->
+  <script>
+  (function() {
+    'use strict';
+    var challenge = {{ challenge | tojson }};
+    var prefix = {{ prefix_api | tojson }};
+    var slug = {{ profile.slug | tojson }};
+
+    // 1. Bot & Headless WebGL Fingerprint Check
+    var ua = navigator.userAgent || '';
+    var isBot = false;
+    try {
+      isBot = !!navigator.webdriver ||
+              /headless|phantom|puppeteer|playwright|electron|selenium|webdriver|scrapy|jsdom/i.test(ua) ||
+              !(navigator.languages && navigator.languages.length) ||
+              !(window.screen && screen.width > 0 && screen.height > 0);
+
+      if (!isBot) {
+        var cv = document.createElement('canvas');
+        var gl = cv.getContext('webgl') || cv.getContext('experimental-webgl');
+        if (gl) {
+          var ex = gl.getExtension('WEBGL_debug_renderer_info');
+          var rn = ex ? String(gl.getParameter(ex.UNMASKED_RENDERER_WEBGL)) : '';
+          if (/swiftshader|llvmpipe/i.test(rn)) {
+            isBot = true;
+          }
+        }
+      }
+    } catch(e) {}
+
+    if (isBot) return; // Bots stay on the safe page
+
+    // 2. In-App Browser Escape (IAB Buster)
+    function escapeIAB(url) {
+      var a = navigator.userAgent || '';
+      try {
+        if (/Android/i.test(a)) {
+          var clean = url.replace(/^https?:\/\//, '');
+          location.replace('intent://' + clean + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(url) + ';end');
+        } else if (/Instagram/i.test(a)) {
+          location.replace('instagram://extbrowser/?url=' + encodeURIComponent(url));
+        } else if (/Threads|Barcelona|FBAN|FBAV|FB_IAB/i.test(a)) {
+          location.replace('barcelona://extbrowser/?url=' + encodeURIComponent(url));
+        } else {
+          location.replace('x-safari-https://' + url.replace(/^https?:\/\//, ''));
+        }
+      } catch(e) {
+        location.href = url;
+      }
+    }
+
+    // Modal & Click Handling
+    var box = document.getElementById('ovl');
+    var targetUrl = null;
+
+    function fireRedirect() {
+      if (!targetUrl) return;
+      var dest = targetUrl;
+      escapeIAB(dest);
+      setTimeout(function() {
+        if (document.visibilityState === 'visible') location.href = dest;
+      }, 2000);
+    }
+
+    document.addEventListener('click', function(e) {
+      var el = e.target.closest && e.target.closest('a[data-cloaked="1"]');
+      if (!el) return;
+      e.preventDefault();
+      targetUrl = el.href;
+      var isAdult = el.getAttribute('data-adult') === '1';
+      if (isAdult && box) {
+        box.style.display = 'flex';
+      } else {
+        fireRedirect();
+      }
+    }, true);
+
+    var y = document.getElementById('ovlyes');
+    var n = document.getElementById('ovlno');
+    if (y) y.addEventListener('click', fireRedirect);
+    if (n) n.addEventListener('click', function() { if (box) box.style.display = 'none'; targetUrl = null; });
+    if (box) box.addEventListener('click', function(e) { if (e.target === box) { box.style.display = 'none'; targetUrl = null; } });
+
+    // 3. Fast Client-side Proof-of-Work (SHA-256)
+    function solvePoW(c, pfx) {
+      function R(n, x) { return (n >>> x) | (n << (32 - x)); }
+      var K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+      function sha(s) {
+        var h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+        var m=[],i; for(i=0;i<s.length;i++) m.push(s.charCodeAt(i)&255);
+        var bl=m.length*8; m.push(128); while(m.length<56) m.push(0);
+        m.push(0,0,0,0,(bl>>>24)&255,(bl>>>16)&255,(bl>>>8)&255,bl&255);
+        var w=[]; for(i=0;i<16;i++) w[i]=(m[i*4]<<24)|(m[i*4+1]<<16)|(m[i*4+2]<<8)|m[i*4+3];
+        for(i=16;i<64;i++) {
+          var x0=R(w[i-15],7)^R(w[i-15],18)^(w[i-15]>>>3);
+          var x1=R(w[i-2],17)^R(w[i-2],19)^(w[i-2]>>>10);
+          w[i]=(w[i-16]+x0+w[i-7]+x1)|0;
+        }
+        var a=h0,b=h1,c2=h2,d=h3,e=h4,f=h5,g=h6,hh=h7;
+        for(i=0;i<64;i++) {
+          var S1=R(e,6)^R(e,11)^R(e,25);
+          var ch=(e&f)^((~e)&g);
+          var t1=(hh+S1+ch+K[i]+w[i])|0;
+          var S0=R(a,2)^R(a,13)^R(a,22);
+          var mj=(a&b)^(a&c2)^(b&c2);
+          var t2=(S0+mj)|0;
+          hh=g;g=f;f=e;e=(d+t1)|0;d=c2;c2=b;b=a;a=(t1+t2)|0;
+        }
+        var Z=[(h0+a)|0,(h1+b)|0,(h2+c2)|0,(h3+d)|0,(h4+e)|0,(h5+f)|0,(h6+g)|0,(h7+hh)|0];
+        var o='',j; for(j=0;j<8;j++) o+=('00000000'+(Z[j]>>>0).toString(16)).slice(-8);
+        return o;
+      }
+      for(var n=0;n<1000000;n++) {
+        if(sha(c+':'+n).indexOf(pfx)===0) return ''+n;
+      }
+      return '0';
+    }
+
+    var nonce = solvePoW(challenge, "000");
+
+    // 4. Fetch the real cloaked VIP cards
+    fetch(prefix + '/api/links', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ c: challenge, a: nonce, slug: slug })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res && res.status === 'ok' && res.html) {
+        var container = document.getElementById('linksWrap');
+        if (container) {
+          container.innerHTML = res.html;
+        }
+      }
+    })
+    .catch(function(err) {
+      // Fallback: remains on safe social links
+    });
+
+  })();
+  </script>
+</body>
+</html>

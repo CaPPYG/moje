@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Záznam nenájdený – PasteBin</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <a href="{{ url_for('index') }}" class="brand">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <span class="brand-name">PasteBin</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="main-content center-card-wrapper">
+    <div class="center-card">
+      <div class="center-card-icon icon-ghost">
+        <i class="fas fa-ghost"></i>
+      </div>
+      <h1 class="center-card-title">Záznam neexistuje</h1>
+      <p class="center-card-desc">Tento paste mohol vypršať (TTL expirácia), bol natrvalo spálený po 1. prečítaní (Burn after reading) alebo nikdy neexistoval.</p>
+
+      <a href="{{ url_for('index') }}" class="btn-submit" style="display: inline-flex; justify-content: center; width: 100%; text-decoration: none;">
+        <i class="fas fa-plus"></i> Vytvoriť nový paste
+      </a>
+    </div>
+  </main>
+
+</body>
+</html>

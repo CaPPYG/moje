@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paste #{{ paste.id }} – PasteBin</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Highlight.js dark theme -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <a href="/" class="back-link" title="Návrat do GarcArzP HUB">
+        <i class="fas fa-arrow-left"></i> HUB
+      </a>
+      <a href="{{ url_for('index') }}" class="brand">
+        <div class="brand-icon"><i class="fas fa-shield-halved"></i></div>
+        <span class="brand-name">PasteBin</span>
+      </a>
+    </div>
+    <div class="header-right">
+      <a href="{{ url_for('index') }}" class="btn-header">
+        <i class="fas fa-plus"></i> Nový paste
+      </a>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="card-paste">
+      {% if burned %}
+        <div class="burn-banner">
+          <i class="fas fa-fire-flame-curved" style="font-size: 1.2em; color: var(--accent-fire);"></i>
+          <span><b>Tento záznam bol po otvorení spálený (Burned)!</b> Bol natrvalo odstránený z databázy a pri ďalšom načítaní už nebude dostupný.</span>
+        </div>
+      {% endif %}
+
+      <div class="viewer-header">
+        <div class="viewer-meta">
+          <span><i class="fas fa-hashtag"></i> ID: <b>{{ paste.id }}</b></span>
+          <span><i class="fas fa-eye"></i> Zobrazení: {{ views }}</span>
+          {% if paste.expires_at and not burned %}
+            <span><i class="fas fa-hourglass-half"></i> Expirácia aktívna</span>
+          {% endif %}
+        </div>
+
+        <div class="viewer-actions">
+          <button type="button" class="btn-action" id="btnCopyContent" title="Skopírovať celý obsah">
+            <i class="fas fa-copy"></i> Kopírovať
+          </button>
+          <a href="{{ url_for('raw_paste', paste_id=paste.id) }}" target="_blank" class="btn-action" title="Zobraziť čistý text">
+            <i class="fas fa-align-left"></i> Raw
+          </a>
+        </div>
+      </div>
+
+      <div class="code-wrapper">
+        <pre><code class="plaintext">{{ paste.content }}</code></pre>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      hljs.highlightAll();
+    });
+  </script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_widget"
+    android:padding="12dp">
+
+    <!-- ── Widget Header ── -->
+    <RelativeLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true">
+
+        <!-- Left: Brain Logo + Title + Count Badge -->
+        <LinearLayout
+            android:id="@+id/widget_header_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_centerVertical="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginRight="6dp"
+                android:src="@drawable/ic_brain" />
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/app_name"
+                android:textColor="@color/widget_text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_count_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:background="@drawable/bg_badge"
+                android:fontFamily="sans-serif-medium"
+                android:text="0"
+                android:textColor="@color/accent"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Right: Action Buttons (+ manual add, mic record, refresh) -->
+        <LinearLayout
+            android:id="@+id/widget_header_right"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Manual Add Task (+) Button (TickTick style) -->
+            <ImageButton
+                android:id="@+id/btn_widget_add"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginRight="6dp"
+                android:background="@drawable/bg_circle_btn"
+                android:contentDescription="@string/widget_add_task"
+                android:padding="5dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_add" />
+
+            <!-- Voice Record (Mic) Button -->
+            <ImageButton
+                android:id="@+id/btn_widget_mic"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginRight="6dp"
+                android:background="@drawable/bg_circle_btn"
+                android:contentDescription="@string/widget_record_task"
+                android:padding="5dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_mic" />
+
+            <!-- Refresh Button -->
+            <ImageButton
+                android:id="@+id/btn_widget_refresh"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@drawable/bg_circle_btn"
+                android:contentDescription="@string/widget_refresh"
+                android:padding="6dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_refresh" />
+        </LinearLayout>
+
+    </RelativeLayout>
+
+    <!-- Divider -->
+    <ImageView
+        android:id="@+id/widget_divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_below="@id/widget_header"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="6dp"
+        android:background="@color/widget_border"
+        android:contentDescription="@null" />
+
+    <!-- ── Task List ── -->
+    <ListView
+        android:id="@+id/widget_task_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/widget_divider"
+        android:divider="@color/widget_border"
+        android:dividerHeight="0.5dp"
+        android:scrollbars="none" />
+
+    <!-- ── Empty State View ── -->
+    <TextView
+        android:id="@+id/widget_empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/widget_divider"
+        android:gravity="center"
+        android:text="@string/widget_empty_text"
+        android:textColor="@color/widget_text_secondary"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+</RelativeLayout>
