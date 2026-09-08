@@ -1284,6 +1284,7 @@ def background_sync_worker():
 worker_thread = threading.Thread(target=background_sync_worker, daemon=True)
 worker_thread.start()
 health_monitor.start_background_health_worker(interval_seconds=1800)
+vault_planner.start_background_planner_worker(interval_seconds=60)
 
 
 if __name__ == "__main__":

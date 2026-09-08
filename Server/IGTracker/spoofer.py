@@ -262,7 +262,8 @@ def spoof_video_for_account(src_video_path: str, out_spoofed_path: str, region: 
         "-map_metadata", "-1",
         "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
         "-vf", vf,
-        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-crf", "18", "-preset", "fast",
         "-c:a", "aac", "-b:a", "192k",
         out_spoofed_path
     ]

@@ -2377,6 +2377,7 @@
             const isScheduled = p.status === 'scheduled';
             const isPublished = p.status === 'published';
             const isFailed = p.status === 'failed';
+            const canPublish = !isPublished;
 
             const statusBadge = isPublished
               ? '<span class="health-pill healthy"><i class="fas fa-circle-check"></i> Publikované</span>'
@@ -2386,12 +2387,13 @@
 
             const regionFlag = p.region === 'us' ? '🇺🇸' : '🇸🇰';
             const timeFormatted = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '--:--';
+            const masterName = p.master_video_name || p.original_video_name || 'Master';
 
             return `
               <div class="planner-post-card" id="planner-card-${p.id}">
                 <!-- Left Video Preview -->
                 <div class="planner-video-col">
-                  <video src="${p.video_url}" controls preload="metadata"></video>
+                  <video src="${p.video_url}" poster="${p.thumbnail_url || ''}" controls preload="auto" playsinline></video>
                 </div>
 
                 <!-- Right Metadata & Editor -->
@@ -2402,7 +2404,7 @@
                         ${regionFlag} @${escapeHtml(p.username)}
                       </span>
                       <span class="peak-badge">
-                        <i class="fas fa-sun"></i> ${escapeHtml(p.target_peak || 'Peak Window')} (~${timeFormatted} CET)
+                        <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || p.target_peak || 'Peak Window')} (~${timeFormatted} CET)
                       </span>
                       <span class="jitter-pill">
                         <i class="fas fa-shuffle"></i> Jitter ±${p.jitter_minutes || 0}m
@@ -2416,7 +2418,7 @@
                     <span class="spoof-tag-pill" title="FFmpeg micro-contrast, deband a farebný jitter"><i class="fas fa-palette" style="color:#38bdf8;"></i> Pixel Spoof</span>
                     <span class="spoof-tag-pill" title="Spoofovaný model smartfónu"><i class="fas fa-mobile-screen" style="color:#ec4899;"></i> EXIF Device</span>
                     <span class="spoof-tag-pill" title="GPS lokácia náhodne v Los Angeles alebo Las Vegas"><i class="fas fa-location-dot" style="color:#10b981;"></i> GPS LA / Vegas</span>
-                    <span class="spoof-tag-pill" title="Pôvodné master video"><i class="fas fa-film" style="color:#f59e0b;"></i> Master: ${escapeHtml(p.original_video_name || '')}</span>
+                    <span class="spoof-tag-pill" title="Pôvodné master video z Vaultu"><i class="fas fa-film" style="color:#f59e0b;"></i> Master: ${escapeHtml(masterName)}</span>
                   </div>
 
                   <!-- In-line Editable Caption & Hashtags -->
@@ -2432,9 +2434,9 @@
                       <i class="fas fa-floppy-disk"></i> Uložiť zmeny
                     </button>
 
-                    ${isScheduled ? `
+                    ${canPublish ? `
                       <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})">
-                        <i class="fas fa-paper-plane"></i> Publikovať Reel teraz
+                        <i class="fas fa-paper-plane"></i> Publikovať Reel teraz na @${escapeHtml(p.username)}
                       </button>
                     ` : ''}
 

@@ -320,3 +320,53 @@ def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.
         logger.exception(f"Výnimka pri publikovaní Reelu: {e}")
         db.update_planned_post(post_id, status="failed", error_message=str(e))
         return {"status": "error", "message": f"Výnimka pri publikovaní: {str(e)}"}
+
+
+def check_and_publish_scheduled_posts(base_public_url: str = "https://garcarzp.online/ig"):
+    """
+    Periodická kontrola naplánovaných postov.
+    Ak nastal čas scheduled_time a status je 'ready' alebo 'scheduled',
+    automaticky odošle Reel na Meta Graph API.
+    """
+    now_dt = datetime.now()
+    with db.get_db() as conn:
+        rows = conn.execute("""
+            SELECT id, scheduled_time, status 
+            FROM planned_posts 
+            WHERE status IN ('ready', 'scheduled')
+        """).fetchall()
+
+    for r in rows:
+        try:
+            sched_str = r["scheduled_time"]
+            if not sched_str:
+                continue
+            if "T" in sched_str:
+                sched_dt = datetime.fromisoformat(sched_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            else:
+                sched_dt = datetime.strptime(sched_str[:19], "%Y-%m-%d %H:%M:%S")
+
+            if sched_dt <= now_dt:
+                logger.info(f"Auto-Planner: Nastal naplánovaný čas pre post #{r['id']} ({sched_str}). Publikujem...")
+                publish_planned_post(r["id"], base_public_url=base_public_url)
+        except Exception as e:
+            logger.error(f"Auto-Planner scheduler chyba pri poste #{r['id']}: {e}")
+
+
+def start_background_planner_worker(interval_seconds: int = 60, base_public_url: str = "https://garcarzp.online/ig"):
+    """Spustí background vlákno, ktoré každú minútu kontroluje a automaticky postuje naplánované posty."""
+    import threading
+    import time
+
+    def _worker():
+        logger.info(f"Auto-Planner background scheduler spustený (interval {interval_seconds}s).")
+        while True:
+            try:
+                check_and_publish_scheduled_posts(base_public_url=base_public_url)
+            except Exception as e:
+                logger.error(f"Chyba vo workerovi Auto-Planneru: {e}")
+            time.sleep(interval_seconds)
+
+    t = threading.Thread(target=_worker, daemon=True, name="AutoPlannerScheduler")
+    t.start()
+    return t
