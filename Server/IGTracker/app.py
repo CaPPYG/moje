@@ -921,9 +921,9 @@ def api_vault_sync_gdrive():
     return jsonify(res), 200
 
 
-@app.route("/api/vault/stream/<int:video_id>", methods=["GET"])
+@app.route("/api/vault/stream/<int:video_id>", methods=["GET", "HEAD"])
 def stream_vault_video(video_id):
-    """Streamovacia proxy pre Google Drive master video/foto bez ukladania na VPS disk."""
+    """Streamovacia proxy pre Google Drive master video/foto s plnou podporou HTTP Range (206 Partial Content)."""
     video = db.get_vault_video_by_id(video_id)
     if not video:
         return "Médium nebolo nájdené", 404
@@ -931,38 +931,68 @@ def stream_vault_video(video_id):
     is_photo = (video.get("media_type") == "photo")
     ext = os.path.splitext(video.get("original_name") or video.get("filename") or "")[1].lower()
     if is_photo:
-        mimetype = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
+        default_mime = "image/png" if ext == ".png" else "image/webp" if ext == ".webp" else "image/jpeg"
     else:
-        mimetype = "video/quicktime" if ext in (".mov", ".qt") else "video/mp4"
+        default_mime = "video/quicktime" if ext in (".mov", ".qt") else "video/mp4"
 
     if video.get("storage_type") == "gdrive" and video.get("gdrive_file_id"):
-        svc = gdrive_vault.get_drive_service()
-        if not svc:
+        creds = gdrive_vault.get_drive_credentials()
+        if not creds:
             if video.get("gdrive_web_view_link"):
                 return redirect(video["gdrive_web_view_link"])
             return "Google Drive nie je pripojený", 503
+
+        import requests
+        from google.auth.transport.requests import Request as GRequest
+
+        drive_url = f"https://www.googleapis.com/drive/v3/files/{video['gdrive_file_id']}?alt=media"
+        req_headers = {"Authorization": f"Bearer {creds.token}"}
+
+        # Preposlanie Range hlavičky z prehliadača (kľúčové pre video prehrávanie v Chrome/Safari)
+        range_header = request.headers.get("Range")
+        if range_header:
+            req_headers["Range"] = range_header
+
         try:
-            req = svc.files().get_media(fileId=video["gdrive_file_id"])
-            def generate():
-                from googleapiclient.http import MediaIoBaseDownload
-                stream = io.BytesIO()
-                downloader = MediaIoBaseDownload(stream, req, chunksize=1024 * 1024 * 2)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-                    stream.seek(0)
-                    data = stream.read()
-                    stream.seek(0)
-                    stream.truncate(0)
-                    yield data
-            return Response(stream_with_context(generate()), mimetype=mimetype)
+            drive_res = requests.get(drive_url, headers=req_headers, stream=True, timeout=30)
+            if drive_res.status_code == 401:
+                # Obnovenie tokenu v prípade expirácie
+                creds.refresh(GRequest())
+                req_headers["Authorization"] = f"Bearer {creds.token}"
+                drive_res = requests.get(drive_url, headers=req_headers, stream=True, timeout=30)
+
+            content_type = drive_res.headers.get("Content-Type") or default_mime
+
+            # HEAD request (pre Meta Graph API validator / crawler)
+            if request.method == "HEAD":
+                resp = Response("", status=drive_res.status_code, mimetype=content_type)
+                resp.headers["Accept-Ranges"] = "bytes"
+                if "Content-Length" in drive_res.headers:
+                    resp.headers["Content-Length"] = drive_res.headers["Content-Length"]
+                if "Content-Range" in drive_res.headers:
+                    resp.headers["Content-Range"] = drive_res.headers["Content-Range"]
+                return resp
+
+            def generate_stream():
+                for chunk in drive_res.iter_content(chunk_size=1024 * 256):
+                    if chunk:
+                        yield chunk
+
+            resp = Response(stream_with_context(generate_stream()), status=drive_res.status_code, mimetype=content_type)
+            resp.headers["Accept-Ranges"] = "bytes"
+            if "Content-Length" in drive_res.headers:
+                resp.headers["Content-Length"] = drive_res.headers["Content-Length"]
+            if "Content-Range" in drive_res.headers:
+                resp.headers["Content-Range"] = drive_res.headers["Content-Range"]
+            return resp
+
         except Exception as e:
             logger.error(f"Chyba pri streamovaní z Drive: {e}")
             if video.get("gdrive_web_view_link"):
                 return redirect(video["gdrive_web_view_link"])
             return f"Chyba streamu: {e}", 500
     else:
-        return send_from_directory(VAULT_DIR, video.get("filename"), mimetype=mimetype, conditional=True)
+        return send_from_directory(VAULT_DIR, video.get("filename"), mimetype=default_mime, conditional=True)
 
 
 @app.route("/api/vault/videos", methods=["GET"])

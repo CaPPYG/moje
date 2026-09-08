@@ -73,10 +73,10 @@ def is_connected():
     return os.path.exists(get_token_file())
 
 
-def get_drive_service():
+def get_drive_credentials():
     """
-    Inicializuje a vráti autentifikovanú službu Google Drive v3.
-    V prípade expirácie tokenu ho automaticky obnoví.
+    Načíta a vráti platné Credentials pre Google Drive.
+    Automaticky obnoví expirovaný access token bez obmedzovania na hardcoded scopes.
     """
     token_path = get_token_file()
     if not os.path.exists(token_path):
@@ -84,12 +84,16 @@ def get_drive_service():
         return None
 
     try:
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
+        # Použijeme scopes uložené priamo v súbore tokenu (nevnucujeme iné scopes)
+        creds = Credentials.from_authorized_user_file(token_path)
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
             # Uložíme obnovený token späť do nájdeného súboru aj lokálne
-            with open(token_path, "w", encoding="utf-8") as f:
-                f.write(creds.to_json())
+            try:
+                with open(token_path, "w", encoding="utf-8") as f:
+                    f.write(creds.to_json())
+            except Exception:
+                pass
             local_token = os.path.join(DATA_DIR, "drive_token.json")
             if local_token != token_path:
                 try:
@@ -102,6 +106,18 @@ def get_drive_service():
             logger.error("Google Drive prihlasovacie údaje nie sú platné.")
             return None
 
+        return creds
+    except Exception as e:
+        logger.error(f"Chyba pri inicializácii Google Drive Credentials: {e}")
+        return None
+
+
+def get_drive_service():
+    """Inicializuje a vráti autentifikovanú službu Google Drive v3."""
+    creds = get_drive_credentials()
+    if not creds:
+        return None
+    try:
         return build("drive", "v3", credentials=creds)
     except Exception as e:
         logger.error(f"Chyba pri inicializácii Google Drive API: {e}")
