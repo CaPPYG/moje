@@ -308,65 +308,116 @@ def delete_file_from_drive(file_id):
 
 def list_drive_vault_files():
     """
-    Vráti zoznam všetkých video súborov nachádzajúcich sa v priečinku IG_VAULT na Google Drive.
+    Vráti zoznam všetkých video a foto súborov nachádzajúcich sa v priečinku IG_VAULT na Google Drive,
+    vrátane všetkých podzložiek (napr. kopie 1, kopie 2, kopie 3...).
+    Ku každému súboru priradí 'folder_name' zodpovedajúci názvu podzložky (alebo '' pre koreň).
     """
     svc = get_drive_service()
     if not svc:
         return []
 
-    folder_id, _ = get_vault_folder_id(svc)
-    if not folder_id:
+    root_id, _ = get_vault_folder_id(svc)
+    if not root_id:
         return []
 
-    query = f"'{folder_id}' in parents and trashed=false"
+    all_media_files = []
+
+    def _fetch_files_in_folder(folder_id, folder_name=""):
+        page_token = None
+        while True:
+            try:
+                res = svc.files().list(
+                    q=f"'{folder_id}' in parents and trashed=false",
+                    fields="nextPageToken, files(id, name, size, mimeType, createdTime, webViewLink, webContentLink, videoMediaMetadata)",
+                    pageSize=100,
+                    pageToken=page_token,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True
+                ).execute()
+            except Exception as e:
+                logger.error(f"Chyba pri nacitavani suborov z {folder_name or root_id}: {e}")
+                break
+
+            for f in res.get("files", []):
+                mime = f.get("mimeType", "")
+                name = f.get("name", "")
+                if mime == "application/vnd.google-apps.folder":
+                    continue
+                if (mime.startswith("video/") or mime.startswith("image/") or
+                    name.lower().endswith((".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp"))):
+                    f["folder_name"] = folder_name
+                    all_media_files.append(f)
+
+            page_token = res.get("nextPageToken")
+            if not page_token:
+                break
+
     try:
-        res = svc.files().list(
-            q=query,
-            fields="files(id, name, size, mimeType, createdTime, webViewLink, webContentLink, videoMediaMetadata)",
+        # 1. Hľadáme všetky podzložky v IG_VAULT (napr. kopie 1, kopie 2...)
+        subfolders_res = svc.files().list(
+            q=f"'{root_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
             pageSize=100
         ).execute()
-        files = res.get("files", [])
-        media_files = [
-            f for f in files
-            if f.get("mimeType", "").startswith("video/")
-            or f.get("mimeType", "").startswith("image/")
-            or f.get("name", "").lower().endswith((".mp4", ".mov", ".m4v", ".webm", ".jpg", ".jpeg", ".png", ".webp"))
-        ]
-        return media_files
+        subfolders = subfolders_res.get("files", [])
+
+        # 2. Načítame médiá z každej podzložky
+        for sf in subfolders:
+            _fetch_files_in_folder(sf["id"], folder_name=sf["name"])
+
+        # 3. Načítame médiá priamo z koreňa IG_VAULT (ak tam nejaké sú)
+        _fetch_files_in_folder(root_id, folder_name="")
+
+        return all_media_files
     except Exception as e:
-        logger.error(f"Chyba pri načítavaní súborov z IG_VAULT: {e}")
+        logger.error(f"Chyba pri prehľadávaní priečinka IG_VAULT: {e}")
         return []
 
 
 def sync_drive_vault_to_db(quick=True):
     """
     Synchronizuje videá a fotky z priečinka IG_VAULT na Google Drive do databázy vault_videos.
-    V režime quick=True okamžite zaregistruje všetky súbory bez zbytočného sťahovania stoviek MB dát.
+    Podporuje podzložky (kopie 1, kopie 2...) a automaticky čistí zmazané/odstránené súbory.
     """
     import spoofer
 
     drive_files = list_drive_vault_files()
-    if not drive_files:
-        return {
-            "status": "ok",
-            "synced": 0,
-            "total": 0,
-            "message": "V priečinku IG_VAULT na Google Drive sa nenašli žiadne videá ani fotky."
-        }
+    active_drive_ids = {df["id"]: df for df in drive_files}
 
     existing_videos = db.get_all_vault_videos()
-    existing_gdrive_ids = {v.get("gdrive_file_id") for v in existing_videos if v.get("gdrive_file_id")}
+    existing_by_gdrive_id = {v.get("gdrive_file_id"): v for v in existing_videos if v.get("gdrive_file_id")}
 
+    # 1. Odstránime z DB záznamy, ktoré boli na Google Drive odstránené / presunuté do koša
+    removed_count = 0
+    for v in existing_videos:
+        gid = v.get("gdrive_file_id")
+        if v.get("storage_type") == "gdrive" and gid and gid not in active_drive_ids:
+            if v.get("status") in ("available", "scheduled"):
+                db.delete_vault_video(v["id"])
+                removed_count += 1
+
+    # 2. Aktualizujeme folder_name pre existujúce videá
+    for gid, df in active_drive_ids.items():
+        if gid in existing_by_gdrive_id:
+            existing = existing_by_gdrive_id[gid]
+            folder_name = df.get("folder_name", "")
+            if existing.get("folder_name") != folder_name:
+                db.update_vault_video_folder(existing["id"], folder_name)
+
+    # 3. Pridáme nové médiá
     new_count = 0
     temp_thumb_dir = os.path.join(DATA_DIR, "vault", "thumbs")
     os.makedirs(temp_thumb_dir, exist_ok=True)
 
     for df in drive_files:
         file_id = df["id"]
-        if file_id in existing_gdrive_ids:
+        if file_id in existing_by_gdrive_id:
             continue
 
         orig_name = df.get("name", f"media_{file_id}")
+        folder_name = df.get("folder_name", "")
         mime = df.get("mimeType", "")
         ext = os.path.splitext(orig_name)[1].lower()
         is_photo = mime.startswith("image/") or (ext in spoofer.IMAGE_EXT)
@@ -413,13 +464,61 @@ def sync_drive_vault_to_db(quick=True):
             gdrive_file_id=file_id,
             gdrive_web_view_link=web_link,
             media_type=media_type,
-            tag='Voľné'
+            tag='Voľné',
+            folder_name=folder_name
         )
         new_count += 1
 
     return {
         "status": "ok",
         "synced": new_count,
+        "removed": removed_count,
         "total_in_drive": len(drive_files),
-        "message": f"Synchronizácia dokončená. Pridaných {new_count} nových médií z Google Drive."
+        "message": f"Synchronizácia dokončená. Pridaných {new_count} nových, odstránených {removed_count} neplatných médií."
     }
+
+
+def get_vault_folders_summary(account_id=None):
+    """
+    Vráti prehľad zložiek (kopie 1, kopie 2...) s počtom celkových a voľných videí.
+    """
+    all_videos = db.get_all_vault_videos()
+    gdrive_videos = [v for v in all_videos if v.get("storage_type") == "gdrive"]
+
+    target_user = ""
+    if account_id:
+        acc = db.get_account_by_id(account_id)
+        if acc:
+            target_user = acc.get("username", "")
+
+    folders_map = {}
+    for v in gdrive_videos:
+        folder = v.get("folder_name") or "(Koreň Drive)"
+        if folder not in folders_map:
+            folders_map[folder] = {
+                "name": folder,
+                "total_count": 0,
+                "unused_count": 0,
+                "sample_videos": []
+            }
+        folders_map[folder]["total_count"] += 1
+
+        used_accounts = [u.strip().lstrip("@").lower() for u in (v.get("used_by_accounts") or "").split(",") if u.strip()]
+        is_used = False
+        if target_user and target_user.lstrip("@").lower() in used_accounts:
+            is_used = True
+        elif not target_user and v.get("status") in ("used", "scheduled"):
+            is_used = True
+
+        if not is_used:
+            folders_map[folder]["unused_count"] += 1
+
+        if len(folders_map[folder]["sample_videos"]) < 3:
+            folders_map[folder]["sample_videos"].append({
+                "id": v["id"],
+                "name": v["original_name"],
+                "size_fmt": format_bytes(v.get("file_size", 0))
+            })
+
+    sorted_folders = sorted(folders_map.values(), key=lambda f: f["name"])
+    return sorted_folders

@@ -807,11 +807,15 @@ def serve_vault_media(subpath):
 def download_desktop_spoofer():
     """Umožňuje stiahnuť desktop spoofer balík priamo z webu na akýkoľvek PC."""
     zip_path = os.path.join(BASE_DIR, "static", "desktop_spoofer.zip")
-    if not os.path.exists(zip_path):
-        spoofer_dir = os.path.join(BASE_DIR, "desktop_spoofer")
-        if os.path.exists(spoofer_dir):
-            import shutil
-            shutil.make_archive(os.path.join(BASE_DIR, "static", "desktop_spoofer"), 'zip', spoofer_dir)
+    spoofer_dir = os.path.join(BASE_DIR, "desktop_spoofer")
+    main_script = os.path.join(spoofer_dir, "spoofer_desktop.py")
+    need_rebuild = not os.path.exists(zip_path)
+    if os.path.exists(zip_path) and os.path.exists(main_script):
+        if os.path.getmtime(main_script) > os.path.getmtime(zip_path):
+            need_rebuild = True
+    if need_rebuild and os.path.exists(spoofer_dir):
+        import shutil
+        shutil.make_archive(os.path.join(BASE_DIR, "static", "desktop_spoofer"), 'zip', spoofer_dir)
     return send_from_directory(
         os.path.join(BASE_DIR, "static"),
         "desktop_spoofer.zip",
@@ -1530,13 +1534,16 @@ def api_planner_gdrive_summary():
             "size_fmt": gdrive_vault.format_bytes(v.get("file_size", 0))
         })
 
+    folders = gdrive_vault.get_vault_folders_summary(account_id=account_id)
+
     return jsonify({
         "status": "ok",
         "connected": True,
         "total_count": total_count,
         "unused_count": unused_count,
         "target_user": target_user,
-        "sample_videos": sample_videos
+        "sample_videos": sample_videos,
+        "folders": folders
     }), 200
 
 
@@ -1561,6 +1568,7 @@ def api_planner_gdrive_schedule():
     frequency = data.get("frequency") or "1_evening"
     randomize = str(data.get("randomize", "true")).lower() in ("true", "1", "yes")
     only_unused = str(data.get("only_unused", "true")).lower() in ("true", "1", "yes")
+    folder_name = data.get("folder_name") or ""
     caption = data.get("caption") or ""
     hashtags = data.get("hashtags") or ""
     selected_ids = data.get("selected_ids") or []
@@ -1574,7 +1582,8 @@ def api_planner_gdrive_schedule():
         only_unused=only_unused,
         default_caption=caption,
         default_hashtags=hashtags,
-        selected_video_ids=selected_ids
+        selected_video_ids=selected_ids,
+        folder_name=folder_name
     )
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code

@@ -617,11 +617,49 @@ def init_gdrive():
         return None, f"Chyba autentifikacie: {e}"
 
 
-def upload_to_drive(svc, path, name):
+_DRIVE_FOLDER_CACHE = {}
+
+
+def get_or_create_drive_folder(svc, folder_name, parent_id=DEFAULT_VAULT_ID):
+    """Nájde existujúci alebo vytvorí nový priečinok na Google Drive v rodičovskom priečinku."""
+    if not folder_name:
+        return parent_id
+    cache_key = f"{parent_id}:{folder_name}"
+    if cache_key in _DRIVE_FOLDER_CACHE:
+        return _DRIVE_FOLDER_CACHE[cache_key]
+    try:
+        q = f"name = '{folder_name}' and '{parent_id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+        res = svc.files().list(
+            q=q,
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
+        files = res.get("files", [])
+        if files:
+            f_id = files[0]["id"]
+            _DRIVE_FOLDER_CACHE[cache_key] = f_id
+            return f_id
+        meta = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id]
+        }
+        f = svc.files().create(body=meta, fields="id, name", supportsAllDrives=True).execute()
+        f_id = f["id"]
+        _DRIVE_FOLDER_CACHE[cache_key] = f_id
+        return f_id
+    except Exception as e:
+        print(f"Chyba pri vytvarani priecinka na Drive {folder_name}: {e}")
+        return parent_id
+
+
+def upload_to_drive(svc, path, name, folder_id=None):
     from googleapiclient.http import MediaFileUpload
-    meta = {"name": name, "parents": [DEFAULT_VAULT_ID]}
+    target_parent = folder_id or DEFAULT_VAULT_ID
+    meta = {"name": name, "parents": [target_parent]}
     media = MediaFileUpload(path, mimetype="video/mp4", resumable=True)
-    req = svc.files().create(body=meta, media_body=media, fields="id,name")
+    req = svc.files().create(body=meta, media_body=media, fields="id,name", supportsAllDrives=True)
     resp = None
     while resp is None:
         _, resp = req.next_chunk()
@@ -639,23 +677,28 @@ class DriveUploadManager:
         self.worker = threading.Thread(target=self._worker_loop, daemon=True)
         self.worker.start()
 
-    def queue_upload(self, file_path: str, file_name: str):
+    def queue_upload(self, file_path: str, file_name: str, folder_name: str = None):
         with self.lock:
             self.active_count += 1
-        self.queue.put((file_path, file_name))
+        self.queue.put((file_path, file_name, folder_name))
+        target_info = f" ({folder_name}/{file_name})" if folder_name else f" ({file_name})"
         if self.log:
-            self.log(f"  ☁ Zaradené do pozadia na Drive upload: {file_name}")
+            self.log(f"  ☁ Zaradené do pozadia na Drive upload:{target_info}")
 
     def _worker_loop(self):
         while True:
             item = self.queue.get()
             if item is None:
                 break
-            path, name = item
+            path, name, folder_name = item
             try:
-                upload_to_drive(self.gdrive_svc, path, name)
+                target_folder_id = None
+                if folder_name and self.gdrive_svc:
+                    target_folder_id = get_or_create_drive_folder(self.gdrive_svc, folder_name, DEFAULT_VAULT_ID)
+                upload_to_drive(self.gdrive_svc, path, name, target_folder_id)
+                tag = f"{folder_name}/{name}" if folder_name else name
                 if self.log:
-                    self.log(f"  ☁ Drive upload OK: {name}")
+                    self.log(f"  ☁ Drive upload OK: {tag}")
             except Exception as e:
                 if self.log:
                     self.log(f"  ☁ Drive CHYBA pri {name}: {e}")
@@ -1069,7 +1112,8 @@ class ReelsStudio(tk.Tk):
             self._set_progress(done, total)
 
             if uploader:
-                uploader.queue_upload(out1, name1)
+                folder_name1 = "kopie 1" if variants > 1 else None
+                uploader.queue_upload(out1, name1, folder_name=folder_name1)
 
             # 2. Ďalšie kópie z hlavného videa s náhodným jitterom (Paralelne na viacerých jadrách CPU)
             if variants > 1 and self.is_running:
@@ -1080,7 +1124,8 @@ class ReelsStudio(tk.Tk):
                 def _process_copy(v_idx):
                     if not self.is_running:
                         return False
-                    target_dir_v = os.path.join(out_dir, f"kopie {v_idx + 1}")
+                    folder_name_v = f"kopie {v_idx + 1}"
+                    target_dir_v = os.path.join(out_dir, folder_name_v)
                     os.makedirs(target_dir_v, exist_ok=True)
 
                     tok_v = uuid.uuid4().hex[:6]
@@ -1094,9 +1139,9 @@ class ReelsStudio(tk.Tk):
 
                     if ok_v:
                         mb_v = round(os.path.getsize(out_v) / 1048576, 1) if os.path.exists(out_v) else 0
-                        self.log(f"  ✓ OK kópia {v_idx+1}/{variants} s jitterom: {dur_v}s | {mb_v} MB (kopie {v_idx+1}/{name_v})")
+                        self.log(f"  ✓ OK kópia {v_idx+1}/{variants} s jitterom: {dur_v}s | {mb_v} MB ({folder_name_v}/{name_v})")
                         if uploader:
-                            uploader.queue_upload(out_v, name_v)
+                            uploader.queue_upload(out_v, name_v, folder_name=folder_name_v)
                         return True
                     else:
                         self.log(f"  ✗ CHYBA kópie {v_idx+1} po {dur_v}s")

@@ -345,17 +345,19 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
     }
 
 
-def schedule_gdrive_reel_set(account_id: int, count: int = None,
-                             start_date_str: str = None, frequency: str = "1_evening",
+def schedule_gdrive_reel_set(account_id: int, count: int = 7, start_date_str: str = None,
+                             frequency: str = "1_evening",
                              randomize: bool = True, only_unused: bool = True,
                              default_caption: str = "", default_hashtags: str = "",
-                             selected_video_ids: list = None) -> dict:
+                             selected_video_ids: list = None,
+                             folder_name: str = None) -> dict:
     """
     Naplánuje sadu Reels priamo z Google Drive priečinka IG_VAULT pre konkrétny účet.
     1. Zosynchronizuje zoznam videí z Google Drive bez zaťaženia VPS disku.
-    2. Nájde dostupné videá, náhodne ich premieša (randomize).
-    3. Rozvrhne ich do US časových špičiek (s anti-bot jitterom ±7 až 23 min).
-    4. Pri publikovaní ich server streamuje priamo z Google Drive.
+    2. Vyfiltruje videá z určenej zložky (kopie 1, kopie 2...), aby nedochádzalo k duplicitám na jednom účte.
+    3. Nájde dostupné videá, náhodne ich premieša (randomize).
+    4. Rozvrhne ich do US časových špičiek (s anti-bot jitterom ±7 až 23 min).
+    5. Pri publikovaní ich server streamuje priamo z Google Drive.
     """
     account = db.get_account_by_id(account_id)
     if not account:
@@ -378,6 +380,24 @@ def schedule_gdrive_reel_set(account_id: int, count: int = None,
             "status": "error",
             "message": "Na vašom Google Drive v priečinku IG_VAULT sa nenašli žiadne video súbory."
         }
+
+    # Filter podľa zložky / variantu kópie (napr. kopie 1 pre účet 1, kopie 2 pre účet 2...)
+    if folder_name and folder_name not in ("all", "vsetky", ""):
+        if folder_name == "auto":
+            all_accs = db.get_all_accounts()
+            acc_index = 0
+            for idx, a in enumerate(all_accs):
+                if a["id"] == account_id:
+                    acc_index = idx
+                    break
+            suggested_folder = f"kopie {acc_index + 1}"
+            filtered_by_folder = [v for v in gdrive_videos if (v.get("folder_name") or "") == suggested_folder]
+            if filtered_by_folder:
+                gdrive_videos = filtered_by_folder
+        else:
+            filtered_by_folder = [v for v in gdrive_videos if (v.get("folder_name") or "") == folder_name]
+            if filtered_by_folder:
+                gdrive_videos = filtered_by_folder
 
     chosen_pool = []
     if selected_video_ids:

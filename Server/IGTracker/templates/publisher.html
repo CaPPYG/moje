@@ -1837,6 +1837,20 @@
             </div>
           </div>
 
+          <!-- GDrive Subfolder / Copy Selection -->
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+              <span><i class="fas fa-folder-tree" style="color: #38bdf8;"></i> <b>Zložka / Kópia na Google Drive (pre tento účet):</b></span>
+              <span id="setFolderBadge" style="font-size: 0.72rem; color: #38bdf8; background: rgba(56, 189, 248, 0.15); padding: 2px 8px; border-radius: 6px;">Unikátne videá</span>
+            </label>
+            <select id="setGdriveFolderSelect" class="form-input" style="padding: 8px 12px; font-weight: 700; color: #38bdf8; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.4);" onchange="onGdriveFolderChanged()">
+              <option value="auto">⚡ Automaticky podľa účtu (napr. Účet 1 -> kopie 1)</option>
+            </select>
+            <div style="font-size: 0.73rem; color: #94a3b8; margin-top: 4px;">
+              Každá zložka (<b>kopie 1, kopie 2, kopie 3...</b>) obsahuje sadu unikátnych videí. Priradením zložky k profilu zabezpečíte, že sa na profile nebudú opakovať rovnaké reelska!
+            </div>
+          </div>
+
           <!-- GDrive Selection Options -->
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
             <div class="form-group" style="margin-bottom: 0;">
@@ -3723,6 +3737,27 @@
       updateSetPeakPreview();
     }
 
+    function onGdriveFolderChanged() {
+      const folderSelect = document.getElementById('setGdriveFolderSelect');
+      const badge = document.getElementById('setFolderBadge');
+      const textEl = document.getElementById('setGdriveDetailsText');
+      if (!folderSelect || !gdriveSummaryData) return;
+
+      const chosen = folderSelect.value;
+      if (chosen === 'auto') {
+        if (badge) badge.textContent = '⚡ Auto kópia';
+      } else if (chosen === 'all') {
+        if (badge) badge.textContent = '🌐 Všetky zložky';
+      } else {
+        if (badge) badge.textContent = `📁 ${chosen}`;
+        const fInfo = (gdriveSummaryData.folders || []).find(f => f.name === chosen);
+        if (fInfo && textEl) {
+          textEl.innerHTML = `Vybraná zložka <b>${fInfo.name}</b>: <b>${fInfo.total_count} unikátnych videí</b> (${fInfo.unused_count} nepoužitých). Žiadne duplicity pre tento profil!`;
+        }
+      }
+      updateSetPeakPreview();
+    }
+
     async function refreshGdrivePlannerSummary() {
       const selectEl = document.getElementById('setAccountSelect');
       const titleEl = document.getElementById('setGdriveStatusTitle');
@@ -3743,6 +3778,34 @@
           if (titleEl) titleEl.innerHTML = `☁️ Google Drive IG_VAULT (${data.total_count} videí na Drive)`;
           if (textEl) {
             textEl.innerHTML = `K dispozícii je <b>${data.total_count} videí</b> v priečinku IG_VAULT na 5 TB Drive. Z toho <b>${data.unused_count} videí</b> zatiaľ tento profil nepoužil.`;
+          }
+
+          // Populate folders dropdown
+          const folderSelect = document.getElementById('setGdriveFolderSelect');
+          if (folderSelect) {
+            const prevVal = folderSelect.value;
+            const folders = data.folders || [];
+            
+            const accIdx = selectEl.selectedIndex >= 0 ? selectEl.selectedIndex : 0;
+            const autoFolderName = `kopie ${accIdx + 1}`;
+
+            let opts = `<option value="auto">⚡ Automaticky podľa účtu (${autoFolderName})</option>`;
+            folders.forEach(f => {
+              const isRecommended = (f.name === autoFolderName);
+              const recTag = isRecommended ? ' ★ ODPORÚČANÉ' : '';
+              opts += `<option value="${escapeHtml(f.name)}">📁 ${escapeHtml(f.name)} (${f.total_count} videí • ${f.unused_count} nepoužitých)${recTag}</option>`;
+            });
+            opts += `<option value="all">🌐 Všetky zložky (premiešať celý Drive)</option>`;
+            folderSelect.innerHTML = opts;
+
+            if (prevVal && prevVal !== 'auto' && folders.some(f => f.name === prevVal)) {
+              folderSelect.value = prevVal;
+            } else if (folders.some(f => f.name === autoFolderName)) {
+              folderSelect.value = autoFolderName;
+            } else {
+              folderSelect.value = 'auto';
+            }
+            onGdriveFolderChanged();
           }
         } else {
           if (titleEl) titleEl.innerHTML = '⚠️ Google Drive nepripojený';
@@ -3897,6 +3960,7 @@
         const countSel = document.getElementById('setGdriveCountSelect');
         const customCountEl = document.getElementById('setGdriveCustomCount');
         const filterSel = document.getElementById('setGdriveFilterSelect');
+        const folderSel = document.getElementById('setGdriveFolderSelect');
         const randEl = document.getElementById('setGdriveRandomize');
 
         let countVal = null;
@@ -3928,6 +3992,7 @@
               frequency: freqEl ? freqEl.value : '1_evening',
               randomize: randEl ? randEl.checked : true,
               only_unused: filterSel ? filterSel.value === 'unused' : true,
+              folder_name: folderSel ? folderSel.value : 'auto',
               caption: capEl ? capEl.value : '',
               hashtags: tagEl ? tagEl.value : ''
             })

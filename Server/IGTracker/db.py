@@ -99,6 +99,8 @@ def init_db():
             conn.execute("ALTER TABLE vault_videos ADD COLUMN last_used_at TIMESTAMP DEFAULT NULL")
         if "tag" not in vault_cols:
             conn.execute("ALTER TABLE vault_videos ADD COLUMN tag TEXT DEFAULT 'Voľné'")
+        if "folder_name" not in vault_cols:
+            conn.execute("ALTER TABLE vault_videos ADD COLUMN folder_name TEXT DEFAULT ''")
 
         # ── Auto-Planner: scheduled / spoofed slots per account ──────────
         conn.execute("""
@@ -401,20 +403,25 @@ def get_all_settings():
 
 def add_vault_video(filename, original_name, file_size=0, duration_seconds=0.0, width=0, height=0,
                     thumbnail_path=None, storage_type='local', gdrive_file_id=None, gdrive_web_view_link=None,
-                    media_type='video', tag='Voľné'):
+                    media_type='video', tag='Voľné', folder_name=''):
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute("""
             INSERT INTO vault_videos (
                 filename, original_name, file_size, duration_seconds, width, height,
                 thumbnail_path, status, storage_type, gdrive_file_id, gdrive_web_view_link,
-                media_type, tag
+                media_type, tag, folder_name
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'available', ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'available', ?, ?, ?, ?, ?, ?)
         """, (filename, original_name, file_size, duration_seconds, width, height,
               thumbnail_path, storage_type, gdrive_file_id, gdrive_web_view_link,
-              media_type, tag))
+              media_type, tag, folder_name))
         return cur.lastrowid
+
+
+def update_vault_video_folder(video_id, folder_name):
+    with get_db() as conn:
+        conn.execute("UPDATE vault_videos SET folder_name = ? WHERE id = ?", (folder_name, video_id))
 
 
 def get_all_vault_videos(status=None):
