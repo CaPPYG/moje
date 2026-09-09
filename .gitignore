@@ -50,3 +50,7 @@ Thumbs.db
 # Submodules / other repos
 sach/
 
+
+# Generated spoofed media
+**/data/spoofed/
+**/data/vault/

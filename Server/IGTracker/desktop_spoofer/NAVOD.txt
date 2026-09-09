@@ -1,47 +1,47 @@
 ================================================================================
-  IG TRACKER & PUBLISHER — LOKÁLNY DESKTOP SPOOFER (NÁVOD NA POUŽITIE)
+  IG TRACKER & PUBLISHER — REELS STUDIO DESKTOP SPOOFER (NÁVOD)
 ================================================================================
 
-Tento balík vám umožňuje využiť plný výkon vášho osobného počítača (viacjadrový
-procesor + grafická karta Nvidia / AMD / Intel) na bleskové naspoofovanie
-desiatok až stoviek Reels videí naraz a ich okamžitý upload na váš 5 TB Google Drive.
-
-Vďaka tomu je záťaž na cloudový server rovná NULE (0 MB disk, 0% CPU záťaž).
-
---------------------------------------------------------------------------------
-AKO POUŽIŤ NA AKOMKOĽVEK POČÍTAČI (WINDOWS):
---------------------------------------------------------------------------------
-
-1. ROZBALENIE BALÍKA:
-   - Rozbaľte tento priečinok kdekoľvek na počítači.
-
-2. PRÍPRAVA VIDEÍ:
-   - Do zložky "videa_na_spoof" (vytvorí sa automaticky, alebo ju vytvorte)
-     vložte vaše pripravené MP4 / MOV videá.
-
-3. SPUSTENIE:
-   - Dvakrát kliknite na súbor:
-     run_spoofer.bat
-
-4. PRIEBEH:
-   - Skript automaticky:
-     a) Deteguje grafickú kartu (Nvidia NVENC / Intel QSV / CPU).
-     b) Opýta sa vás na cieľový región (USA: Los Angeles & Las Vegas alebo Slovensko).
-     c) Opýta sa, koľko unikátnych variantov z každého videa chcete vytvoriť.
-     d) Aplikuje náhodné pixelové filtre (farby, deband, micro-jitter).
-     e) Zapíše čistý smartfónový EXIF podpis (iPhone 15/16 Pro, Galaxy S24, Pixel 9)
-        a GPS súradnice hotspotov (Hollywood, Beverly Hills, Venice Beach, Bellagio atď.).
-     f) Automaticky nahrá hotové videá priamo do vášho Google Drive priečinka "IG_VAULT".
-
-5. ZOBRAZENIE NA WEBE:
-   - Otvorte webové rozhranie: https://garcarzp.online/ig/publisher
-   - Prejdite do záložky "🎬 Media Vault"
-   - Kliknite na tlačidlo: [🔄 Synchronizovať z Google Drive]
-   - Všetky videá sú okamžite pripravené v kalendári na publikovanie!
+Tento grafický nástroj vám umožňuje využiť plný výkon vášho osobného počítača
+(viacjadrový CPU + grafická karta Nvidia / AMD / Intel) na bleskové spracovanie:
+1. Sťahovanie Reels videí z URL (Instagram, TikTok, YouTube cez yt-dlp)
+2. AI Upscaling do 1080p (Real-ESRGAN / Lanczos)
+3. Color Grading pomocou 3D LUT tabuliek (.cube) + organické filmové zrno
+4. Hromadný (Batch) Anti-Duplicate Spoofing (pixel jitter, EXIF, GPS hotspoty LA & Las Vegas)
+5. Priamy upload hotových videí na 5 TB Google Drive do priečinka IG_VAULT
 
 --------------------------------------------------------------------------------
-POŽIADAVKY NA POČÍTAČI (AK CHÝBAJÚ):
+AKO SPUSTIŤ NA AKOMKOĽVEK POČÍTAČI (WINDOWS):
+--------------------------------------------------------------------------------
+
+1. Dvakrát kliknite na súbor:
+   👉 run_spoofer.bat
+
+2. Otvorí sa moderné tmavé grafické okno "Reels Studio — Desktop Spoofer":
+   - ZÁLOŽKA 1: [ 🚀 Dávkový Batch Spoof ]
+     * Vyberte zložku s videami na vašom disku.
+     * Zvoľte región (USA / Slovensko), počet variantov na jedno video.
+     * Nastavte Color Grading (LUT tabuľka, posuvník Film Grain).
+     * Zvoľte metódu Upscalingu (None / Lanczos / Real-ESRGAN).
+     * Kliknite na [ ▶ Spustiť dávkové spracovanie ].
+
+   - ZÁLOŽKA 2: [ 🔗 Stiahnuť Reel z URL ]
+     * Vložte odkaz na Reel (Instagram, TikTok, YouTube).
+     * Nastavte Color Grading & Grain.
+     * Kliknite na [ ⬇ Stiahnuť & Spracovať Reel ].
+
+3. SYNCHRONIZÁCIA DO WEBOVÉHO ŠTÚDIA:
+   - Ak je zaškrtnuté "Nahrať na Google Drive (IG_VAULT)", videá sa nahrajú na váš Drive.
+   - Na webe https://garcarzp.online/ig/publisher v záložke "Media Vault"
+     kliknite na [ 🔄 Synchronizovať z Google Drive ] a videá sú okamžite pripravené!
+
+--------------------------------------------------------------------------------
+POŽIADAVKY (AK CHÝBAJÚ NA NOVOM PC):
 --------------------------------------------------------------------------------
 - Python 3.10+ (pri inštalácii zaškrtnite "Add python.exe to PATH")
-- FFmpeg (v príkazovom riadku napíšte: winget install Gyan.FFmpeg)
-- ExifTool (voliteľné pre GPS zápis: winget install PhilHarvey.ExifTool)
+- FFmpeg:
+  winget install Gyan.FFmpeg
+- ExifTool (pre GPS & device fingerprinting):
+  winget install PhilHarvey.ExifTool
+- Real-ESRGAN (voliteľné pre AI upscale):
+  Stiahnite realesrgan-ncnn-vulkan z GitHubu a vložte do PATH alebo zložky nástroja.

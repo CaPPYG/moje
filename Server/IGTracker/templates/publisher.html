@@ -1540,6 +1540,9 @@
             <button type="button" class="qs-source-btn" id="btnQsSourceFile" onclick="switchQuickSpoofSource('file')">
               <i class="fas fa-laptop" style="color: #ec4899;"></i> Nahrať súbor z PC
             </button>
+            <button type="button" class="qs-source-btn" id="btnQsSourceUrl" onclick="switchQuickSpoofSource('url')">
+              <i class="fas fa-link" style="color: #a78bfa;"></i> Stiahnuť z URL
+            </button>
           </div>
 
           <!-- A) VAULT PICKER SECTION -->
@@ -1606,6 +1609,19 @@
               </button>
             </div>
           </div>
+
+          <!-- C) URL DOWNLOAD SECTION -->
+          <div id="qsUrlSection" style="display: none;">
+            <div style="margin-bottom: 8px;">
+              <label class="form-label" style="font-size: 0.76rem; margin-bottom: 4px;">Instagram / TikTok / YouTube URL:</label>
+              <input type="url" id="qsUrlInput" class="form-input" placeholder="https://www.instagram.com/reel/..." style="font-size: 0.82rem;">
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+              <input type="checkbox" id="qsUrlSaveVault" style="accent-color: #7c5cfc;">
+              <label for="qsUrlSaveVault" style="font-size: 0.78rem; color: #94a3b8; cursor: pointer;">Uložiť aj do Media Vaultu po stiahnutí</label>
+            </div>
+            <div style="font-size: 0.72rem; color: #64748b; margin-top: 6px;">Podporuje: Instagram, TikTok, YouTube Shorts, Facebook Reels a 1000+ platforiem (cez yt-dlp)</div>
+          </div>
         </div>
 
         <!-- Step 2: Target Region -->
@@ -1626,6 +1642,31 @@
                 <div style="font-size: 0.72rem; color: #94a3b8;">Bratislava & Košice</div>
               </div>
             </label>
+          </div>
+        </div>
+
+        <!-- Step 3: Color Grading + Film Grain -->
+        <div class="form-group" style="margin-bottom: 14px; background: rgba(124, 92, 252, 0.07); border: 1px solid rgba(124, 92, 252, 0.2); border-radius: 12px; padding: 12px 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <label style="font-size: 0.78rem; font-weight: 700; color: #c4b5fd; display: flex; align-items: center; gap: 6px;">
+              <i class="fas fa-palette"></i> 3. Color Grading + Film Grain (14 Mbps H.264)
+            </label>
+            <label class="toggle-switch" style="margin: 0;">
+              <input type="checkbox" id="qsColorGrade" checked onchange="onQsGradeToggle(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div id="qsGradeControls">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <label style="font-size: 0.74rem; color: #94a3b8; min-width: 110px;">Film Grain <span id="qsGrainVal">9</span>/20:</label>
+              <input type="range" id="qsGrainSlider" min="1" max="20" value="9" style="flex: 1; accent-color: #7c5cfc;" oninput="document.getElementById('qsGrainVal').textContent = this.value">
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <label style="font-size: 0.74rem; color: #94a3b8; min-width: 110px;">LUT tabuľka:</label>
+              <select id="qsLutSelect" class="form-input" style="flex: 1; font-size: 0.78rem; padding: 5px 8px;">
+                <option value="">— bez LUT —</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -2696,6 +2737,7 @@
       }
 
       if (modal) modal.style.display = 'flex';
+      loadQsLuts();
     }
 
     function closeQuickSpoofModal() {
@@ -2709,13 +2751,41 @@
       qsActiveSource = source;
       const btnVault = document.getElementById('btnQsSourceVault');
       const btnFile = document.getElementById('btnQsSourceFile');
+      const btnUrl = document.getElementById('btnQsSourceUrl');
       const vaultSec = document.getElementById('qsVaultSection');
       const fileSec = document.getElementById('qsFileSection');
+      const urlSec = document.getElementById('qsUrlSection');
 
       if (btnVault) btnVault.classList.toggle('active', source === 'vault');
       if (btnFile) btnFile.classList.toggle('active', source === 'file');
+      if (btnUrl) btnUrl.classList.toggle('active', source === 'url');
       if (vaultSec) vaultSec.style.display = (source === 'vault') ? 'block' : 'none';
       if (fileSec) fileSec.style.display = (source === 'file') ? 'block' : 'none';
+      if (urlSec) urlSec.style.display = (source === 'url') ? 'block' : 'none';
+
+      // URL mod: hide region selector (not needed for download+spoof)
+      const regionGrp = document.getElementById('qsRegionGroup');
+      if (regionGrp) regionGrp.style.display = (source === 'url') ? 'none' : 'block';
+    }
+
+    function onQsGradeToggle(checked) {
+      const controls = document.getElementById('qsGradeControls');
+      if (controls) controls.style.display = checked ? 'flex' : 'none';
+    }
+
+    async function loadQsLuts() {
+      try {
+        const r = await fetch(`${PREFIX}/api/spoofer/luts`, { headers: { 'X-Master-Password': PWD } });
+        if (!r.ok) return;
+        const data = await r.json();
+        const sel = document.getElementById('qsLutSelect');
+        if (!sel || !data.luts || sel.options.length > 1) return;
+        data.luts.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name; opt.textContent = name.replace('.cube', '');
+          sel.appendChild(opt);
+        });
+      } catch (e) { /* silent */ }
     }
 
     function qsSelectVaultVideo(id) {
@@ -2894,6 +2964,55 @@
 
       if (qsActiveSource === 'vault') {
         videoId = qsSelectedVideoId;
+      } else if (qsActiveSource === 'url') {
+        const urlInput = document.getElementById('qsUrlInput');
+        const url = (urlInput ? urlInput.value : '').trim();
+        if (!url || !url.startsWith('http')) {
+          showToast('Zadajte platny URL odkaz na Reel.', 'error'); return;
+        }
+        // Run download-reel flow
+        const progBox = document.getElementById('quickSpoofProgressBox');
+        const progText = document.getElementById('quickSpoofProgressText');
+        const resBox = document.getElementById('quickSpoofResultBox');
+        const btnRun = document.getElementById('btnRunQuickSpoof');
+        if (progBox) progBox.style.display = 'flex';
+        if (progText) progText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Stiahavam Reel (yt-dlp) a spoofujem...';
+        if (resBox) resBox.style.display = 'none';
+        if (btnRun) { btnRun.disabled = true; btnRun.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Stiahavam...'; }
+        const doGrade = document.getElementById('qsColorGrade') ? document.getElementById('qsColorGrade').checked : true;
+        const grain = document.getElementById('qsGrainSlider') ? parseInt(document.getElementById('qsGrainSlider').value) : 9;
+        const lut = document.getElementById('qsLutSelect') ? document.getElementById('qsLutSelect').value : '';
+        const saveVault = document.getElementById('qsUrlSaveVault') ? document.getElementById('qsUrlSaveVault').checked : false;
+        try {
+          const res = await fetch(`${PREFIX}/api/spoofer/download-reel`, {
+            method: 'POST', headers: { 'X-Master-Password': PWD, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, spoof: true, color_grade: doGrade, grain, lut, save_to_vault: saveVault })
+          });
+          const data = await res.json();
+          if (res.ok && data.status === 'ok') {
+            lastQuickSpoofedResult = data;
+            showToast(data.message || 'Reel stiahnuty a spoofovany!', 'success');
+            if (progBox) progBox.style.display = 'none';
+            if (resBox) resBox.style.display = 'block';
+            const resVideo = document.getElementById('quickSpoofResultVideo');
+            if (resVideo) { resVideo.src = data.video_url; resVideo.load(); }
+            const badgeDev = document.getElementById('qsBadgeDevice');
+            const badgeCity = document.getElementById('qsBadgeCity');
+            const btnDl = document.getElementById('btnDownloadQuickSpoofed');
+            if (badgeDev) badgeDev.innerHTML = `<i class="fas fa-mobile-screen" style="color:#ec4899;"></i> ${escapeHtml(data.meta && data.meta.device ? data.meta.device : 'Smartfon')}`;
+            if (badgeCity) badgeCity.innerHTML = `<i class="fas fa-location-dot" style="color:#10b981;"></i> GPS: ${escapeHtml(data.meta && data.meta.city ? data.meta.city : 'US')}`;
+            if (btnDl) { btnDl.href = data.download_url; btnDl.setAttribute('download', data.filename); }
+          } else {
+            showToast(data.message || 'Chyba pri stahovani reelu.', 'error');
+            if (progBox) progBox.style.display = 'none';
+          }
+        } catch (err) {
+          console.error(err); showToast('Chyba spojenia pri stahovani.', 'error');
+          if (progBox) progBox.style.display = 'none';
+        } finally {
+          if (btnRun) { btnRun.disabled = false; btnRun.innerHTML = '<i class="fas fa-bolt"></i> Spustit Rychly Spoof'; }
+        }
+        return;
       } else {
         file = qsSelectedLocalFile;
       }
@@ -2902,7 +3021,7 @@
         if (qsActiveSource === 'vault') {
           showToast('Kliknite na video zo zoznamu Vaultu a vyberte ho.', 'error');
         } else {
-          showToast('Vyberte MP4 súbor z počítača.', 'error');
+          showToast('Vyberte MP4 subor z pocitaca.', 'error');
         }
         return;
       }
@@ -2913,14 +3032,21 @@
       const btnRun = document.getElementById('btnRunQuickSpoof');
 
       if (progBox) progBox.style.display = 'flex';
-      if (progText) progText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Prebieha FFmpeg kódovanie (yuv420p, faststart, EXIF & GPS spoofing)...';
+      if (progText) progText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Prebieha FFmpeg pipeline (14 Mbps H.264, Color Grade, GPS spoofing)...';
       if (resBox) resBox.style.display = 'none';
       if (btnRun) { btnRun.disabled = true; btnRun.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Spoofujem...'; }
+
+      const doGrade = document.getElementById('qsColorGrade') ? document.getElementById('qsColorGrade').checked : true;
+      const grain = document.getElementById('qsGrainSlider') ? parseInt(document.getElementById('qsGrainSlider').value) : 9;
+      const lut = document.getElementById('qsLutSelect') ? document.getElementById('qsLutSelect').value : '';
 
       const formData = new FormData();
       if (videoId) formData.append('video_id', videoId);
       if (file) formData.append('file', file);
       formData.append('region', selectedRegion);
+      formData.append('color_grade', doGrade ? 'true' : 'false');
+      formData.append('grain', grain.toString());
+      if (lut) formData.append('lut', lut);
       if (typeof ACCOUNT_ID !== 'undefined' && ACCOUNT_ID) formData.append('account_id', ACCOUNT_ID);
 
       try {

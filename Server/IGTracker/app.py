@@ -1170,13 +1170,22 @@ def api_vault_delete(video_id):
 @auth_required
 def api_quick_spoof():
     """
-    Rýchly manuálny spoofing videa priamo cez webové rozhranie.
-    Podporuje výber z Vaultu (Google Drive / lokálne) aj priamy upload z PC.
-    Aplikuje FFmpeg mikro-kontrast jitter (yuv420p, faststart), EXIF smartphone fingerprint a GPS v LA/Vegas.
+    Rychly manualny spoofing videa priamo cez webove rozhranie.
+    Podporuje vyber z Vaultu (Google Drive / lokalne) aj priamy upload z PC.
+    Aplikuje FFmpeg mikro-kontrast jitter + color grading (14 Mbps H.264, LUT, grain),
+    EXIF smartphone fingerprint a GPS v LA/Vegas.
     """
-    video_id = request.form.get("video_id", type=int)
-    region = (request.form.get("region") or "us").lower()
+    video_id   = request.form.get("video_id", type=int)
+    region     = (request.form.get("region") or "us").lower()
     account_id = request.form.get("account_id", type=int)
+    do_grade   = request.form.get("color_grade", "true").lower() not in ("false", "0", "no")
+    grain      = min(20, max(1, int(request.form.get("grain") or 9)))
+    lut_name   = (request.form.get("lut") or "").strip()
+    lut_path   = None
+    if lut_name:
+        lut_path = os.path.join(BASE_DIR, "data", "luts", os.path.basename(lut_name))
+        if not os.path.isfile(lut_path):
+            lut_path = None
 
     if account_id:
         acc = db.get_account_by_id(account_id)
@@ -1198,22 +1207,28 @@ def api_quick_spoof():
         if video_id:
             video = db.get_vault_video_by_id(video_id)
             if not video:
-                return jsonify({"status": "error", "message": "Video vo Vaulte nebolo nájdené."}), 404
+                return jsonify({"status": "error", "message": "Video vo Vaulte nebolo najdene."}), 404
             orig_name = video.get("original_name") or "vault_video.mp4"
             ext = os.path.splitext(orig_name)[1].lower() or ".mp4"
 
             if video.get("storage_type") == "gdrive" and video.get("gdrive_file_id"):
                 with gdrive_vault.temporary_master(video["gdrive_file_id"], ext=ext) as temp_master_path:
-                    meta = spoofer.spoof_video_for_account(temp_master_path, out_path, region=region)
+                    meta = spoofer.spoof_video_for_account(
+                        temp_master_path, out_path, region=region,
+                        color_grade=do_grade, grain=grain, lut_path=lut_path
+                    )
                     spoofer.generate_thumbnail(out_path, thumb_path)
             else:
                 local_src = os.path.join(VAULT_DIR, video["filename"])
                 if not os.path.exists(local_src):
-                    return jsonify({"status": "error", "message": "Lokálny master súbor neexistuje."}), 404
-                meta = spoofer.spoof_video_for_account(local_src, out_path, region=region)
+                    return jsonify({"status": "error", "message": "Lokalny master subor neexistuje."}), 404
+                meta = spoofer.spoof_video_for_account(
+                    local_src, out_path, region=region,
+                    color_grade=do_grade, grain=grain, lut_path=lut_path
+                )
                 spoofer.generate_thumbnail(out_path, thumb_path)
 
-        # B) Z priameho uploadu súboru
+        # B) Z priameho uploadu suboru
         elif "file" in request.files and request.files["file"].filename:
             f = request.files["file"]
             orig_name = f.filename
@@ -1221,47 +1236,157 @@ def api_quick_spoof():
             temp_src = os.path.join(tempfile.gettempdir(), f"src_quick_{ts}_{rand_hex}{ext}")
             f.save(temp_src)
             try:
-                meta = spoofer.spoof_video_for_account(temp_src, out_path, region=region)
+                meta = spoofer.spoof_video_for_account(
+                    temp_src, out_path, region=region,
+                    color_grade=do_grade, grain=grain, lut_path=lut_path
+                )
                 spoofer.generate_thumbnail(out_path, thumb_path)
             finally:
                 if os.path.exists(temp_src):
                     try: os.remove(temp_src)
                     except Exception: pass
         else:
-            return jsonify({"status": "error", "message": "Vyberte video z Vaultu alebo nahrajte súbor z PC."}), 400
+            return jsonify({"status": "error", "message": "Vyberte video z Vaultu alebo nahrajte subor z PC."}), 400
 
     except Exception as e:
-        logger.exception(f"Chyba pri rýchlom spoofovaní: {e}")
-        return jsonify({"status": "error", "message": f"Chyba pri spoofovaní: {str(e)}"}), 500
+        logger.exception(f"Chyba pri rychlom spoofovani: {e}")
+        return jsonify({"status": "error", "message": f"Chyba pri spoofovani: {str(e)}"}), 500
 
     host = request.headers.get("X-Forwarded-Host") or request.host or "garcarzp.online"
     if "127.0.0.1" in host or "localhost" in host:
         host = "garcarzp.online"
 
-    video_url = f"/ig/media/vault/spoofed/{out_filename}"
-    public_url = f"https://{host}/ig/media/vault/spoofed/{out_filename}"
-    thumb_url = f"/ig/media/vault/thumbs/{thumb_filename}"
+    video_url    = f"/ig/media/vault/spoofed/{out_filename}"
+    public_url   = f"https://{host}/ig/media/vault/spoofed/{out_filename}"
+    thumb_url    = f"/ig/media/vault/thumbs/{thumb_filename}"
     download_url = f"/ig/api/spoofer/download/{out_filename}"
 
     return jsonify({
-        "status": "ok",
-        "message": f"Video bolo úspešne naspoofované ({meta.get('device', 'Smartfón')}, GPS: {meta.get('city', region.upper())})!",
-        "filename": out_filename,
-        "original_name": orig_name,
-        "video_url": video_url,
-        "public_url": public_url,
-        "thumbnail_url": thumb_url,
-        "download_url": download_url,
+        "status":         "ok",
+        "message":        f"Video spoofnute ({meta.get('device', 'Smartfon')}, GPS: {meta.get('city', region.upper())})!",
+        "filename":       out_filename,
+        "original_name":  orig_name,
+        "video_url":      video_url,
+        "public_url":     public_url,
+        "thumbnail_url":  thumb_url,
+        "download_url":   download_url,
         "vault_video_id": video_id,
-        "meta": meta
+        "meta":           meta,
+        "color_grade":    do_grade,
+        "grain":          grain,
+        "lut":            lut_name or None,
     }), 200
 
 
 @app.route("/api/spoofer/download/<filename>", methods=["GET"])
 def download_spoofed_video(filename):
-    """Priame stiahnutie naspoofovaného MP4 videa do PC."""
+    """Priame stiahnutie naspoofovaneho MP4 videa do PC."""
     safe_name = os.path.basename(filename)
     return send_from_directory(SPOOFED_DIR, safe_name, as_attachment=True, download_name=safe_name)
+
+
+@app.route("/api/spoofer/download-reel", methods=["POST"])
+@auth_required
+def api_download_reel():
+    """
+    Stiahne Reel / video z URL pomocou yt-dlp a volitelne ho spoofuje.
+    Vstup JSON: { "url": "...", "spoof": true, "save_to_vault": false }
+    """
+    data         = request.get_json(silent=True) or request.form or {}
+    url          = (data.get("url") or "").strip()
+    do_spoof     = data.get("spoof", True)
+    save_vault   = data.get("save_to_vault", False)
+    do_grade     = data.get("color_grade", True)
+    grain        = min(20, max(1, int(data.get("grain") or 9)))
+    lut_name     = (data.get("lut") or "").strip()
+    lut_path     = None
+    if lut_name:
+        candidate = os.path.join(BASE_DIR, "data", "luts", os.path.basename(lut_name))
+        if os.path.isfile(candidate):
+            lut_path = candidate
+
+    if not url or not url.startswith("http"):
+        return jsonify({"status": "error", "message": "Zadajte platny URL odkaz."}), 400
+
+    dl_dir = os.path.join(SPOOFED_DIR, "downloads")
+    os.makedirs(dl_dir, exist_ok=True)
+
+    cookies_path = os.path.join(BASE_DIR, "data", "cookies.txt")
+    if not os.path.isfile(cookies_path):
+        cookies_path = None
+
+    dl_path = spoofer.download_reel(url, dl_dir, cookies_path=cookies_path)
+    if not dl_path:
+        return jsonify({"status": "error", "message": "Stiahnutie zlyhalo. Skontrolujte URL alebo ci je yt-dlp nainstalovane."}), 500
+
+    result_path = dl_path
+    meta = {}
+
+    if do_spoof:
+        ts = int(time.time())
+        tok = uuid.uuid4().hex[:6]
+        out_name = f"reel_spoof_{ts}_{tok}.mp4"
+        out_path = os.path.join(SPOOFED_DIR, out_name)
+        try:
+            meta = spoofer.spoof_video_for_account(
+                dl_path, out_path, region="us",
+                color_grade=do_grade, grain=grain, lut_path=lut_path
+            )
+            result_path = out_path
+            # Vymaz stiahnuty original po uspesnom spoofovani
+            try: os.remove(dl_path)
+            except Exception: pass
+        except Exception as e:
+            logger.error(f"Spoof po download-reel zlyhal: {e}")
+            # Pokracujeme s nespoofovanym suborom
+
+    out_filename = os.path.basename(result_path)
+    thumb_filename = f"thumb_{os.path.splitext(out_filename)[0]}.jpg"
+    thumb_path = os.path.join(THUMBS_DIR, thumb_filename)
+    spoofer.generate_thumbnail(result_path, thumb_path)
+
+    vault_id = None
+    if save_vault:
+        try:
+            vault_id = db.add_vault_video(
+                filename=out_filename,
+                original_name=os.path.basename(url)[:100],
+                storage_type="local",
+                file_size=os.path.getsize(result_path),
+                region="us",
+                tags="downloaded",
+            )
+        except Exception as e:
+            logger.warning(f"Ulozenie do Vaultu zlyhalo: {e}")
+
+    host = request.headers.get("X-Forwarded-Host") or request.host or "garcarzp.online"
+    if "127.0.0.1" in host or "localhost" in host:
+        host = "garcarzp.online"
+
+    return jsonify({
+        "status":       "ok",
+        "message":      f"Reel stiahnuty a spoofovany! ({meta.get('device', 'N/A')} | GPS: {meta.get('city', 'N/A')})",
+        "filename":     out_filename,
+        "video_url":    f"/ig/media/vault/spoofed/{out_filename}",
+        "public_url":   f"https://{host}/ig/media/vault/spoofed/{out_filename}",
+        "thumbnail_url":f"/ig/media/vault/thumbs/{thumb_filename}",
+        "download_url": f"/ig/api/spoofer/download/{out_filename}",
+        "vault_id":     vault_id,
+        "meta":         meta,
+    }), 200
+
+
+@app.route("/api/spoofer/luts", methods=["GET"])
+@auth_required
+def api_spoofer_luts():
+    """Vrati zoznam dostupnych .cube LUT suborov z data/luts/."""
+    luts_dir = os.path.join(BASE_DIR, "data", "luts")
+    os.makedirs(luts_dir, exist_ok=True)
+    luts = sorted([
+        f for f in os.listdir(luts_dir)
+        if f.lower().endswith(".cube")
+    ])
+    return jsonify({"status": "ok", "luts": luts}), 200
 
 
 # ─── Auto-Planner & Review Studio API ──────────────────────────────────────────
