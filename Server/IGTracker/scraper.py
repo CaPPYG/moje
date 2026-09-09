@@ -109,7 +109,7 @@ def _parse_apify_item(data, default_username=""):
     for i, p in enumerate(posts):
         p_type = p.get("type")
         shortcode = p.get("shortCode")
-        views = p.get("videoViewCount") or 0
+        views = p.get("videoPlayCount") or p.get("videoViewCount") or 0
         likes = p.get("likesCount") or 0
         comments = p.get("commentsCount") or 0
         ts = p.get("timestamp")
@@ -162,6 +162,70 @@ def _parse_apify_item(data, default_username=""):
     }
 
 
+def _enrich_profiles_with_posts(profiles, posts_items):
+    """
+    Obohatí profily o skutočné videnia Reels (videoPlayCount),
+    presné celkové zhliadnutia a identifikuje skutočný Top Reel (napr. virálne videá nad 100k).
+    """
+    from collections import defaultdict
+    posts_by_user = defaultdict(list)
+    for p in posts_items:
+        u = (p.get("ownerUsername") or "").strip().lower()
+        if u:
+            posts_by_user[u].append(p)
+
+    for u, p_list in posts_by_user.items():
+        if u not in profiles:
+            continue
+        prof = profiles[u]
+        total_views = 0
+        video_count = 0
+        top_views = 0
+        top_likes = 0
+        top_url = prof.get("top_reel_url")
+        total_likes = 0
+        total_comments = 0
+        last_date = prof.get("last_post_date")
+
+        for i, p in enumerate(p_list):
+            plays = p.get("videoPlayCount") or p.get("videoViewCount") or 0
+            likes = p.get("likesCount") or 0
+            comments = p.get("commentsCount") or 0
+            shortcode = p.get("shortCode")
+            ts = p.get("timestamp")
+
+            if i == 0 and ts:
+                last_date = parse_relative_time(ts)
+
+            total_likes += likes
+            total_comments += comments
+
+            if plays > 0:
+                video_count += 1
+                total_views += plays
+                if plays > top_views:
+                    top_views = plays
+                    top_likes = likes
+                    top_url = f"https://www.instagram.com/reel/{shortcode}/"
+
+        if video_count > 0:
+            prof["total_views"] = total_views
+            prof["avg_views"] = total_views // video_count
+            prof["reels_count"] = video_count
+
+        if top_url and top_views > 0:
+            prof["top_reel_url"] = top_url
+            prof["top_reel_views"] = top_views
+            prof["top_reel_likes"] = top_likes
+
+        followers = prof.get("followers", 0)
+        sample_posts = max(1, len(p_list))
+        if followers > 0:
+            prof["engagement_rate"] = round(((total_likes + total_comments) / sample_posts / followers) * 100, 2)
+        if last_date:
+            prof["last_post_date"] = last_date
+
+
 # ─── 2. PRIMÁRNY FETCHER: APIFY INSTAGRAM SCRAPER (SINGLE & BATCH) ─────────
 
 def fetch_via_apify(username):
@@ -175,9 +239,9 @@ def fetch_via_apify(username):
 
 def fetch_profiles_batch(usernames):
     """
-    Stiahne viacero profilov naraz v JEDNOM Apify volaní.
-    Šetrí čas a compute kredity, pretože všetky profily idú v jednom behu.
-    Vráti dict: {username: profile_data, ...}
+    Stiahne viacero profilov naraz v Apify volaní:
+    1. Detaily profilov (followers, following, avatar, bio)
+    2. Všetky posty a reels s plným playCountom (skutočné videnia a virálne reels)
     """
     clean_usernames = [u.strip().lstrip("@").lower() for u in usernames if u.strip()]
     if not clean_usernames:
@@ -187,22 +251,40 @@ def fetch_profiles_batch(usernames):
     if token:
         try:
             url = f"https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token={token}"
-            payload = {
+
+            # 1. Krok: Získanie profilov
+            payload_details = {
                 "directUrls": [f"https://www.instagram.com/{u}/" for u in clean_usernames],
                 "resultsType": "details"
             }
-            print(f"[Apify Batch] Sťahujem {len(clean_usernames)} profilov naraz...")
-            r = requests.post(url, json=payload, timeout=90)
-            if r.status_code in (200, 201):
-                items = r.json()
-                results = {}
+            print(f"[Apify Batch] Sťahujem profily pre {len(clean_usernames)} účtov...")
+            r1 = requests.post(url, json=payload_details, timeout=90)
+            results = {}
+            if r1.status_code in (200, 201):
+                items = r1.json()
                 for it in items:
                     if not it.get("error"):
                         parsed = _parse_apify_item(it, it.get("username", ""))
                         results[parsed["username"].lower()] = parsed
-                print(f"[Apify Batch] Úspešne stiahnutých {len(results)}/{len(clean_usernames)} profilov.")
-                if results:
-                    return results
+
+            # 2. Krok: Získanie posts & reels vrátane videoPlayCount (pre reálne celkové views a top viral reel)
+            try:
+                payload_posts = {
+                    "directUrls": [f"https://www.instagram.com/{u}/" for u in clean_usernames],
+                    "resultsType": "posts",
+                    "resultsLimit": 35
+                }
+                print(f"[Apify Batch] Sťahujem reels metriky (playCount) pre {len(clean_usernames)} účtov...")
+                r2 = requests.post(url, json=payload_posts, timeout=90)
+                if r2.status_code in (200, 201):
+                    posts_items = r2.json()
+                    _enrich_profiles_with_posts(results, posts_items)
+            except Exception as e_posts:
+                print(f"[Apify Batch] Varovanie: načítanie posts metrík zlyhalo ({e_posts}), používam základné metriky.")
+
+            if results:
+                print(f"[Apify Batch] Úspešne stiahnutých a obohatených {len(results)}/{len(clean_usernames)} profilov.")
+                return results
         except Exception as e:
             print(f"[Apify Batch] Chyba batch sťahovania: {e}. Prechádzam na fallback.")
 

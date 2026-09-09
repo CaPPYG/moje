@@ -223,7 +223,8 @@ def api_sync():
                     total_views=scraped.get("total_views", 0),
                     avg_views=scraped.get("avg_views", 0),
                     engagement_rate=scraped.get("engagement_rate", 0.0),
-                    )
+                    last_post_date=scraped.get("last_post_date")
+                )
                 synced_count += 1
             except Exception as e:
                 print(f"Chyba pri ukladaní {uname}: {e}")
