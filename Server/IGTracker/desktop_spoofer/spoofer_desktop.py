@@ -94,6 +94,20 @@ DEFAULT_VAULT_ID    = "1NyPnFW4O8NYd_BEzMf5c43XWQlr8zsSJ"
 
 # ─── System helpers ───────────────────────────────────────────────────────────
 
+def _init_paths():
+    base = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base, "tools", "realesrgan"),
+        os.path.join(base, "tools"),
+        os.path.join(base, "bin"),
+    ]
+    for c in candidates:
+        if os.path.isdir(c) and c not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = c + os.pathsep + os.environ["PATH"]
+
+_init_paths()
+
+
 def has_tool(name):
     return shutil.which(name) is not None
 
@@ -365,8 +379,10 @@ def upscale_with_realesrgan(src, out, model="realesrgan-x4plus", binary="realesr
     - Zachováva pôvodnú snímkovú frekvenciu (FPS) bez interpolácie.
     - Zväčšuje zdrojové video na 1080p cez zadaný model (default: realesrgan-x4plus / realesr-animevideov3).
     """
-    if not has_tool(binary):
+    bin_path = shutil.which(binary)
+    if not bin_path:
         return False
+    model_dir = os.path.join(os.path.dirname(bin_path), "models")
     fps = get_video_fps(src)
     tmp_frames = tempfile.mkdtemp(prefix="ig_frames_")
     tmp_up = tempfile.mkdtemp(prefix="ig_up_")
@@ -378,12 +394,17 @@ def upscale_with_realesrgan(src, out, model="realesrgan-x4plus", binary="realesr
         )
         if r1.returncode != 0: return False
         cnt = len(glob.glob(os.path.join(tmp_frames, "*.png")))
-        if log: log(f"  Real-ESRGAN: Upscalujem {cnt} snimkov modelom {model}...")
+        if log: log(f"  Real-ESRGAN: Upscalujem {cnt} snimkov na GPU (AMD Radeon) cez {model}...")
+        cmd_up = [bin_path, "-i", tmp_frames, "-o", tmp_up, "-n", model, "-f", "png"]
+        if os.path.isdir(model_dir):
+            cmd_up += ["-m", model_dir]
         r2 = subprocess.run(
-            [binary, "-i", tmp_frames, "-o", tmp_up, "-n", model, "-f", "png"],
+            cmd_up,
             capture_output=True, text=True, timeout=3600
         )
-        if r2.returncode != 0: return False
+        if r2.returncode != 0:
+            if log: log(f"  Real-ESRGAN chyba: {r2.stderr[-200:] if r2.stderr else 'neznáma chyba'}")
+            return False
         if log: log(f"  Real-ESRGAN: Skladam video (FPS={fps} bez zmeny)...")
         has_a = has_audio_stream(src)
         cmd = ["ffmpeg", "-y", "-framerate", str(fps),
