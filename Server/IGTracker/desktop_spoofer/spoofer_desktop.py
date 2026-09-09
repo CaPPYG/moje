@@ -601,12 +601,39 @@ def upload_to_drive(svc, path, name):
 
 # ─── GUI ──────────────────────────────────────────────────────────────────────
 
+class ScrollableFrame(tk.Frame):
+    def __init__(self, parent, bg=BG_DARK, *args, **kwargs):
+        super().__init__(parent, bg=bg, *args, **kwargs)
+        self.canvas = tk.Canvas(self, bg=bg, borderwidth=0, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.content = tk.Frame(self.canvas, bg=bg)
+
+        self.content.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        self._win_id = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
+        self.canvas.bind(
+            "<Configure>",
+            lambda e: self.canvas.itemconfig(self._win_id, width=e.width)
+        )
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+
+    def on_mousewheel(self, event):
+        sr = self.canvas.bbox("all")
+        if sr and (sr[3] - sr[1]) > self.canvas.winfo_height():
+            self.canvas.yview_scroll(int(-1 * (event.delta / 120) * 2), "units")
+
+
 class ReelsStudio(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("IG Reels Studio v2.0")
-        self.geometry("980x860")
-        self.minsize(900, 720)
+        self.geometry("980x780")
+        self.minsize(860, 580)
         self.configure(bg=BG_DARK)
 
         self.enc_name, self.enc_args = detect_encoder()
@@ -687,70 +714,27 @@ class ReelsStudio(tk.Tk):
         ])
 
     def _build_ui(self):
-        # Header
+        # 1. Header (Hore)
         hdr = tk.Frame(self, bg=BG_DARK)
-        hdr.pack(fill="x", padx=18, pady=(16, 0))
-        tk.Label(hdr, text="🎬  IG REELS STUDIO", font=("Segoe UI", 21, "bold"),
+        hdr.pack(side="top", fill="x", padx=18, pady=(12, 4))
+        tk.Label(hdr, text="🎬  IG REELS STUDIO", font=("Segoe UI", 20, "bold"),
                  fg=ACCENT, bg=BG_DARK).pack(side="left")
         self._enc_lbl = tk.Label(hdr, text=f"⚡ {self.enc_name}", font=("Segoe UI", 10),
                                   fg=GREEN, bg=BG_DARK)
         self._enc_lbl.pack(side="right")
 
-        # Notebook
-        style = ttk.Style(self)
-        style.theme_use("clam")
-        style.configure("TNotebook", background=BG_DARK, borderwidth=0)
-        style.configure("TNotebook.Tab", background=BG_CARD, foreground=MUTED,
-                         font=("Segoe UI", 11, "bold"), padding=[18, 8])
-        style.map("TNotebook.Tab",
-                  background=[("selected", BG_CARD2)],
-                  foreground=[("selected", TEXT)])
-
-        nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=12, pady=10)
-
-        t1 = tk.Frame(nb, bg=BG_DARK)
-        t2 = tk.Frame(nb, bg=BG_DARK)
-        nb.add(t1, text="📦  Batch Spoofing")
-        nb.add(t2, text="⬇  Stiahnut Reels")
-        self._build_batch(t1)
-        self._build_download(t2)
-
-        # Progress bar
-        bot = tk.Frame(self, bg=BG_DARK)
-        bot.pack(fill="x", padx=14, pady=(0, 4))
-        pr = tk.Frame(bot, bg=BG_DARK)
-        pr.pack(fill="x")
-        self._prog_lbl = tk.Label(pr, text="Pripraveny", fg=MUTED, bg=BG_DARK,
-                                   font=("Segoe UI", 9))
-        self._prog_lbl.pack(side="left")
-        style.configure("Neon.Horizontal.TProgressbar",
-                         troughcolor=BG_CARD, background=ACCENT)
-        self._prog = ttk.Progressbar(bot, style="Neon.Horizontal.TProgressbar",
-                                      mode="determinate", length=100)
-        self._prog.pack(fill="x", pady=4)
-
-        # Log
-        self._log = scrolledtext.ScrolledText(
-            self, height=9, bg="#0b0d14", fg="#a8b2d8",
-            font=("Consolas", 9), relief="flat", borderwidth=0,
-            insertbackground=ACCENT
-        )
-        self._log.pack(fill="both", expand=True, padx=14, pady=(0, 6))
-        self._log.configure(state="disabled")
-
-        # Buttons
+        # 2. Akčné tlačidlá (Ukotvené celkom dole, aby boli vždy na očiach)
         br = tk.Frame(self, bg=BG_DARK)
-        br.pack(fill="x", padx=14, pady=(0, 14))
+        br.pack(side="bottom", fill="x", padx=14, pady=(6, 12))
         self._start_btn = tk.Button(br, text="▶  SPUSTIT", font=("Segoe UI", 12, "bold"),
                                      bg=ACCENT, fg="white", activebackground=BTN_HOVER,
                                      activeforeground="white", relief="flat",
-                                     padx=26, pady=10, cursor="hand2", command=self._on_start)
+                                     padx=26, pady=9, cursor="hand2", command=self._on_start)
         self._start_btn.pack(side="left", padx=(0, 8))
         self._stop_btn = tk.Button(br, text="⬛  STOP", font=("Segoe UI", 12, "bold"),
                                     bg="#363a4f", fg=MUTED, activebackground="#4a4e6a",
                                     activeforeground=TEXT, relief="flat",
-                                    padx=26, pady=10, cursor="hand2",
+                                    padx=26, pady=9, cursor="hand2",
                                     command=self._on_stop, state="disabled")
         self._stop_btn.pack(side="left")
         self._drive_lbl = tk.Label(br, text="☁ Drive: –", fg=MUTED, bg=BG_DARK,
@@ -758,6 +742,70 @@ class ReelsStudio(tk.Tk):
         self._drive_lbl.pack(side="right")
         self._btn(br, "🔗 Pripojit Drive", self._connect_drive,
                   color="#1e2235", fg=ACCENT3).pack(side="right", padx=8)
+
+        # 3. Progress bar (Hneď nad tlačidlami)
+        bot = tk.Frame(self, bg=BG_DARK)
+        bot.pack(side="bottom", fill="x", padx=14, pady=(0, 4))
+        pr = tk.Frame(bot, bg=BG_DARK)
+        pr.pack(fill="x")
+        self._prog_lbl = tk.Label(pr, text="Pripraveny", fg=MUTED, bg=BG_DARK,
+                                   font=("Segoe UI", 9))
+        self._prog_lbl.pack(side="left")
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("Neon.Horizontal.TProgressbar",
+                         troughcolor=BG_CARD, background=ACCENT)
+        self._prog = ttk.Progressbar(bot, style="Neon.Horizontal.TProgressbar",
+                                      mode="determinate", length=100)
+        self._prog.pack(fill="x", pady=2)
+
+        # 4. Log konzola (Kompaktná, hneď nad progress barom)
+        self._log = scrolledtext.ScrolledText(
+            self, height=5, bg="#0b0d14", fg="#a8b2d8",
+            font=("Consolas", 9), relief="flat", borderwidth=0,
+            insertbackground=ACCENT
+        )
+        self._log.pack(side="bottom", fill="x", padx=14, pady=(0, 6))
+        self._log.configure(state="disabled")
+
+        # 5. Notebook / Záložky (Vyplní celý stred okna a je scrolovateľný)
+        style.configure("TNotebook", background=BG_DARK, borderwidth=0)
+        style.configure("TNotebook.Tab", background=BG_CARD, foreground=MUTED,
+                         font=("Segoe UI", 11, "bold"), padding=[18, 7])
+        style.map("TNotebook.Tab",
+                  background=[("selected", BG_CARD2)],
+                  foreground=[("selected", TEXT)])
+
+        self._nb = ttk.Notebook(self)
+        self._nb.pack(side="top", fill="both", expand=True, padx=12, pady=(2, 6))
+
+        t1 = tk.Frame(self._nb, bg=BG_DARK)
+        t2 = tk.Frame(self._nb, bg=BG_DARK)
+        self._nb.add(t1, text="📦  Batch Spoofing")
+        self._nb.add(t2, text="⬇  Stiahnut Reels")
+
+        self._t1_scroll = ScrollableFrame(t1, bg=BG_DARK)
+        self._t1_scroll.pack(fill="both", expand=True)
+        self._build_batch(self._t1_scroll.content)
+
+        self._t2_scroll = ScrollableFrame(t2, bg=BG_DARK)
+        self._t2_scroll.pack(fill="both", expand=True)
+        self._build_download(self._t2_scroll.content)
+
+        # Globálny mousewheel listener – scroluje aktuálne otvorenú záložku
+        self.bind_all("<MouseWheel>", self._on_global_mousewheel)
+
+    def _on_global_mousewheel(self, event):
+        if hasattr(self, "_log") and str(event.widget).startswith(str(self._log)):
+            return
+        try:
+            active_tab = self._nb.index("current")
+            if active_tab == 0 and hasattr(self, "_t1_scroll"):
+                self._t1_scroll.on_mousewheel(event)
+            elif active_tab == 1 and hasattr(self, "_t2_scroll"):
+                self._t2_scroll.on_mousewheel(event)
+        except Exception:
+            pass
 
     def _build_batch(self, parent):
         c1 = self._card(parent, "📂  Vstupne videa")
@@ -781,7 +829,9 @@ class ReelsStudio(tk.Tk):
         vc.pack(side="left", fill="both", expand=True, padx=(0, 4))
         tk.Spinbox(vc, from_=1, to=20, textvariable=self.v_variants, width=4,
                    font=("Segoe UI", 14, "bold"), bg=BG_CARD2, fg=ACCENT,
-                   relief="flat", buttonbackground=BG_CARD2).pack(pady=6)
+                   relief="flat", buttonbackground=BG_CARD2).pack(pady=4)
+        tk.Label(vc, text="každá kópia do zložky:\nkopie 1, kopie 2...",
+                 fg=MUTED, bg=BG_CARD, font=("Segoe UI", 8), justify="center").pack(pady=(0, 2))
 
         uc = self._card(row, "📐  Upscaling")
         uc.pack(side="left", fill="both", expand=True)
@@ -903,6 +953,8 @@ class ReelsStudio(tk.Tk):
         self._set_running(True)
         self.log(f"\n{'='*58}")
         self.log(f"BATCH SPOOFING: {len(files)} videi x {cfg['variants']} variantov")
+        if cfg['variants'] > 1:
+            self.log(f"Vystup: Rozdelenie do {cfg['variants']} zložiek: kopie 1 až kopie {cfg['variants']}")
         self.log(f"Region: {cfg['region'].upper()} | Grain: {cfg['grain']} | Upscale: {cfg['upscale_method']}")
         self.log(f"{'='*58}")
         threading.Thread(target=self._batch_worker,
@@ -913,19 +965,26 @@ class ReelsStudio(tk.Tk):
         total = len(files) * variants
         done = 0
         t0 = time.time()
-        for src in files:
-            base = os.path.splitext(os.path.basename(src))[0]
-            for v in range(variants):
+        for v in range(variants):
+            if variants > 1:
+                target_dir = os.path.join(out_dir, f"kopie {v + 1}")
+                os.makedirs(target_dir, exist_ok=True)
+            else:
+                target_dir = out_dir
+
+            for src in files:
                 if not self.is_running:
                     self.log("STOP — prerušene pouzivatelom.")
                     self._set_running(False)
                     return
                 done += 1
+                base = os.path.splitext(os.path.basename(src))[0]
                 tok = uuid.uuid4().hex[:6]
                 suf = f"_v{v+1}" if variants > 1 else ""
                 name = f"spoofed_{base}{suf}_{tok}.mp4"
-                out = os.path.join(out_dir, name)
-                self.log(f"\n[{done}/{total}] {os.path.basename(src)} -> {name}")
+                out = os.path.join(target_dir, name)
+                folder_tag = f"kopie {v+1}/" if variants > 1 else ""
+                self.log(f"\n[{done}/{total}] (Kópia {v+1}/{variants}) {os.path.basename(src)} -> {folder_tag}{name}")
                 self._set_progress(done - 1, total)
                 vt = time.time()
                 ok = full_pipeline(src, out, cfg, self.enc_args, log=self.log)
@@ -945,7 +1004,10 @@ class ReelsStudio(tk.Tk):
         elapsed = round(time.time() - t0, 1)
         self.log(f"\n{'='*58}")
         self.log(f"HOTOVO za {elapsed}s | {done}/{total} videi")
-        self.log(f"Vystup: {out_dir}")
+        if variants > 1:
+            self.log(f"Vystup: {out_dir} (roztriedene do {variants} zložiek: kopie 1 až kopie {variants})")
+        else:
+            self.log(f"Vystup: {out_dir}")
         if do_drive:
             self.log("Otvorit: https://garcarzp.online/ig/publisher -> Media Vault -> Synchronizovat")
         self.log(f"{'='*58}")
