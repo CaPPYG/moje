@@ -175,34 +175,39 @@ def generate_thumbnail(media_path: str, out_thumb_path: str, time_offset="00:00:
 
 
 def get_sharpen_filter() -> str:
-    """Vráti AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    """Vráti AMD FidelityFX CAS 0.4 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
     try:
         r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return "cas=0.45"
+            return "cas=0.4"
     except Exception:
         pass
     return "unsharp=5:5:0.8:5:5:0.0"
 
 
-def build_spoof_filters() -> str:
-    """
-    Vygeneruje bezpečné náhodné filtre (jemný jitter), ktoré ľudské oko
-    nevníma, ale pre algoritmus Instagramu menia každý jeden pixelový hash.
-    """
-    sat = random.uniform(0.985, 1.015)
-    cont = random.uniform(0.985, 1.015)
-    bright = random.uniform(-0.008, 0.008)
-    gamma = random.uniform(0.985, 1.015)
-    hue = random.uniform(-1.0, 1.0)
-    col_temp = random.uniform(-0.015, 0.015)
+BASE_EQ_FILTER = "eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03"
 
-    filters = [
-        f"eq=saturation={sat:.4f}:contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}",
-        f"colorbalance=rs={col_temp:.4f}:gs=0:bs={-col_temp:.4f}:rm={col_temp/2:.4f}:gm=0:bm={-col_temp/2:.4f}",
-        f"hue=h={hue:.2f}",
-    ]
-    return ",".join(filters)
+
+def build_spoof_filters(is_copy: bool = False) -> str:
+    """Vráti vyladený Cinematic EQ filter (alebo náhodný jitter pre kópie)."""
+    if not is_copy:
+        return BASE_EQ_FILTER
+    return build_copy_jitter_filter()
+
+
+def build_copy_jitter_filter() -> str:
+    """Jemný jitter okolo 1.0 pre kópie, aby bol každý pixelový hash pre algo unikátny."""
+    cont   = random.uniform(0.990, 1.010)
+    bright = random.uniform(-0.005, 0.005)
+    gamma  = random.uniform(0.990, 1.010)
+    sat    = random.uniform(0.990, 1.010)
+    ct     = random.uniform(-0.008, 0.008)
+    hue    = random.uniform(-0.6, 0.6)
+    return (
+        f"eq=contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}:saturation={sat:.4f},"
+        f"colorbalance=rs={ct:.4f}:gs=0:bs={-ct:.4f}:rm={ct/2:.4f}:gm=0:bm={-ct/2:.4f},"
+        f"hue=h={hue:.2f}"
+    )
 
 
 def apply_exif_metadata(file_path: str, region: str = "us"):
@@ -268,14 +273,17 @@ def spoof_video_for_account(
     out_spoofed_path: str,
     region: str = "us",
     color_grade: bool = True,
-    grain: int = 3,
-    lut_path: str = None,
+    is_copy: bool = False,
+    **kwargs,
 ) -> dict:
     """
     Kompletny proces spoofovania pre jeden konkretny profil.
-    Ak color_grade=True: pouzije Instagram-ready pipeline (14 Mbps H.264 High 4.2,
-    scale+crop 1080x1920, LUT, film grain, spoof jitter, AAC 320k stereo).
-    Inak: jednoduchy jitter encode (legacy).
+    Pouzije novy Instagram-ready pipeline:
+    - scale+crop 1080x1920 (Lanczos)
+    - CAS 0.4 adaptivne doostrenie
+    - Cinematic EQ (contrast=1.06, brightness=-0.01, gamma=0.97, saturation=1.03)
+    - CPU libx264 -crf 18 -preset fast
+    - -map_metadata -1 + nove EXIF a GPS pre dany profil.
     """
     if not os.path.isfile(src_video_path):
         raise FileNotFoundError(f"Master video neexistuje: {src_video_path}")
@@ -286,25 +294,24 @@ def spoof_video_for_account(
     if color_grade:
         ok = color_grade_and_encode(
             src_video_path, out_spoofed_path,
-            lut_path=lut_path, grain=grain, spoof=True
+            is_copy=is_copy
         )
         if not ok:
             logger.warning("color_grade_and_encode zlyhalo, pouzivam legacy spoof.")
             color_grade = False
 
     if not color_grade:
-        vf = build_spoof_filters()
+        vf = build_spoof_filters(is_copy=is_copy)
         has_a = has_audio_stream(src_video_path)
         cmd = ["ffmpeg", "-y", "-i", src_video_path]
         if not has_a:
             cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd += [
             "-map_metadata", "-1",
-            "-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact",
             "-vf", vf,
             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
             "-crf", "18", "-preset", "fast",
-            "-c:a", "aac", "-ac", "2", "-b:a", "192k",
+            "-c:a", "copy" if has_a else "aac",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-shortest",
             out_spoofed_path
@@ -465,56 +472,29 @@ def generate_anti_ai_lut(out_path=None, size=33):
 def color_grade_and_encode(
     src_path: str,
     out_path: str,
-    lut_path: str = None,
-    grain: int = 3,
-    spoof: bool = True,
+    is_copy: bool = False,
+    **kwargs,
 ) -> bool:
     """
-    Kompletný FFmpeg pipeline pre Instagram Reels (One-pass filter):
+    Kompletný FFmpeg pipeline pre Instagram Reels:
     1. Pomer strán a vycentrovaný orez na presných 1080x1920:
        scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
-    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp
-    3. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic s hlbokým kontrastom alebo externý .cube cez lut3d
-    4. Filmové zrno: Jemná textúra noise=alls={grain}:allf=t+u (predvolená hodnota: 3, 0 = vypnuté)
-    5. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
-    6. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
+    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.4 (alebo unsharp)
+    3. Cinematic EQ: eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03 (alebo jitter pre kópie)
+    4. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
+    5. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
+    6. Vymazané metadáta: -map_metadata -1
     """
     has_a = has_audio_stream(src_path)
-
-    # Procedurálny Anti-AI Filmic LUT (ak používateľ nezadá vlastný .cube)
-    if not lut_path or not os.path.isfile(lut_path):
-        lut_path = generate_anti_ai_lut()
-        logger.info("Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33 - hlboký kontrast)")
-    else:
-        logger.info(f"Aplikujem externý LUT: {os.path.basename(lut_path)}")
-
-    lut_norm = os.path.abspath(lut_path).replace("\\", "/")
-    if len(lut_norm) >= 2 and lut_norm[1] == ":":
-        lut_esc = lut_norm[0] + "\\\\:" + lut_norm[2:]
-    else:
-        lut_esc = lut_norm
-
     sharp_filter = get_sharpen_filter()
+    eq_filter = build_spoof_filters(is_copy=is_copy)
 
-    # Kompletný reťazec v správnom poradí:
-    # 1. Scale & vycentrovaný Crop na 1080x1920 (Lanczos)
-    # 2. Doostrenie (AMD CAS 0.45)
-    # 3. Spoof farebné odchýlky
-    # 4. Color Grading (.cube LUT)
-    # 5. Filmové zrno (až po doostrení, aby zrno nebolo preostrené)
     vf_parts = [
         "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos",
         "crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2",
         sharp_filter,
+        eq_filter
     ]
-    if spoof:
-        vf_parts.extend(build_spoof_filters().split(","))
-
-    vf_parts.append(f"lut3d={lut_esc}")
-
-    if grain and grain > 0:
-        vf_parts.append(f"noise=alls={grain}:allf=t+u")
-
     vf = ",".join(vf_parts)
 
     cmd = ["ffmpeg", "-y", "-i", src_path]
@@ -537,7 +517,7 @@ def color_grade_and_encode(
         out_path
     ]
 
-    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, CRF 18 libx264")
+    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + {eq_filter[:40]}, CRF 18 libx264")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out_path):
         logger.warning(f"Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback: {r.stderr[-300:]}")

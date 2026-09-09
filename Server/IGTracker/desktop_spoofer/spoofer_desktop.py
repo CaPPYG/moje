@@ -130,28 +130,39 @@ def detect_encoder():
 
 
 def get_sharpen_filter():
-    """Vráti AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    """Vráti AMD FidelityFX CAS 0.4 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
     try:
         r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return "cas=0.45"
+            return "cas=0.4"
     except Exception:
         pass
     return "unsharp=5:5:0.8:5:5:0.0"
 
 
-def build_spoof_filters():
-    sat      = random.uniform(0.985, 1.015)
-    cont     = random.uniform(0.985, 1.015)
-    bright   = random.uniform(-0.008, 0.008)
-    gamma    = random.uniform(0.985, 1.015)
-    hue      = random.uniform(-1.0, 1.0)
-    ct       = random.uniform(-0.015, 0.015)
-    return ",".join([
-        f"eq=saturation={sat:.4f}:contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}",
-        f"colorbalance=rs={ct:.4f}:gs=0:bs={-ct:.4f}:rm={ct/2:.4f}:gm=0:bm={-ct/2:.4f}",
-        f"hue=h={hue:.2f}",
-    ])
+BASE_EQ_FILTER = "eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03"
+
+
+def build_spoof_filters(is_copy=False):
+    """Vráti vyladený Cinematic EQ filter (alebo náhodný jitter pre kópie)."""
+    if not is_copy:
+        return BASE_EQ_FILTER
+    return build_copy_jitter_filter()
+
+
+def build_copy_jitter_filter():
+    """Jemný jitter okolo 1.0 pre kópie z hlavného videa, aby bol každý hash pre algo unikátny."""
+    cont   = random.uniform(0.990, 1.010)
+    bright = random.uniform(-0.005, 0.005)
+    gamma  = random.uniform(0.990, 1.010)
+    sat    = random.uniform(0.990, 1.010)
+    ct     = random.uniform(-0.008, 0.008)
+    hue    = random.uniform(-0.6, 0.6)
+    return (
+        f"eq=contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}:saturation={sat:.4f},"
+        f"colorbalance=rs={ct:.4f}:gs=0:bs={-ct:.4f}:rm={ct/2:.4f}:gm=0:bm={-ct/2:.4f},"
+        f"hue=h={hue:.2f}"
+    )
 
 
 def get_video_fps(path):
@@ -400,57 +411,30 @@ def upscale_with_realesrgan(src, out, model="realesrgan-x4plus", binary="realesr
         shutil.rmtree(tmp_up, ignore_errors=True)
 
 
-def color_grade_and_encode(src, out, lut_path=None, grain=3, spoof=True, enc_args=None, log=None):
+def color_grade_and_encode(src, out, is_copy=False, enc_args=None, log=None, **kwargs):
     """
-    Kompletný FFmpeg pipeline pre Instagram Reels (One-pass filter):
+    Kompletný FFmpeg pipeline pre hlavné video:
     1. Pomer strán a vycentrovaný orez na presných 1080x1920:
        scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
-    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp
-    3. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic s hlbokým kontrastom alebo externý .cube cez lut3d
-    4. Filmové zrno: Jemná textúra noise=alls={grain}:allf=t+u (predvolená hodnota: 3, 0 = vypnuté)
-    5. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
-    6. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
+    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.4 (alebo unsharp)
+    3. Cinematic EQ: eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03
+    4. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
+    5. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
+    6. Vymazané metadáta: -map_metadata -1 (následne zapísané čisté GPS/EXIF)
     """
     if enc_args is None:
         _, enc_args = detect_encoder()
     has_a = has_audio_stream(src)
 
-    # Procedurálny Anti-AI Filmic LUT (ak používateľ nezadá vlastný .cube)
-    if not lut_path or not os.path.isfile(lut_path):
-        lut_path = generate_anti_ai_lut()
-        if log: log("  Color Grade: Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33 - hlboký kontrast)")
-    else:
-        if log: log(f"  Color Grade: Aplikujem externý LUT: {os.path.basename(lut_path)}")
-
-    # Bezpečné formátovanie cesty pre FFmpeg Windows (lut3d=c\:/... bez úvodzoviek)
-    lut_norm = os.path.abspath(lut_path).replace("\\", "/")
-    if len(lut_norm) >= 2 and lut_norm[1] == ":":
-        lut_esc = lut_norm[0] + "\\\\:" + lut_norm[2:]
-    else:
-        lut_esc = lut_norm
-
     sharp_filter = get_sharpen_filter()
-    if log: log(f"  Doostrenie: {sharp_filter} ({'AMD FidelityFX CAS' if 'cas' in sharp_filter else 'unsharp'})")
+    eq_filter = build_spoof_filters(is_copy=is_copy)
 
-    # Kompletný reťazec v správnom poradí:
-    # 1. Scale & vycentrovaný Crop na 1080x1920 (Lanczos)
-    # 2. Doostrenie (AMD CAS 0.45)
-    # 3. Spoof farebné odchýlky
-    # 4. Color Grading (.cube LUT)
-    # 5. Filmové zrno (až po doostrení, aby zrno nebolo preostrené)
     vf_parts = [
         "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos",
         "crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2",
         sharp_filter,
+        eq_filter
     ]
-    if spoof:
-        vf_parts.extend(build_spoof_filters().split(","))
-
-    vf_parts.append(f"lut3d={lut_esc}")
-
-    if grain and grain > 0:
-        vf_parts.append(f"noise=alls={grain}:allf=t+u")
-
     vf = ",".join(vf_parts)
 
     cmd = ["ffmpeg", "-y", "-i", src]
@@ -468,7 +452,7 @@ def color_grade_and_encode(src, out, lut_path=None, grain=3, spoof=True, enc_arg
         "-map", ("0:a?" if has_a else "1:a"),
         "-movflags", "+faststart", "-shortest", out
     ]
-    if log: log(f"  Enkódujem: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, CRF 18 libx264")
+    if log: log(f"  Enkódujem hlavné video: 1080x1920 Lanczos + {sharp_filter} + EQ (1.06/-0.01/0.97/1.03), CRF 18")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out):
         if log: log("  Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback s AAC re-encode...")
@@ -488,12 +472,63 @@ def color_grade_and_encode(src, out, lut_path=None, grain=3, spoof=True, enc_arg
     return True
 
 
+def create_copy_with_jitter(main_src, out_copy, region="us", enc_args=None, log=None):
+    """
+    Rýchle vytvorenie kópie z už spracovaného hlavného videa:
+    - Aplikuje rýchly náhodný jitter hodnôt (kontrast, jas, gamma, saturácia, hue, colorbalance).
+    - Zachováva 1080x1920 a CAS 0.4 ostrosť bez opätovného škálovania.
+    - libx264 -crf 18 -preset fast + bezstratové audio copy (-c:a copy).
+    - -map_metadata -1 a nové unikátne GPS/EXIF metadáta pre daný účet.
+    """
+    if enc_args is None:
+        _, enc_args = detect_encoder()
+    has_a = has_audio_stream(main_src)
+    jitter_filter = build_copy_jitter_filter()
+
+    cmd = ["ffmpeg", "-y", "-i", main_src]
+    if not has_a:
+        cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+    cmd += ["-map_metadata", "-1", "-vf", jitter_filter] + enc_args
+    if "-pix_fmt" not in enc_args:
+        cmd += ["-pix_fmt", "yuv420p"]
+    if has_a:
+        cmd += ["-c:a", "copy"]
+    else:
+        cmd += ["-c:a", "aac", "-ac", "2", "-b:a", "320k"]
+    cmd += [
+        "-map", "0:v",
+        "-map", ("0:a?" if has_a else "1:a"),
+        "-movflags", "+faststart", "-shortest", out_copy
+    ]
+    if log: log(f"  Vytváram kópiu s náhodným jitterom pre unikátny hash...")
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    ok = r.returncode == 0 and os.path.exists(out_copy)
+    if not ok:
+        cmd2 = ["ffmpeg", "-y", "-i", main_src]
+        if not has_a:
+            cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+        cmd2 += [
+            "-map_metadata", "-1",
+            "-vf", jitter_filter,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-ac", "2", "-b:a", "320k",
+            "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
+            "-movflags", "+faststart", "-shortest", out_copy
+        ]
+        r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=300)
+        ok = r2.returncode == 0 and os.path.exists(out_copy)
+
+    if ok:
+        meta = apply_exif(out_copy, region=region)
+        if meta and log:
+            log(f"  EXIF: {meta['device']} | GPS: {meta['city']}")
+    return ok
+
+
 def full_pipeline(src, out, config, enc_args, log=None):
-    """Kompletny pipeline: [upscale] -> [color grade + encode] -> [EXIF]."""
+    """Kompletny pipeline pre hlavne video: [upscale] -> [color grade + encode] -> [EXIF]."""
     upscale_method = config.get("upscale_method", "none")
     do_grade = config.get("color_grade", True)
-    grain = config.get("grain", 3)
-    lut_path = config.get("lut_path", None)
     region = config.get("region", "us")
 
     current = src
@@ -510,22 +545,18 @@ def full_pipeline(src, out, config, enc_args, log=None):
             else:
                 if log: log("  Real-ESRGAN zlyhal, pokracujem s rychlym Lanczos 1080p...")
 
-        # 2. Color grade + Lanczos 1080p + encode (všetko v 1 priechode na GPU)
+        # 2. Color grade + Lanczos 1080p + CAS 0.4 + encode
         if do_grade:
-            ok = color_grade_and_encode(
-                current, out,
-                lut_path=lut_path, grain=grain, spoof=True,
-                enc_args=enc_args, log=log
-            )
+            ok = color_grade_and_encode(current, out, enc_args=enc_args, log=log)
         else:
             has_a = has_audio_stream(current)
             cmd = ["ffmpeg", "-y", "-i", current]
             if not has_a:
                 cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
             cmd += ["-map_metadata", "-1",
-                    "-vf", build_spoof_filters()] + enc_args + [
+                    "-vf", BASE_EQ_FILTER] + enc_args + [
                 "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-ac", "2", "-b:a", "192k",
+                "-c:a", "copy" if has_a else "aac",
                 "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
                 "-movflags", "+faststart", "-shortest", out
             ]
@@ -536,12 +567,16 @@ def full_pipeline(src, out, config, enc_args, log=None):
             if log: log("  CHYBA: Encode pipeline zlyhala!")
             return False
 
-        # 3. EXIF
+        # 3. EXIF & GPS
         meta = apply_exif(out, region=region)
         if meta and log:
             log(f"  EXIF: {meta['device']} | GPS: {meta['city']}")
         return True
     finally:
+        for t in temps:
+            if t and os.path.isfile(t):
+                try: os.remove(t)
+                except: pass
         for t in temps:
             if t and os.path.isfile(t):
                 try: os.remove(t)
@@ -833,20 +868,13 @@ class ReelsStudio(tk.Tk):
             ("realesrgan", "Real-ESRGAN AI (Vysoká záťaž GPU/zdroja)"),
         ])
 
-        gc = self._card(parent, "🎨  Color Grading")
-        tk.Checkbutton(gc, text="Zapnut Color Grading + Film Grain (odporucane)",
+        gc = self._card(parent, "🎨  Vizuálny štýl (Cinematic EQ + CAS 0.4)")
+        tk.Checkbutton(gc, text="Aplikovať Cinematic EQ + CAS 0.4 doostrenie (odporúčané)",
                        variable=self.v_grade, bg=BG_CARD, fg=TEXT,
                        selectcolor=ACCENT, activebackground=BG_CARD,
-                       activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w")
-        gr = tk.Frame(gc, bg=BG_CARD); gr.pack(fill="x", pady=(6, 0))
-        tk.Label(gr, text="Film Grain (0-30, odporúčané 3):", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
-        tk.Scale(gr, from_=0, to=30, orient="horizontal", variable=self.v_grain,
-                 bg=BG_CARD, fg=TEXT, highlightbackground=BG_CARD,
-                 troughcolor=BG_CARD2, activebackground=ACCENT, length=180).pack(side="left", padx=8)
-        lr = tk.Frame(gc, bg=BG_CARD); lr.pack(fill="x", pady=(4, 0))
-        tk.Label(lr, text="LUT (.cube) [prázdne = Anti-AI Filmic 33×33]:", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
-        self._entry(lr, self.v_lut, width=32).pack(side="left", padx=8)
-        self._btn(lr, "Vybrat...", self._pick_lut).pack(side="left")
+                       activeforeground=TEXT, font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        tk.Label(gc, text="• Hlavné video: contrast=1.06, brightness=-0.01, gamma=0.97, saturation=1.03\n• Adaptívne doostrenie: AMD FidelityFX CAS 0.4\n• Enkóder: CPU libx264 -crf 18 (vizuálne bezstratový export)\n• Kópie: automatický náhodný jitter hodnôt + unikátne GPS a EXIF",
+                 fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9), justify="left").pack(anchor="w", padx=4, pady=(4, 0))
 
         tk.Checkbutton(self._card(parent, "☁  Google Drive"),
                        text="Po dokonceni nahrat na Google Drive IG_VAULT",
@@ -957,42 +985,87 @@ class ReelsStudio(tk.Tk):
         total = len(files) * variants
         done = 0
         t0 = time.time()
-        for v in range(variants):
-            if variants > 1:
-                target_dir = os.path.join(out_dir, f"kopie {v + 1}")
-                os.makedirs(target_dir, exist_ok=True)
-            else:
-                target_dir = out_dir
 
-            for src in files:
-                if not self.is_running:
-                    self.log("STOP — prerušene pouzivatelom.")
-                    self._set_running(False)
-                    return
-                done += 1
-                base = os.path.splitext(os.path.basename(src))[0]
-                tok = uuid.uuid4().hex[:6]
-                suf = f"_v{v+1}" if variants > 1 else ""
-                name = f"spoofed_{base}{suf}_{tok}.mp4"
-                out = os.path.join(target_dir, name)
-                folder_tag = f"kopie {v+1}/" if variants > 1 else ""
-                self.log(f"\n[{done}/{total}] (Kópia {v+1}/{variants}) {os.path.basename(src)} -> {folder_tag}{name}")
-                self._set_progress(done - 1, total)
-                vt = time.time()
-                ok = full_pipeline(src, out, cfg, self.enc_args, log=self.log)
-                dur = round(time.time() - vt, 1)
-                if ok:
-                    mb = round(os.path.getsize(out) / 1048576, 1) if os.path.exists(out) else 0
-                    self.log(f"  OK: {dur}s | {mb} MB")
-                    if do_drive and self.gdrive_svc:
-                        self.log("  Nahravanie na Drive...")
-                        try:
-                            upload_to_drive(self.gdrive_svc, out, name)
-                            self.log("  Drive upload OK!")
-                        except Exception as e:
-                            self.log(f"  Drive CHYBA: {e}")
-                else:
-                    self.log(f"  CHYBA po {dur}s")
+        for src in files:
+            if not self.is_running:
+                self.log("STOP — prerušene pouzivatelom.")
+                self._set_running(False)
+                return
+
+            base = os.path.splitext(os.path.basename(src))[0]
+
+            # 1. Hlavné video (kópia 1)
+            done += 1
+            if variants > 1:
+                target_dir_1 = os.path.join(out_dir, "kopie 1")
+                os.makedirs(target_dir_1, exist_ok=True)
+            else:
+                target_dir_1 = out_dir
+
+            tok1 = uuid.uuid4().hex[:6]
+            suf1 = "_v1" if variants > 1 else ""
+            name1 = f"spoofed_{base}{suf1}_{tok1}.mp4"
+            out1 = os.path.join(target_dir_1, name1)
+
+            folder_tag1 = "kopie 1/" if variants > 1 else ""
+            self.log(f"\n[{done}/{total}] (Hlavné video 1/{variants}) {os.path.basename(src)} -> {folder_tag1}{name1}")
+            self._set_progress(done - 1, total)
+
+            vt = time.time()
+            ok1 = full_pipeline(src, out1, cfg, self.enc_args, log=self.log)
+            dur1 = round(time.time() - vt, 1)
+
+            if not ok1:
+                self.log(f"  CHYBA hlavného videa po {dur1}s")
+                continue
+
+            mb1 = round(os.path.getsize(out1) / 1048576, 1) if os.path.exists(out1) else 0
+            self.log(f"  OK hlavné video: {dur1}s | {mb1} MB")
+
+            if do_drive and self.gdrive_svc:
+                self.log("  Nahravanie hlavného videa na Drive...")
+                try:
+                    upload_to_drive(self.gdrive_svc, out1, name1)
+                    self.log("  Drive upload OK!")
+                except Exception as e:
+                    self.log(f"  Drive CHYBA: {e}")
+
+            # 2. Ďalšie kópie z hlavného videa s náhodným jitterom
+            if variants > 1:
+                for v in range(1, variants):
+                    if not self.is_running:
+                        self.log("STOP — prerušene pouzivatelom.")
+                        self._set_running(False)
+                        return
+
+                    done += 1
+                    target_dir_v = os.path.join(out_dir, f"kopie {v + 1}")
+                    os.makedirs(target_dir_v, exist_ok=True)
+
+                    tok_v = uuid.uuid4().hex[:6]
+                    name_v = f"spoofed_{base}_v{v + 1}_{tok_v}.mp4"
+                    out_v = os.path.join(target_dir_v, name_v)
+
+                    self.log(f"\n[{done}/{total}] (Kópia {v+1}/{variants} s jitterom) {folder_tag1}{name1} -> kopie {v+1}/{name_v}")
+                    self._set_progress(done - 1, total)
+
+                    vt2 = time.time()
+                    ok_v = create_copy_with_jitter(out1, out_v, region=cfg.get("region", "us"),
+                                                   enc_args=self.enc_args, log=self.log)
+                    dur_v = round(time.time() - vt2, 1)
+
+                    if ok_v:
+                        mb_v = round(os.path.getsize(out_v) / 1048576, 1) if os.path.exists(out_v) else 0
+                        self.log(f"  OK kópia {v+1}: {dur_v}s | {mb_v} MB")
+                        if do_drive and self.gdrive_svc:
+                            self.log("  Nahravanie kópie na Drive...")
+                            try:
+                                upload_to_drive(self.gdrive_svc, out_v, name_v)
+                                self.log("  Drive upload OK!")
+                            except Exception as e:
+                                self.log(f"  Drive CHYBA: {e}")
+                    else:
+                        self.log(f"  CHYBA kópie {v+1} po {dur_v}s")
         elapsed = round(time.time() - t0, 1)
         self.log(f"\n{'='*58}")
         self.log(f"HOTOVO za {elapsed}s | {done}/{total} videi")
