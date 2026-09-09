@@ -43,6 +43,8 @@ def init_db():
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN health_message TEXT DEFAULT 'Pripravené na použitie'")
         if "last_health_check" not in cols:
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN last_health_check TIMESTAMP DEFAULT NULL")
+        if "usa_audience_pct" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN usa_audience_pct REAL DEFAULT NULL")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS snapshots (
@@ -59,10 +61,25 @@ def init_db():
                 avg_views INTEGER DEFAULT 0,
                 engagement_rate REAL DEFAULT 0.0,
                 last_post_date TEXT,
+                last_post_views INTEGER DEFAULT 0,
+                last_post_url TEXT,
+                last_post_likes INTEGER DEFAULT 0,
+                usa_audience_pct REAL DEFAULT NULL,
                 FOREIGN KEY(account_id) REFERENCES tracked_accounts(id) ON DELETE CASCADE
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_account ON snapshots(account_id, timestamp DESC)")
+
+        # Migration for snapshots table
+        snap_cols = [c["name"] for c in conn.execute("PRAGMA table_info(snapshots)").fetchall()]
+        if "last_post_views" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN last_post_views INTEGER DEFAULT 0")
+        if "last_post_url" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN last_post_url TEXT DEFAULT NULL")
+        if "last_post_likes" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN last_post_likes INTEGER DEFAULT 0")
+        if "usa_audience_pct" not in snap_cols:
+            conn.execute("ALTER TABLE snapshots ADD COLUMN usa_audience_pct REAL DEFAULT NULL")
 
         # ── Media Vault: raw master videos ──────────────────────────────
         conn.execute("""
@@ -220,7 +237,8 @@ def get_all_accounts():
 def add_snapshot(account_id, followers, following, posts_count,
                  top_reel_url="", top_reel_views=0, top_reel_likes=0,
                  total_views=0, avg_views=0, engagement_rate=0.0,
-                 last_post_date=None):
+                 last_post_date=None, last_post_views=0, last_post_url=None,
+                 last_post_likes=0, usa_audience_pct=None):
     now_iso = datetime.now(timezone.utc).isoformat()
     with get_db() as conn:
         cur = conn.cursor()
@@ -228,12 +246,14 @@ def add_snapshot(account_id, followers, following, posts_count,
             INSERT INTO snapshots (
                 account_id, timestamp, followers, following, posts_count,
                 top_reel_url, top_reel_views, top_reel_likes,
-                total_views, avg_views, engagement_rate, last_post_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                total_views, avg_views, engagement_rate, last_post_date,
+                last_post_views, last_post_url, last_post_likes, usa_audience_pct
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             account_id, now_iso, followers, following, posts_count,
             top_reel_url, top_reel_views, top_reel_likes,
-            total_views, avg_views, engagement_rate, last_post_date
+            total_views, avg_views, engagement_rate, last_post_date,
+            last_post_views, last_post_url, last_post_likes, usa_audience_pct
         ))
         return cur.lastrowid
 
@@ -278,10 +298,25 @@ def get_accounts_with_metrics():
         health_message = acc["health_message"] if "health_message" in acc.keys() and acc["health_message"] else "Pripravené na použitie"
         last_health_check = acc["last_health_check"] if "last_health_check" in acc.keys() else None
 
+        # USA audience: buď zo snapshotu alebo priamo z profilu (fallback)
+        acc_usa = acc["usa_audience_pct"] if "usa_audience_pct" in acc.keys() else None
+
         if latest:
             followers = latest["followers"]
             prev_followers = prev["followers"] if prev else followers
             delta_followers = followers - prev_followers
+
+            total_views = latest.get("total_views", 0) or 0
+            prev_views = prev.get("total_views", 0) if prev else total_views
+            if prev_views is None:
+                prev_views = total_views
+            delta_views = total_views - prev_views
+
+            last_post_views = latest.get("last_post_views", 0) or 0
+            last_post_url = latest.get("last_post_url")
+            last_post_likes = latest.get("last_post_likes", 0) or 0
+            snap_usa = latest.get("usa_audience_pct")
+            usa_audience_pct = snap_usa if snap_usa is not None else acc_usa
 
             item = {
                 "id": aid,
@@ -302,8 +337,10 @@ def get_accounts_with_metrics():
                 "delta_fmt": (f"+{delta_followers}" if delta_followers > 0 else str(delta_followers)),
                 "following": latest["following"],
                 "posts_count": latest["posts_count"],
-                "total_views": latest["total_views"],
-                "total_views_fmt": format_number(latest["total_views"]) if latest["total_views"] > 0 else "-",
+                "total_views": total_views,
+                "total_views_fmt": format_number(total_views) if total_views > 0 else "-",
+                "delta_views": delta_views,
+                "delta_views_fmt": (f"+{format_number(delta_views)}" if delta_views > 0 else ("0" if delta_views == 0 else f"-{format_number(abs(delta_views))}")),
                 "avg_views": latest["avg_views"],
                 "avg_views_fmt": format_number(latest["avg_views"]) if latest["avg_views"] > 0 else "-",
                 "top_reel_url": latest["top_reel_url"],
@@ -313,6 +350,12 @@ def get_accounts_with_metrics():
                 "top_reel_likes_fmt": format_number(latest["top_reel_likes"]) if latest["top_reel_likes"] > 0 else "-",
                 "engagement_rate": latest["engagement_rate"],
                 "last_post_date": latest["last_post_date"] or "Aktuálne",
+                "last_post_views": last_post_views,
+                "last_post_views_fmt": format_number(last_post_views) if last_post_views > 0 else str(last_post_views),
+                "last_post_url": last_post_url,
+                "last_post_likes": last_post_likes,
+                "last_post_likes_fmt": format_number(last_post_likes) if last_post_likes > 0 else str(last_post_likes),
+                "usa_audience_pct": round(usa_audience_pct, 1) if usa_audience_pct is not None else None,
                 "last_updated": latest["timestamp"]
             }
         else:
@@ -337,6 +380,8 @@ def get_accounts_with_metrics():
                 "posts_count": 0,
                 "total_views": 0,
                 "total_views_fmt": "--",
+                "delta_views": 0,
+                "delta_views_fmt": "0",
                 "avg_views": 0,
                 "avg_views_fmt": "--",
                 "top_reel_url": None,
@@ -346,11 +391,28 @@ def get_accounts_with_metrics():
                 "top_reel_likes_fmt": "--",
                 "engagement_rate": 0.0,
                 "last_post_date": "--",
+                "last_post_views": 0,
+                "last_post_views_fmt": "-",
+                "last_post_url": None,
+                "last_post_likes": 0,
+                "last_post_likes_fmt": "-",
+                "usa_audience_pct": round(acc_usa, 1) if acc_usa is not None else None,
                 "last_updated": None
             }
         result.append(item)
 
     return result
+
+
+def update_account_usa_audience(account_id, usa_audience_pct):
+    """Aktualizuje podiel USA publika pre účet v tracked_accounts a v najnovšom snapshote."""
+    with get_db() as conn:
+        conn.execute("UPDATE tracked_accounts SET usa_audience_pct = ? WHERE id = ?", (usa_audience_pct, account_id))
+        conn.execute("""
+            UPDATE snapshots 
+            SET usa_audience_pct = ? 
+            WHERE id = (SELECT id FROM snapshots WHERE account_id = ? ORDER BY id DESC LIMIT 1)
+        """, (usa_audience_pct, account_id))
 
 
 # ─── Account Health Management ────────────────────────────────────────────────

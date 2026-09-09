@@ -76,7 +76,14 @@ def index():
     if not is_authenticated() and auth_header != MASTER_PASSWORD:
         return render_template("login.html")
     accounts = db.get_accounts_with_metrics()
-    return render_template("index.html", accounts=accounts)
+    total_followers = sum(a["followers"] for a in accounts if a["has_data"])
+    total_views = sum(a["total_views"] for a in accounts if a["has_data"])
+    return render_template(
+        "index.html",
+        accounts=accounts,
+        total_followers_fmt=db.format_number(total_followers),
+        total_views_fmt=db.format_number(total_views)
+    )
 
 
 @app.route("/login", methods=["POST"])
@@ -155,7 +162,11 @@ def api_add_account():
             total_views=scraped.get("total_views", 0),
             avg_views=scraped.get("avg_views", 0),
             engagement_rate=scraped.get("engagement_rate", 0.0),
-            last_post_date=scraped.get("last_post_date")
+            last_post_date=scraped.get("last_post_date"),
+            last_post_views=scraped.get("last_post_views", 0),
+            last_post_url=scraped.get("last_post_url"),
+            last_post_likes=scraped.get("last_post_likes", 0),
+            usa_audience_pct=scraped.get("usa_audience_pct")
         )
     except Exception as e:
         print(f"Chyba pri scrapovaní {username}: {e}")
@@ -224,7 +235,11 @@ def api_sync():
                     total_views=scraped.get("total_views", 0),
                     avg_views=scraped.get("avg_views", 0),
                     engagement_rate=scraped.get("engagement_rate", 0.0),
-                    last_post_date=scraped.get("last_post_date")
+                    last_post_date=scraped.get("last_post_date"),
+                    last_post_views=scraped.get("last_post_views", 0),
+                    last_post_url=scraped.get("last_post_url"),
+                    last_post_likes=scraped.get("last_post_likes", 0),
+                    usa_audience_pct=scraped.get("usa_audience_pct")
                 )
                 synced_count += 1
             except Exception as e:
@@ -283,6 +298,24 @@ def api_delete_account_token(account_id):
         "message": "Token bol úspešne odpojený od účtu.",
         "account_id": account_id
     }), 200
+
+
+@app.route("/api/ig-tracker/<int:account_id>/audience", methods=["POST"])
+@auth_required
+def api_update_account_audience(account_id):
+    """Aktualizuje podiel USA publika pre daný účet."""
+    data = request.get_json(silent=True) or request.form or {}
+    val = data.get("usa_audience_pct")
+    try:
+        pct = float(val) if val is not None and str(val).strip() != "" else None
+        db.update_account_usa_audience(account_id, pct)
+        return jsonify({
+            "status": "ok",
+            "message": f"Podiel USA publika bol nastavený na {pct}%" if pct is not None else "Hodnota bola vynulovaná.",
+            "usa_audience_pct": pct
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Neplatná hodnota: {e}"}), 400
 
 
 # ─── Meta / Instagram OAuth Login Flow ────────────────────────────────────────
@@ -1668,7 +1701,11 @@ def background_sync_worker():
                             total_views=scraped.get("total_views", 0),
                             avg_views=scraped.get("avg_views", 0),
                             engagement_rate=scraped.get("engagement_rate", 0.0),
-                            last_post_date=scraped.get("last_post_date")
+                            last_post_date=scraped.get("last_post_date"),
+                            last_post_views=scraped.get("last_post_views", 0),
+                            last_post_url=scraped.get("last_post_url"),
+                            last_post_likes=scraped.get("last_post_likes", 0),
+                            usa_audience_pct=scraped.get("usa_audience_pct")
                         )
         except Exception as e:
             print(f"[IGTracker Worker] Všeobecná chyba workeru: {e}")

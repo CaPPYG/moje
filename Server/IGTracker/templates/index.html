@@ -84,7 +84,7 @@
         <div class="stat-badge-icon ig-gradient-text"><i class="fab fa-instagram"></i></div>
         <div class="stat-badge-info">
           <span class="stat-badge-label">Celkový dosah (Followeri)</span>
-          <span class="stat-badge-value" id="statTotalFollowers">--</span>
+          <span class="stat-badge-value" id="statTotalFollowers">{{ total_followers_fmt or '--' }}</span>
         </div>
       </div>
 
@@ -92,7 +92,7 @@
         <div class="stat-badge-icon" style="color: #38bdf8;"><i class="fas fa-play"></i></div>
         <div class="stat-badge-info">
           <span class="stat-badge-label">Celkové zhliadnutia</span>
-          <span class="stat-badge-value" id="statTotalViews">--</span>
+          <span class="stat-badge-value" id="statTotalViews">{{ total_views_fmt or '--' }}</span>
         </div>
       </div>
     </section>
@@ -106,7 +106,7 @@
               <th>Účet</th>
               <th>Stav</th>
               <th>Followeri (Δ)</th>
-              <th>Celkové Views</th>
+              <th>Celkové Views (Δ)</th>
               <th>Priemer Views</th>
               <th>Top Reel (Views / Likes)</th>
               <th>Engagement</th>
@@ -174,7 +174,16 @@
 
                   <!-- Celkové Views -->
                   <td>
-                    <span class="mono-stat">{{ acc.total_views_fmt }}</span>
+                    <div class="views-cell">
+                      <span class="mono-stat">{{ acc.total_views_fmt }}</span>
+                      {% if acc.delta_views > 0 %}
+                        <span class="delta-badge delta-pos" title="Nárast od posledného refreshu"><i class="fas fa-caret-up"></i> {{ acc.delta_views_fmt }}</span>
+                      {% elif acc.delta_views < 0 %}
+                        <span class="delta-badge delta-neg" title="Pokles od posledného refreshu"><i class="fas fa-caret-down"></i> {{ acc.delta_views_fmt }}</span>
+                      {% else %}
+                        <span class="delta-badge delta-neutral" title="Žiadna zmena od posledného refreshu">0</span>
+                      {% endif %}
+                    </div>
                   </td>
 
                   <!-- Priemer Views -->
@@ -185,11 +194,22 @@
                   <!-- Top Reel (Views / Likes) -->
                   <td>
                     {% if acc.top_reel_url and acc.top_reel_views > 0 %}
-                      <a href="{{ acc.top_reel_url }}" target="_blank" rel="noopener noreferrer" class="top-reel-pill" title="Otvoriť Top Reel na Instagrame">
-                        <span class="reel-views"><i class="fas fa-eye"></i> {{ acc.top_reel_views_fmt }}</span>
-                        <span class="reel-sep">/</span>
-                        <span class="reel-likes"><i class="fas fa-heart"></i> {{ acc.top_reel_likes_fmt }}</span>
-                      </a>
+                      <div class="top-reel-cell">
+                        <a href="{{ acc.top_reel_url }}" target="_blank" rel="noopener noreferrer" class="top-reel-pill" title="Otvoriť Top Reel na Instagrame">
+                          <span class="reel-views"><i class="fas fa-eye"></i> {{ acc.top_reel_views_fmt }}</span>
+                          <span class="reel-sep">/</span>
+                          <span class="reel-likes"><i class="fas fa-heart"></i> {{ acc.top_reel_likes_fmt }}</span>
+                        </a>
+                        {% if acc.usa_audience_pct is not none %}
+                          <span class="usa-badge" onclick="promptSetAudience({{ acc.id }}, '{{ acc.username }}', {{ acc.usa_audience_pct }})" title="Podiel publika z USA (kliknutím upraviť)">
+                            <i class="fas fa-flag-usa"></i> {{ acc.usa_audience_pct }}% USA
+                          </span>
+                        {% else %}
+                          <button class="btn-set-audience" onclick="promptSetAudience({{ acc.id }}, '{{ acc.username }}', null)" title="Nastaviť % USA publika pre @{{ acc.username }}">
+                            <i class="fas fa-flag-usa"></i> +% USA
+                          </button>
+                        {% endif %}
+                      </div>
                     {% else %}
                       <span class="text-dim">Profil bez reels</span>
                     {% endif %}
@@ -208,7 +228,17 @@
 
                   <!-- Posledný post -->
                   <td>
-                    <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
+                    <div class="latest-post-cell">
+                      {% if acc.last_post_url %}
+                        <a href="{{ acc.last_post_url }}" target="_blank" rel="noopener noreferrer" class="latest-post-pill" title="Otvoriť posledný post na Instagrame">
+                          <span class="post-views"><i class="fas fa-eye"></i> {{ acc.last_post_views_fmt }}</span>
+                          <span class="post-sep">/</span>
+                          <span class="post-time"><i class="fas fa-clock"></i> {{ acc.last_post_date }}</span>
+                        </a>
+                      {% else %}
+                        <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
+                      {% endif %}
+                    </div>
                   </td>
 
                   <!-- Akcie -->

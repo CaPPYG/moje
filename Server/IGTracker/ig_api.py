@@ -128,6 +128,41 @@ def get_account_insights(token: str, days: int = 30) -> dict:
     return result
 
 
+def get_audience_country(token: str) -> Optional[dict]:
+    """
+    Pokúsi sa získať demografiu publika (rozpad podľa krajín) cez Meta Graph API.
+    Poznámka: Vyžaduje oprávnenie instagram_manage_insights na tokene.
+    """
+    try:
+        r = httpx.get(
+            f"{IG_API_BASE}/me/insights",
+            params={
+                "metric": "follower_demographics",
+                "period": "lifetime",
+                "breakdown": "country",
+                "access_token": token,
+            },
+            timeout=10,
+        )
+        data = r.json()
+        if "data" in data and data["data"]:
+            breakdowns = data["data"][0].get("total_value", {}).get("breakdowns", [])
+            if breakdowns:
+                results = {}
+                total = 0
+                for item in breakdowns[0].get("results", []):
+                    c = item.get("dimension_values", [""])[0]
+                    v = item.get("value", 0)
+                    results[c] = v
+                    total += v
+                us_count = results.get("US", 0)
+                us_pct = round((us_count / total * 100), 1) if total > 0 else 0.0
+                return {"us_pct": us_pct, "countries": results, "total": total}
+    except Exception as e:
+        logger.warning(f"Audience country fetch failed: {e}")
+    return None
+
+
 # ─── Publish ──────────────────────────────────────────────────────────────────
 
 def publish_photo(token: str, ig_user_id: str, image_url: str, caption: str = "") -> dict:

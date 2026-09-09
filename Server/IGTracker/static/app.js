@@ -439,7 +439,40 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBox.style.background = '';
         statusBox.style.color = '';
         statusBox.textContent = '❌ Chyba spojenia so serverom.';
+    }
+  };
+
+  // ─── Nastavenie % USA publika ─────────────────────────────────────────
+  window.promptSetAudience = async function(accountId, username, currentVal) {
+    const defaultVal = (currentVal !== null && currentVal !== undefined) ? currentVal : '';
+    const input = prompt(`Zadajte % USA publika pre @${username} (napr. 45 alebo 58.5):`, defaultVal);
+    if (input === null) return; // používateľ zrušil
+
+    const trimmed = input.trim();
+    const pct = trimmed === '' ? null : parseFloat(trimmed.replace(',', '.'));
+    if (pct !== null && (isNaN(pct) || pct < 0 || pct > 100)) {
+      alert('Zadajte platné percento od 0 do 100 (alebo nechajte prázdne pre zmazanie).');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${PREFIX}/api/ig-tracker/${accountId}/audience`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usa_audience_pct: pct })
+      });
+      const data = await res.json();
+      if (res.ok && data.status === 'ok') {
+        if (typeof showToast === 'function') {
+          showToast(`% USA publika pre @${username} bolo uložené!`, 'success');
+        }
+        setTimeout(() => window.location.reload(), 500);
+      } else {
+        alert(data.message || 'Chyba pri ukladaní.');
       }
+    } catch (err) {
+      console.error(err);
+      alert('Chyba spojenia so serverom.');
     }
   };
 });

@@ -104,18 +104,39 @@ def _parse_apify_item(data, default_username=""):
     video_count = 0
     total_likes = 0
     total_comments = 0
-    last_post_date = None
 
-    for i, p in enumerate(posts):
+    # 1. Identifikácia skutočne najnovšieho postu (zoradením podľa timestamp zostupne, ignorujúc pinned posty na profile)
+    sorted_by_date = sorted(
+        posts,
+        key=lambda p: p.get("timestamp") or "",
+        reverse=True
+    )
+    last_post_date = None
+    last_post_views = 0
+    last_post_likes = 0
+    last_post_url = None
+
+    if sorted_by_date:
+        newest = sorted_by_date[0]
+        ts_newest = newest.get("timestamp")
+        if ts_newest:
+            last_post_date = parse_relative_time(ts_newest)
+        last_post_views = newest.get("videoPlayCount") or newest.get("videoViewCount") or 0
+        last_post_likes = newest.get("likesCount") or 0
+        sc_newest = newest.get("shortCode")
+        if sc_newest:
+            if newest.get("type") == "Video" or last_post_views > 0:
+                last_post_url = f"https://www.instagram.com/reel/{sc_newest}/"
+            else:
+                last_post_url = f"https://www.instagram.com/p/{sc_newest}/"
+
+    # 2. Agregácia metrík (views, likes, top reel)
+    for p in posts:
         p_type = p.get("type")
         shortcode = p.get("shortCode")
         views = p.get("videoPlayCount") or p.get("videoViewCount") or 0
         likes = p.get("likesCount") or 0
         comments = p.get("commentsCount") or 0
-        ts = p.get("timestamp")
-
-        if i == 0 and ts:
-            last_post_date = parse_relative_time(ts)
 
         total_likes += likes
         total_comments += comments
@@ -158,6 +179,9 @@ def _parse_apify_item(data, default_username=""):
         "avg_views": avg_views,
         "engagement_rate": engagement_rate,
         "last_post_date": last_post_date or "Aktuálne",
+        "last_post_views": last_post_views,
+        "last_post_likes": last_post_likes,
+        "last_post_url": last_post_url,
         "reels_count": video_count
     }
 
@@ -185,17 +209,33 @@ def _enrich_profiles_with_posts(profiles, posts_items):
         top_url = prof.get("top_reel_url")
         total_likes = 0
         total_comments = 0
-        last_date = prof.get("last_post_date")
+        # Identifikácia skutočne najnovšieho postu
+        sorted_posts = sorted(
+            p_list,
+            key=lambda p: p.get("timestamp") or "",
+            reverse=True
+        )
+        if sorted_posts:
+            newest = sorted_posts[0]
+            ts_newest = newest.get("timestamp")
+            if ts_newest:
+                prof["last_post_date"] = parse_relative_time(ts_newest)
+            newest_views = newest.get("videoPlayCount") or newest.get("videoViewCount") or 0
+            newest_likes = newest.get("likesCount") or 0
+            prof["last_post_views"] = newest_views
+            prof["last_post_likes"] = newest_likes
+            sc_newest = newest.get("shortCode")
+            if sc_newest:
+                if newest.get("type") == "Video" or newest_views > 0:
+                    prof["last_post_url"] = f"https://www.instagram.com/reel/{sc_newest}/"
+                else:
+                    prof["last_post_url"] = f"https://www.instagram.com/p/{sc_newest}/"
 
-        for i, p in enumerate(p_list):
+        for p in p_list:
             plays = p.get("videoPlayCount") or p.get("videoViewCount") or 0
             likes = p.get("likesCount") or 0
             comments = p.get("commentsCount") or 0
             shortcode = p.get("shortCode")
-            ts = p.get("timestamp")
-
-            if i == 0 and ts:
-                last_date = parse_relative_time(ts)
 
             total_likes += likes
             total_comments += comments
@@ -222,8 +262,6 @@ def _enrich_profiles_with_posts(profiles, posts_items):
         sample_posts = max(1, len(p_list))
         if followers > 0:
             prof["engagement_rate"] = round(((total_likes + total_comments) / sample_posts / followers) * 100, 2)
-        if last_date:
-            prof["last_post_date"] = last_date
 
 
 # ─── 2. PRIMÁRNY FETCHER: APIFY INSTAGRAM SCRAPER (SINGLE & BATCH) ─────────

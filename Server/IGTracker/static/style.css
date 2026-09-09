@@ -542,6 +542,116 @@ body {
   color: #38bdf8;
 }
 
+/* Views Cell with Delta */
+.views-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Top Reel Cell */
+.top-reel-cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Latest Post Pill */
+.latest-post-cell {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.latest-post-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  text-decoration: none;
+  color: #fff;
+  font-size: 0.86em;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  width: fit-content;
+}
+
+.latest-post-pill:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+}
+
+.post-views {
+  color: #38bdf8;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.post-sep {
+  color: var(--text-dim);
+  font-size: 0.8em;
+}
+
+.post-time {
+  color: #cbd5e1;
+  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* USA Audience Badge */
+.usa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #60a5fa;
+  font-size: 0.76rem;
+  font-weight: 600;
+  width: fit-content;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.usa-badge:hover {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: #60a5fa;
+  transform: scale(1.02);
+}
+
+.btn-set-audience {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: fit-content;
+}
+
+.btn-set-audience:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: #60a5fa;
+  color: #60a5fa;
+}
+
 .btn-delete {
   background: transparent;
   border: none;
