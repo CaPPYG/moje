@@ -174,6 +174,17 @@ def generate_thumbnail(media_path: str, out_thumb_path: str, time_offset="00:00:
         return False
 
 
+def get_sharpen_filter() -> str:
+    """Vráti AMD FidelityFX CAS (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    try:
+        r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
+        if r.returncode == 0:
+            return "cas=0.35"
+    except Exception:
+        pass
+    return "unsharp=5:5:0.6:5:5:0.0"
+
+
 def build_spoof_filters() -> str:
     """
     Vygeneruje bezpečné náhodné filtre (jemný jitter), ktoré ľudské oko
@@ -183,7 +194,6 @@ def build_spoof_filters() -> str:
     cont = random.uniform(0.985, 1.015)
     bright = random.uniform(-0.008, 0.008)
     gamma = random.uniform(0.985, 1.015)
-    zoom = random.uniform(1.002, 1.008)
     hue = random.uniform(-1.0, 1.0)
     col_temp = random.uniform(-0.015, 0.015)
 
@@ -191,8 +201,6 @@ def build_spoof_filters() -> str:
         f"eq=saturation={sat:.4f}:contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}",
         f"colorbalance=rs={col_temp:.4f}:gs=0:bs={-col_temp:.4f}:rm={col_temp/2:.4f}:gm=0:bm={-col_temp/2:.4f}",
         f"hue=h={hue:.2f}",
-        f"scale=iw*{zoom:.4f}:ih*{zoom:.4f},crop=iw/{zoom:.4f}:ih/{zoom:.4f}",
-        "unsharp=lx=3:ly=3:la=0.35:cx=3:cy=3:ca=0",
     ]
     return ",".join(filters)
 
@@ -495,9 +503,26 @@ def color_grade_and_encode(
     if grain and grain > 0:
         vf_parts.append(f"noise=alls={grain}:allf=t+u")
 
-    # Finálny vycentrovaný scale a orez na presných 1080x1920
-    vf_parts.append("scale=1080:1920:force_original_aspect_ratio=increase")
-    vf_parts.append("crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2")
+    sharp_filter = get_sharpen_filter()
+
+    # Kompletný reťazec v správnom poradí:
+    # 1. Scale & vycentrovaný Crop na 1080x1920 (Lanczos)
+    # 2. Doostrenie (AMD CAS 0.35 alebo unsharp)
+    # 3. Spoof farebné odchýlky
+    # 4. Color Grading (.cube LUT)
+    # 5. Filmové zrno (až po doostrení, aby zrno nebolo preostrené)
+    vf_parts = [
+        "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos",
+        "crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2",
+        sharp_filter,
+    ]
+    if spoof:
+        vf_parts.extend(build_spoof_filters().split(","))
+
+    vf_parts.append(f"lut3d={lut_esc}")
+
+    if grain and grain > 0:
+        vf_parts.append(f"noise=alls={grain}:allf=t+u")
 
     vf = ",".join(vf_parts)
 
@@ -519,7 +544,7 @@ def color_grade_and_encode(
         out_path
     ]
 
-    logger.info(f"color_grade_and_encode: grain={grain}, pomer=1080x1920 center-crop, 14 Mbps H.264")
+    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, 14 Mbps H.264")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if r.returncode != 0 or not os.path.exists(out_path):
         logger.warning(f"Hlavny encode zlyhal, skusam fallback: {r.stderr[-300:]}")
@@ -528,7 +553,7 @@ def color_grade_and_encode(
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
-            "-vf", f"lut3d={lut_esc},noise=alls={grain}:allf=t+u,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2",
+            "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2,{sharp_filter},lut3d={lut_esc},noise=alls={grain}:allf=t+u",
             "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
             "-preset", "slow",
             "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
