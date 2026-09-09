@@ -1399,15 +1399,37 @@
           Rozvrh cieliaci na americké špičky (US Lunch 13:15 EST / Evening 19:30 EST) prepočítané na stredoeurópsky čas s náhodným rozptylom (±7–23 min anti-bot jitter). Žiadne dva profily nepostnú rovnaký master v rovnaký deň.
         </p>
       </div>
-      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <input type="date" id="plannerDateInput" class="form-input" style="width: auto; padding: 7px 12px;" onchange="loadPlannerPosts()">
-        <button type="button" class="btn-save" onclick="openPlanGeneratorModal()">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <!-- View Mode: All Upcoming vs By Day -->
+        <div style="display: flex; gap: 4px; background: rgba(255,255,255,0.05); padding: 3px; border-radius: 9px;">
+          <button type="button" id="btnPlannerModeAll" onclick="setPlannerViewMode('all')" style="border: none; background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 700; font-size: 0.82rem; padding: 7px 12px; border-radius: 7px; cursor: pointer;">
+            <i class="fas fa-list-check"></i> Všetky naplánované (<span id="plannerTotalBadge">0</span>)
+          </button>
+          <button type="button" id="btnPlannerModeDay" onclick="setPlannerViewMode('day')" style="border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.82rem; padding: 7px 12px; border-radius: 7px; cursor: pointer;">
+            <i class="fas fa-calendar-day"></i> Podľa dňa
+          </button>
+        </div>
+
+        <div id="plannerDayNavWrap" style="display: none; align-items: center; gap: 6px;">
+          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(-1)" title="Predchádzajúci deň" style="padding: 7px 10px;">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <input type="date" id="plannerDateInput" class="form-input" style="width: auto; padding: 6px 10px; font-size: 0.85rem;" onchange="loadPlannerPosts()">
+          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(1)" title="Nasledujúci deň" style="padding: 7px 10px;">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <button type="button" class="btn-cancel" onclick="setPlannerToday()" title="Dnes" style="padding: 6px 10px; font-size: 0.8rem;">
+            Dnes
+          </button>
+        </div>
+
+        <button type="button" class="btn-save" onclick="openPlanGeneratorModal()" style="font-size: 0.85rem; padding: 8px 14px;">
           <i class="fas fa-wand-magic-sparkles"></i> 🤖 Generovať denný Auto-Plan
         </button>
-        <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7);">
-          <i class="fas fa-layer-group"></i> 📤 Nahrať Set Reels pre účet
+        <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7); font-size: 0.85rem; padding: 8px 14px;">
+          <i class="fas fa-layer-group"></i> 📤 Naplánovať Set Reels pre účet
         </button>
-        <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť zoznam">
+        <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť zoznam" style="padding: 8px 11px;">
           <i class="fas fa-rotate"></i>
         </button>
       </div>
@@ -3342,35 +3364,83 @@
     }
 
     // ── Auto-Planner Logic ──
+    // ── Auto-Planner Logic ──
+    let plannerViewMode = 'all'; // 'all' or 'day'
+
+    function setPlannerViewMode(mode) {
+      plannerViewMode = mode;
+      const btnAll = document.getElementById('btnPlannerModeAll');
+      const btnDay = document.getElementById('btnPlannerModeDay');
+      const dayNav = document.getElementById('plannerDayNavWrap');
+
+      if (mode === 'all') {
+        if (btnAll) { btnAll.style.background = 'rgba(56, 189, 248, 0.2)'; btnAll.style.color = '#38bdf8'; btnAll.style.fontWeight = '700'; }
+        if (btnDay) { btnDay.style.background = 'transparent'; btnDay.style.color = '#94a3b8'; btnDay.style.fontWeight = '600'; }
+        if (dayNav) dayNav.style.display = 'none';
+      } else {
+        if (btnDay) { btnDay.style.background = 'rgba(56, 189, 248, 0.2)'; btnDay.style.color = '#38bdf8'; btnDay.style.fontWeight = '700'; }
+        if (btnAll) { btnAll.style.background = 'transparent'; btnAll.style.color = '#94a3b8'; btnAll.style.fontWeight = '600'; }
+        if (dayNav) dayNav.style.display = 'flex';
+      }
+      loadPlannerPosts();
+    }
+
+    function shiftPlannerDay(delta) {
+      const dateInput = document.getElementById('plannerDateInput');
+      if (!dateInput) return;
+      const curr = dateInput.value ? new Date(dateInput.value) : new Date();
+      curr.setDate(curr.getDate() + delta);
+      dateInput.value = curr.toISOString().split('T')[0];
+      loadPlannerPosts();
+    }
+
+    function setPlannerToday() {
+      const dateInput = document.getElementById('plannerDateInput');
+      if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+        loadPlannerPosts();
+      }
+    }
+
     async function loadPlannerPosts() {
       const container = document.getElementById('plannerTimelineContainer');
       const dateInput = document.getElementById('plannerDateInput');
+      const badgeTotal = document.getElementById('plannerTotalBadge');
       if (!container) return;
 
-      if (dateInput && !dateInput.value) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        dateInput.value = todayStr;
+      let url = `${PREFIX}/api/planner/posts`;
+      if (plannerViewMode === 'day') {
+        if (dateInput && !dateInput.value) {
+          dateInput.value = new Date().toISOString().split('T')[0];
+        }
+        const selectedDate = dateInput ? dateInput.value : '';
+        url += `?date=${encodeURIComponent(selectedDate)}`;
       }
-      const selectedDate = dateInput ? dateInput.value : '';
 
       container.innerHTML = '<div style="color:#94a3b8; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Načítavam naplánovaný rozvrh...</div>';
 
       try {
-        const url = `${PREFIX}/api/planner/posts?date=${encodeURIComponent(selectedDate)}`;
         const res = await fetch(url, { headers: { 'X-Master-Password': PWD } });
         const data = await res.json();
 
         if (res.ok && data.status === 'ok') {
           const posts = data.posts || [];
+          if (badgeTotal) badgeTotal.textContent = data.total_upcoming != null ? data.total_upcoming : posts.length;
+
           if (posts.length === 0) {
             container.innerHTML = `
               <div style="text-align: center; padding: 44px 20px; background: rgba(255,255,255,0.02); border-radius: 18px; border: 1px dashed rgba(255,255,255,0.1);">
                 <div style="font-size: 2.2rem; color: #64748b; margin-bottom: 12px;"><i class="fas fa-calendar-xmark"></i></div>
-                <h3 style="color: #fff; margin: 0 0 8px 0;">Pre dátum ${selectedDate} zatiaľ nie je vygenerovaný rozvrh</h3>
-                <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 18px 0;">Spustite Auto-Planner so spoofing engine, ktorý namapuje master videá na US Peak okná vašich profilov.</p>
-                <button type="button" class="btn-save" onclick="openPlanGeneratorModal()">
-                  <i class="fas fa-wand-magic-sparkles"></i> 🤖 Vygenerovať Auto-Plan pre tento deň
-                </button>
+                <h3 style="color: #fff; margin: 0 0 8px 0;">Zatiaľ tu nie sú žiadne naplánované posty</h3>
+                <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 18px 0;">Naplánujte sadu Reels z Google Drive alebo spustite Auto-Planner.</p>
+                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                  <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7);">
+                    <i class="fas fa-layer-group"></i> 📤 Naplánovať sadu Reels z Google Drive
+                  </button>
+                  <button type="button" class="btn-cancel" onclick="setPlannerViewMode('all')">
+                    <i class="fas fa-list-check"></i> Zobraziť všetky posty
+                  </button>
+                </div>
               </div>
             `;
             return;
@@ -3389,50 +3459,49 @@
                 : '<span class="health-pill warning"><i class="fas fa-hourglass-half"></i> Pripravené na publikovanie</span>';
 
             const regionFlag = p.region === 'us' ? '🇺🇸' : '🇸🇰';
+            const dateOnly = p.scheduled_time ? p.scheduled_time.substring(0, 10) : '';
             const timeFormatted = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '--:--';
-            const masterName = p.master_video_name || p.original_video_name || 'Master';
+            const masterName = p.master_video_name || p.original_video_name || p.spoofed_video_path || 'Master';
 
             return `
               <div class="planner-post-card" id="planner-card-${p.id}">
                 <!-- Left Video Preview -->
                 <div class="planner-video-col">
-                  <video src="${p.video_url}" poster="${p.thumbnail_url || ''}" controls preload="auto" playsinline></video>
+                  <video src="${p.video_url}" poster="${p.thumbnail_url || ''}" controls preload="metadata" playsinline></video>
                 </div>
 
                 <!-- Right Metadata & Editor -->
                 <div class="planner-info-col">
                   <div class="planner-header-row">
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                       <span style="font-weight: 700; font-size: 1.05rem; color: #fff;">
                         ${regionFlag} @${escapeHtml(p.username)}
                       </span>
-                      <span class="peak-badge">
-                        <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || p.target_peak || 'Peak Window')} (~${timeFormatted} CET)
+                      <span class="peak-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 6px; font-size: 0.78rem;">
+                        <i class="fas fa-calendar-day"></i> <b>${dateOnly}</b> o ${timeFormatted} CET
                       </span>
-                      <span class="jitter-pill">
-                        <i class="fas fa-shuffle"></i> Jitter ±${p.jitter_minutes || 0}m
+                      <span class="peak-badge">
+                        <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || 'US Peak')}
                       </span>
                     </div>
                     <div>${statusBadge}</div>
                   </div>
 
-                  <!-- Spoofing details pills -->
-                  <div class="spoof-breakdown">
-                    <span class="spoof-tag-pill" title="FFmpeg micro-contrast, deband a farebný jitter"><i class="fas fa-palette" style="color:#38bdf8;"></i> Pixel Spoof</span>
-                    <span class="spoof-tag-pill" title="Spoofovaný model smartfónu"><i class="fas fa-mobile-screen" style="color:#ec4899;"></i> EXIF Device</span>
-                    <span class="spoof-tag-pill" title="GPS lokácia náhodne v Los Angeles alebo Las Vegas"><i class="fas fa-location-dot" style="color:#10b981;"></i> GPS LA / Vegas</span>
-                    <span class="spoof-tag-pill" title="Pôvodné master video z Vaultu"><i class="fas fa-film" style="color:#f59e0b;"></i> Master: ${escapeHtml(masterName)}</span>
+                  <!-- Details pill -->
+                  <div class="spoof-breakdown" style="margin-top: 6px;">
+                    <span class="spoof-tag-pill" title="Miesto uloženia"><i class="fab fa-google-drive" style="color:#38bdf8;"></i> Google Drive Stream</span>
+                    <span class="spoof-tag-pill" title="Pôvodný názov videa"><i class="fas fa-film" style="color:#f59e0b;"></i> Video: ${escapeHtml(masterName)}</span>
                   </div>
 
                   <!-- In-line Editable Caption & Hashtags -->
-                  <div class="form-group" style="margin-top: 6px;">
-                    <label class="form-label" style="font-size: 0.72rem;">Popis & Hashtagy (môžete kedykoľvek upraviť):</label>
-                    <textarea id="planCaption-${p.id}" class="form-input" style="min-height: 70px;" placeholder="Popis príspevku...">${escapeHtml(p.caption || '')}</textarea>
+                  <div class="form-group" style="margin-top: 8px;">
+                    <label class="form-label" style="font-size: 0.72rem;">Popis & Hashtagy:</label>
+                    <textarea id="planCaption-${p.id}" class="form-input" style="min-height: 60px;" placeholder="Popis príspevku...">${escapeHtml(p.caption || '')}</textarea>
                     <input type="text" id="planHashtags-${p.id}" class="form-input" style="margin-top: 6px;" value="${escapeHtml(p.hashtags || '')}" placeholder="#hashtagy">
                   </div>
 
                   <!-- Action Buttons -->
-                  <div class="planner-actions">
+                  <div class="planner-actions" style="margin-top: 10px;">
                     <button type="button" class="btn-cancel" onclick="savePlannedPostCaption(${p.id})">
                       <i class="fas fa-floppy-disk"></i> Uložiť zmeny
                     </button>

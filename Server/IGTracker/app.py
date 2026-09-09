@@ -1408,9 +1408,20 @@ def api_planner_posts():
 
     posts = db.get_planned_posts(date_str=date_str, account_id=account_id, status=status)
     for p in posts:
-        p["video_url"] = f"/ig/media/vault/spoofed/{p['spoofed_video_path']}"
-        p["thumbnail_url"] = f"/ig/media/vault/thumbs/{p['thumbnail_path']}" if p.get("thumbnail_path") else None
-    return jsonify({"status": "ok", "count": len(posts), "posts": posts}), 200
+        if p.get("vault_video_id"):
+            p["video_url"] = f"/ig/api/vault/stream/{p['vault_video_id']}/reel.mp4"
+            p["thumbnail_url"] = f"/ig/media/vault/thumbs/{p['thumbnail_path']}" if p.get("thumbnail_path") else None
+        else:
+            p["video_url"] = f"/ig/media/vault/spoofed/{p['spoofed_video_path']}"
+            p["thumbnail_url"] = f"/ig/media/vault/thumbs/{p['thumbnail_path']}" if p.get("thumbnail_path") else None
+
+    all_upcoming = db.get_planned_posts()
+    return jsonify({
+        "status": "ok",
+        "count": len(posts),
+        "total_upcoming": len(all_upcoming),
+        "posts": posts
+    }), 200
 
 
 @app.route("/api/planner/generate", methods=["POST"])
