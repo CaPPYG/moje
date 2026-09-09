@@ -4142,20 +4142,45 @@
       const folderSelect = document.getElementById('setGdriveFolderSelect');
       const badge = document.getElementById('setFolderBadge');
       const textEl = document.getElementById('setGdriveDetailsText');
+      const btnAllBadge = document.getElementById('setBtnAllCountBadge');
+      const selectEl = document.getElementById('setAccountSelect');
       if (!folderSelect || !gdriveSummaryData) return;
 
       const chosen = folderSelect.value;
+      let countForBadge = 26;
+
       if (chosen === 'auto') {
-        if (badge) badge.textContent = '⚡ Auto kópia';
+        const accIdx = selectEl && selectEl.selectedIndex >= 0 ? selectEl.selectedIndex : 0;
+        const autoFolderName = `kopie ${accIdx + 1}`;
+        if (badge) badge.textContent = `⚡ Auto (${autoFolderName})`;
+        const fInfo = (gdriveSummaryData.folders || []).find(f => f.name === autoFolderName);
+        if (fInfo) {
+          countForBadge = fInfo.unused_count != null ? fInfo.unused_count : fInfo.total_count;
+          if (textEl) {
+            textEl.innerHTML = `Automatická zložka <b>${fInfo.name}</b>: <b>${fInfo.total_count} unikátnych videí</b> (${fInfo.unused_count} nepoužitých). Žiadne duplicity pre tento profil!`;
+          }
+        }
       } else if (chosen === 'all') {
         if (badge) badge.textContent = '🌐 Všetky zložky';
+        countForBadge = gdriveSummaryData.unused_count || gdriveSummaryData.total_count || 130;
+        if (textEl) {
+          textEl.innerHTML = `Všetky zložky z Google Drive: <b>${gdriveSummaryData.total_count} videí</b> (${gdriveSummaryData.unused_count} nepoužitých).`;
+        }
       } else {
         if (badge) badge.textContent = `📁 ${chosen}`;
         const fInfo = (gdriveSummaryData.folders || []).find(f => f.name === chosen);
-        if (fInfo && textEl) {
-          textEl.innerHTML = `Vybraná zložka <b>${fInfo.name}</b>: <b>${fInfo.total_count} unikátnych videí</b> (${fInfo.unused_count} nepoužitých). Žiadne duplicity pre tento profil!`;
+        if (fInfo) {
+          countForBadge = fInfo.unused_count != null ? fInfo.unused_count : fInfo.total_count;
+          if (textEl) {
+            textEl.innerHTML = `Vybraná zložka <b>${fInfo.name}</b>: <b>${fInfo.total_count} unikátnych videí</b> (${fInfo.unused_count} nepoužitých). Žiadne duplicity pre tento profil!`;
+          }
         }
       }
+
+      if (btnAllBadge) {
+        btnAllBadge.textContent = countForBadge;
+      }
+
       updateSetPeakPreview();
     }
 
@@ -4338,11 +4363,39 @@
         const customCountEl = document.getElementById('setGdriveCustomCount');
         const filterSel = document.getElementById('setGdriveFilterSelect');
         const onlyUnused = filterSel ? filterSel.value === 'unused' : true;
-        const availableMax = gdriveSummaryData ? (onlyUnused ? gdriveSummaryData.unused_count : gdriveSummaryData.total_count) : 26;
+
+        // Vypočítame počet videí PRESNE pre vybranú zložku (kopie 1, kopie 2, atď.)
+        let folderMax = 26;
+        if (gdriveSummaryData) {
+          if (folderName && folderName !== 'auto' && folderName !== 'all') {
+            const fInfo = (gdriveSummaryData.folders || []).find(f => f.name === folderName);
+            if (fInfo) {
+              folderMax = onlyUnused ? fInfo.unused_count : fInfo.total_count;
+            }
+          } else if (folderName === 'auto') {
+            const accIdx = selectEl.selectedIndex >= 0 ? selectEl.selectedIndex : 0;
+            const autoFolderName = `kopie ${accIdx + 1}`;
+            const fInfo = (gdriveSummaryData.folders || []).find(f => f.name === autoFolderName);
+            if (fInfo) {
+              folderMax = onlyUnused ? fInfo.unused_count : fInfo.total_count;
+            } else {
+              folderMax = onlyUnused ? (gdriveSummaryData.unused_count || 26) : (gdriveSummaryData.total_count || 26);
+            }
+          } else {
+            // 'all' = celý Drive
+            folderMax = onlyUnused ? (gdriveSummaryData.unused_count || 130) : (gdriveSummaryData.total_count || 130);
+          }
+        }
+
+        // Aktualizujeme číslo na tlačidle "Všetky zo zložky"
+        const btnAllBadge = document.getElementById('setBtnAllCountBadge');
+        if (btnAllBadge) {
+          btnAllBadge.textContent = folderMax;
+        }
 
         if (countSel) {
           if (countSel.value === 'all') {
-            count = availableMax || 0;
+            count = folderMax || 0;
           } else if (countSel.value === 'custom') {
             count = customCountEl && customCountEl.value ? parseInt(customCountEl.value) : 1;
           } else {
@@ -4354,22 +4407,22 @@
       }
 
       let postsPerDay = 1;
-      let windowDesc = 'US Prime večer (~19:30 EST / 01:30 CET u nás)';
+      let cadenceText = 'každý deň 1 Reel v US Prime večernej špičke (~19:30 EST / 01:30 CET v noci)';
       if (freq === '1_lunch') {
-        windowDesc = 'US Obed (~13:15 EST / 19:15 CET)';
+        cadenceText = 'každý deň 1 Reel v US obednej špičke (~13:15 EST / 19:15 CET)';
       } else if (freq === '2_daily') {
         postsPerDay = 2;
-        windowDesc = '2x denne (US Obed + Prime večer)';
+        cadenceText = 'každý deň <b>2 Reely</b> (US Obed ~13:15 EST + US Prime Večer ~19:30 EST)';
       } else if (freq === '3_daily') {
         postsPerDay = 3;
-        windowDesc = '3x denne (US Ráno + Obed + Večer)';
+        cadenceText = 'každý deň <b>3 Reely</b> (US Ráno + Obed + Prime Večer)';
       }
 
       const daysCount = count > 0 ? Math.ceil(count / postsPerDay) : 0;
       const folderBadge = (folderName === 'auto' || folderName === 'all') ? 'podľa priradenej kópie' : `zo zložky "<b>${escapeHtml(folderName)}</b>"`;
 
       previewText.innerHTML = `
-        Pre profil <b>${escapeHtml(accName)}</b> sa rozvrhne <b>${count} videí</b> ${folderBadge} od <b>${startDate}</b> na <b>${daysCount} dní</b> (každý deň 1 Reel v <b>${windowDesc}</b> s anti-bot rozptylom ±7–23 min).
+        Pre profil <b>${escapeHtml(accName)}</b> sa rozvrhne <b>${count} videí</b> ${folderBadge} od <b>${startDate}</b> na <b>${daysCount} dní</b> (${cadenceText} s anti-bot rozptylom ±7–23 min).
       `;
     }
 
