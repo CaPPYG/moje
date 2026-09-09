@@ -20,6 +20,8 @@ import datetime
 import math
 import subprocess
 import threading
+import queue
+import concurrent.futures
 import tempfile
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
@@ -124,8 +126,8 @@ def _probe_encoder(enc: str) -> bool:
 
 def detect_encoder():
     """Použije vysoko kvalitný procesorový enkóder libx264 s CRF 18 pre vizuálne bezstratový export bez artefaktov."""
-    return "libx264 (CPU - CRF 18 Bezstratový)", [
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"
+    return "libx264 (CPU - CRF 18 Multicore)", [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p"
     ]
 
 
@@ -438,7 +440,7 @@ def color_grade_and_encode(src, out, is_copy=False, enc_args=None, log=None, **k
     ]
     vf = ",".join(vf_parts)
 
-    cmd = ["ffmpeg", "-y", "-i", src]
+    cmd = ["ffmpeg", "-y", "-threads", "0", "-i", src]
     if not has_a:
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
     cmd += ["-map_metadata", "-1", "-vf", vf] + enc_args
@@ -457,13 +459,13 @@ def color_grade_and_encode(src, out, is_copy=False, enc_args=None, log=None, **k
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out):
         if log: log("  Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback s AAC re-encode...")
-        cmd2 = ["ffmpeg", "-y", "-i", src]
+        cmd2 = ["ffmpeg", "-y", "-threads", "0", "-i", src]
         if not has_a:
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
             "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ac", "2", "-b:a", "320k",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-movflags", "+faststart", "-shortest", out
@@ -486,7 +488,7 @@ def create_copy_with_jitter(main_src, out_copy, region="us", enc_args=None, log=
     has_a = has_audio_stream(main_src)
     jitter_filter = build_copy_jitter_filter()
 
-    cmd = ["ffmpeg", "-y", "-i", main_src]
+    cmd = ["ffmpeg", "-y", "-threads", "0", "-i", main_src]
     if not has_a:
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
     cmd += ["-map_metadata", "-1", "-vf", jitter_filter] + enc_args
@@ -505,13 +507,13 @@ def create_copy_with_jitter(main_src, out_copy, region="us", enc_args=None, log=
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     ok = r.returncode == 0 and os.path.exists(out_copy)
     if not ok:
-        cmd2 = ["ffmpeg", "-y", "-i", main_src]
+        cmd2 = ["ffmpeg", "-y", "-threads", "0", "-i", main_src]
         if not has_a:
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
             "-vf", jitter_filter,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ac", "2", "-b:a", "320k",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-movflags", "+faststart", "-shortest", out_copy
@@ -624,6 +626,46 @@ def upload_to_drive(svc, path, name):
     while resp is None:
         _, resp = req.next_chunk()
     return resp
+
+
+class DriveUploadManager:
+    """Manažér pre asynchrónny upload videí na Google Drive na pozadí bez blokovania CPU."""
+    def __init__(self, gdrive_svc, log_fn=None):
+        self.gdrive_svc = gdrive_svc
+        self.log = log_fn
+        self.queue = queue.Queue()
+        self.active_count = 0
+        self.lock = threading.Lock()
+        self.worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self.worker.start()
+
+    def queue_upload(self, file_path: str, file_name: str):
+        with self.lock:
+            self.active_count += 1
+        self.queue.put((file_path, file_name))
+        if self.log:
+            self.log(f"  ☁ Zaradené do pozadia na Drive upload: {file_name}")
+
+    def _worker_loop(self):
+        while True:
+            item = self.queue.get()
+            if item is None:
+                break
+            path, name = item
+            try:
+                upload_to_drive(self.gdrive_svc, path, name)
+                if self.log:
+                    self.log(f"  ☁ Drive upload OK: {name}")
+            except Exception as e:
+                if self.log:
+                    self.log(f"  ☁ Drive CHYBA pri {name}: {e}")
+            finally:
+                with self.lock:
+                    self.active_count -= 1
+                self.queue.task_done()
+
+    def wait_all(self):
+        self.queue.join()
 
 
 # ─── GUI ──────────────────────────────────────────────────────────────────────
@@ -987,6 +1029,8 @@ class ReelsStudio(tk.Tk):
         done = 0
         t0 = time.time()
 
+        uploader = DriveUploadManager(self.gdrive_svc, self.log) if (do_drive and self.gdrive_svc) else None
+
         for src in files:
             if not self.is_running:
                 self.log("STOP — prerušene pouzivatelom.")
@@ -1022,51 +1066,53 @@ class ReelsStudio(tk.Tk):
 
             mb1 = round(os.path.getsize(out1) / 1048576, 1) if os.path.exists(out1) else 0
             self.log(f"  OK hlavné video: {dur1}s | {mb1} MB")
+            self._set_progress(done, total)
 
-            if do_drive and self.gdrive_svc:
-                self.log("  Nahravanie hlavného videa na Drive...")
-                try:
-                    upload_to_drive(self.gdrive_svc, out1, name1)
-                    self.log("  Drive upload OK!")
-                except Exception as e:
-                    self.log(f"  Drive CHYBA: {e}")
+            if uploader:
+                uploader.queue_upload(out1, name1)
 
-            # 2. Ďalšie kópie z hlavného videa s náhodným jitterom
-            if variants > 1:
-                for v in range(1, variants):
+            # 2. Ďalšie kópie z hlavného videa s náhodným jitterom (Paralelne na viacerých jadrách CPU)
+            if variants > 1 and self.is_running:
+                cpu_cores = os.cpu_count() or 4
+                worker_count = min(3, max(1, cpu_cores // 3))
+                self.log(f"  ⚡ Spúšťam paralelné spracovanie {variants - 1} kópií ({worker_count} jadrá naraz)...")
+
+                def _process_copy(v_idx):
                     if not self.is_running:
-                        self.log("STOP — prerušene pouzivatelom.")
-                        self._set_running(False)
-                        return
-
-                    done += 1
-                    target_dir_v = os.path.join(out_dir, f"kopie {v + 1}")
+                        return False
+                    target_dir_v = os.path.join(out_dir, f"kopie {v_idx + 1}")
                     os.makedirs(target_dir_v, exist_ok=True)
 
                     tok_v = uuid.uuid4().hex[:6]
-                    name_v = f"spoofed_{base}_v{v + 1}_{tok_v}.mp4"
+                    name_v = f"spoofed_{base}_v{v_idx + 1}_{tok_v}.mp4"
                     out_v = os.path.join(target_dir_v, name_v)
-
-                    self.log(f"\n[{done}/{total}] (Kópia {v+1}/{variants} s jitterom) {folder_tag1}{name1} -> kopie {v+1}/{name_v}")
-                    self._set_progress(done - 1, total)
 
                     vt2 = time.time()
                     ok_v = create_copy_with_jitter(out1, out_v, region=cfg.get("region", "us"),
-                                                   enc_args=self.enc_args, log=self.log)
+                                                   enc_args=self.enc_args, log=None)
                     dur_v = round(time.time() - vt2, 1)
 
                     if ok_v:
                         mb_v = round(os.path.getsize(out_v) / 1048576, 1) if os.path.exists(out_v) else 0
-                        self.log(f"  OK kópia {v+1}: {dur_v}s | {mb_v} MB")
-                        if do_drive and self.gdrive_svc:
-                            self.log("  Nahravanie kópie na Drive...")
-                            try:
-                                upload_to_drive(self.gdrive_svc, out_v, name_v)
-                                self.log("  Drive upload OK!")
-                            except Exception as e:
-                                self.log(f"  Drive CHYBA: {e}")
+                        self.log(f"  ✓ OK kópia {v_idx+1}/{variants} s jitterom: {dur_v}s | {mb_v} MB (kopie {v_idx+1}/{name_v})")
+                        if uploader:
+                            uploader.queue_upload(out_v, name_v)
+                        return True
                     else:
-                        self.log(f"  CHYBA kópie {v+1} po {dur_v}s")
+                        self.log(f"  ✗ CHYBA kópie {v_idx+1} po {dur_v}s")
+                        return False
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+                    futures = [executor.submit(_process_copy, v) for v in range(1, variants)]
+                    for fut in concurrent.futures.as_completed(futures):
+                        done += 1
+                        self._set_progress(done, total)
+
+        if uploader and uploader.active_count > 0:
+            self.log(f"\nČakám na dokončenie uploadu na Drive ({uploader.active_count} videí vo fronte)...")
+            uploader.wait_all()
+            self.log("Všetky videá boli úspešne nahrané na Drive!")
+
         elapsed = round(time.time() - t0, 1)
         self.log(f"\n{'='*58}")
         self.log(f"HOTOVO za {elapsed}s | {done}/{total} videi")
