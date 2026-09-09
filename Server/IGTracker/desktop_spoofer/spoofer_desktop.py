@@ -123,48 +123,21 @@ def _probe_encoder(enc: str) -> bool:
 
 
 def detect_encoder():
-    """Dynamicky deteguje najrychlejsi podporovany GPU enkoder (Nvidia, AMD, Intel, alebo CPU)."""
-    if not has_tool("ffmpeg"):
-        return "libx264 (CPU)", ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"]
-
-    # 1. Nvidia NVENC
-    if _probe_encoder("h264_nvenc"):
-        return "h264_nvenc (Nvidia GPU)", [
-            "-c:v", "h264_nvenc", "-preset", "p4", "-cq", "19",
-            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
-        ]
-
-    # 2. AMD AMF (Radeon RX)
-    if _probe_encoder("h264_amf"):
-        return "h264_amf (AMD Radeon GPU)", [
-            "-c:v", "h264_amf", "-quality", "balanced",
-            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
-        ]
-
-    # 3. Intel QuickSync (QSV)
-    if _probe_encoder("h264_qsv"):
-        return "h264_qsv (Intel QSV)", [
-            "-c:v", "h264_qsv", "-preset", "faster", "-global_quality", "20",
-            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
-        ]
-
-    # 4. CPU fallback (libx264)
-    return "libx264 (CPU)", [
-        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-        "-preset", "veryfast", "-crf", "20",
-        "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
+    """Použije vysoko kvalitný procesorový enkóder libx264 s CRF 18 pre vizuálne bezstratový export bez artefaktov."""
+    return "libx264 (CPU - CRF 18 Bezstratový)", [
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"
     ]
 
 
 def get_sharpen_filter():
-    """Vráti AMD FidelityFX CAS (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    """Vráti AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
     try:
         r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return "cas=0.35"
+            return "cas=0.45"
     except Exception:
         pass
-    return "unsharp=5:5:0.6:5:5:0.0"
+    return "unsharp=5:5:0.8:5:5:0.0"
 
 
 def build_spoof_filters():
@@ -321,48 +294,37 @@ def generate_anti_ai_lut(out_path=None, size=33):
                 # 1. Základný jas (Rec. 709)
                 lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
 
-                # 2. Lifted Blacks (+1.5 %) pre analógový kontrast
-                r1 = 0.015 + 0.985 * r
-                g1 = 0.015 + 0.985 * g
-                b1 = 0.015 + 0.985 * b
-                y1 = 0.2126 * r1 + 0.7152 * g1 + 0.0722 * b1
+                # 2. Hlboká prirodzená čierna – bez umelého dvíhania (zachováva hlboký, bohatý kontrast originálu)
+                r1, g1, b1 = r, g, b
+                y1 = lum
 
-                # 3. Soft Highlight Roll-off (-4 % stiahnutie najvyšších svetiel s jemným oteplením)
-                if y1 > 0.75:
-                    hf = (y1 - 0.75) / 0.25
-                    roll = (hf ** 2) * 0.04
-                    r2 = r1 - roll * 0.80  # jemné oteplenie
+                # 3. Soft Highlight Roll-off (jemné stiahnutie najvyšších prepalov s jemným oteplením)
+                if y1 > 0.85:
+                    hf = (y1 - 0.85) / 0.15
+                    roll = (hf ** 2) * 0.025
+                    r2 = r1 - roll * 0.70
                     g2 = g1 - roll * 1.00
-                    b2 = b1 - roll * 1.30  # stiahnutie modrej v prepaloch
+                    b2 = b1 - roll * 1.20
                 else:
                     r2, g2, b2 = r1, g1, b1
 
-                # 4. Split Toning: Neutrálne/chladné tiene, prirodzené teplé tóny v stredoch, stiahnutie neónovej zelenej
+                # 4. Prirodzené pleťové tóny v stredoch + potlačenie presýtených chemických farieb
                 r3, g3, b3 = r2, g2, b2
-                if y1 < 0.35:
-                    sw = (1.0 - y1 / 0.35) * 0.02
-                    r3 -= sw * 0.5
-                    b3 += sw
-                elif 0.30 <= y1 <= 0.75:
-                    mw = math.sin((y1 - 0.30) / 0.45 * math.pi) * 0.022
-                    r3 += mw * 1.2
-                    g3 += mw * 0.3
-                    b3 -= mw * 0.6
+                if 0.35 <= y1 <= 0.70:
+                    mw = math.sin((y1 - 0.35) / 0.35 * math.pi) * 0.012
+                    r3 += mw * 1.1
+                    g3 += mw * 0.2
+                    b3 -= mw * 0.5
 
                 # Stiahnutie neónovej zelenej
                 if g > r and g > b:
                     excess_g = g - max(r, b)
                     g3 -= excess_g * 0.22
 
-                # 5. Luma vs. Saturation: Desaturácia hlbokých tieňov (<10 %) a extrémnych svetiel (>90 %)
+                # 5. Jemná desaturácia len extrémnych prepálených svetiel (>95 %)
                 lum3 = 0.2126 * r3 + 0.7152 * g3 + 0.0722 * b3
-                if y1 < 0.10:
-                    sat_f = y1 / 0.10
-                    r4 = lum3 + sat_f * (r3 - lum3)
-                    g4 = lum3 + sat_f * (g3 - lum3)
-                    b4 = lum3 + sat_f * (b3 - lum3)
-                elif y1 > 0.90:
-                    sat_f = 1.0 - 0.35 * ((y1 - 0.90) / 0.10)
+                if y1 > 0.95:
+                    sat_f = 1.0 - 0.20 * ((y1 - 0.95) / 0.05)
                     r4 = lum3 + sat_f * (r3 - lum3)
                     g4 = lum3 + sat_f * (g3 - lum3)
                     b4 = lum3 + sat_f * (b3 - lum3)
@@ -438,28 +400,25 @@ def upscale_with_realesrgan(src, out, model="realesrgan-x4plus", binary="realesr
         shutil.rmtree(tmp_up, ignore_errors=True)
 
 
-def color_grade_and_encode(src, out, lut_path=None, grain=8, spoof=True, enc_args=None, log=None):
+def color_grade_and_encode(src, out, lut_path=None, grain=3, spoof=True, enc_args=None, log=None):
     """
-    Kompletny FFmpeg pipeline pre Instagram Reels (One-pass filter):
+    Kompletný FFmpeg pipeline pre Instagram Reels (One-pass filter):
     1. Pomer strán a vycentrovaný orez na presných 1080x1920:
-       scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
-    2. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic alebo externý .cube cez lut3d
-    3. Filmové zrno: Časovo premenlivé zrno cez noise=alls={grain}:allf=t+u (predvolená hodnota: 8, rozsah 0-30)
-    4. Audio Guard: ffprobe kontrola audio stopy; ak chýba, automaticky pridá anullsrc stereo
-    5. Instagram Enkódovanie: H.264 (libx264 high 4.2 / GPU AMF/NVENC), yuv420p, 14M/16M/20M, faststart, AAC 320k
+       scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
+    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp
+    3. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic s hlbokým kontrastom alebo externý .cube cez lut3d
+    4. Filmové zrno: Jemná textúra noise=alls={grain}:allf=t+u (predvolená hodnota: 3, 0 = vypnuté)
+    5. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
+    6. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
     """
     if enc_args is None:
         _, enc_args = detect_encoder()
     has_a = has_audio_stream(src)
 
-    vf_parts = []
-    if spoof:
-        vf_parts.extend(build_spoof_filters().split(","))
-
     # Procedurálny Anti-AI Filmic LUT (ak používateľ nezadá vlastný .cube)
     if not lut_path or not os.path.isfile(lut_path):
         lut_path = generate_anti_ai_lut()
-        if log: log("  Color Grade: Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33)")
+        if log: log("  Color Grade: Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33 - hlboký kontrast)")
     else:
         if log: log(f"  Color Grade: Aplikujem externý LUT: {os.path.basename(lut_path)}")
 
@@ -475,7 +434,7 @@ def color_grade_and_encode(src, out, lut_path=None, grain=8, spoof=True, enc_arg
 
     # Kompletný reťazec v správnom poradí:
     # 1. Scale & vycentrovaný Crop na 1080x1920 (Lanczos)
-    # 2. Doostrenie (AMD CAS 0.35)
+    # 2. Doostrenie (AMD CAS 0.45)
     # 3. Spoof farebné odchýlky
     # 4. Color Grading (.cube LUT)
     # 5. Filmové zrno (až po doostrení, aby zrno nebolo preostrené)
@@ -497,27 +456,29 @@ def color_grade_and_encode(src, out, lut_path=None, grain=8, spoof=True, enc_arg
     cmd = ["ffmpeg", "-y", "-i", src]
     if not has_a:
         cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
-    cmd += ["-map_metadata", "-1", "-vf", vf] + enc_args + [
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-ac", "2", "-b:a", "320k",
+    cmd += ["-map_metadata", "-1", "-vf", vf] + enc_args
+    if "-pix_fmt" not in enc_args:
+        cmd += ["-pix_fmt", "yuv420p"]
+    if has_a:
+        cmd += ["-c:a", "copy"]
+    else:
+        cmd += ["-c:a", "aac", "-ac", "2", "-b:a", "320k"]
+    cmd += [
         "-map", "0:v",
         "-map", ("0:a?" if has_a else "1:a"),
         "-movflags", "+faststart", "-shortest", out
     ]
-    if log: log(f"  Enkódujem: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, 14 Mbps H.264")
+    if log: log(f"  Enkódujem: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, CRF 18 libx264")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out):
-        if log: log("  GPU enkóder zlyhal, prepínam na pomalší libx264 CPU fallback (-preset slow)...")
+        if log: log("  Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback s AAC re-encode...")
         cmd2 = ["ffmpeg", "-y", "-i", src]
         if not has_a:
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
-            "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2,{sharp_filter},lut3d={lut_esc},noise=alls={grain}:allf=t+u",
-            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-            "-preset", "slow",
-            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
-            "-pix_fmt", "yuv420p",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ac", "2", "-b:a", "320k",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-movflags", "+faststart", "-shortest", out
@@ -531,7 +492,7 @@ def full_pipeline(src, out, config, enc_args, log=None):
     """Kompletny pipeline: [upscale] -> [color grade + encode] -> [EXIF]."""
     upscale_method = config.get("upscale_method", "none")
     do_grade = config.get("color_grade", True)
-    grain = config.get("grain", 8)
+    grain = config.get("grain", 3)
     lut_path = config.get("lut_path", None)
     region = config.get("region", "us")
 
@@ -677,7 +638,7 @@ class ReelsStudio(tk.Tk):
         self.v_variants   = tk.IntVar(value=1)
         self.v_upscale    = tk.StringVar(value="lanczos")
         self.v_grade      = tk.BooleanVar(value=True)
-        self.v_grain      = tk.IntVar(value=8)
+        self.v_grain      = tk.IntVar(value=3)
         self.v_lut        = tk.StringVar()
         self.v_drive      = tk.BooleanVar(value=False)
         self.v_url        = tk.StringVar()
@@ -878,7 +839,7 @@ class ReelsStudio(tk.Tk):
                        selectcolor=ACCENT, activebackground=BG_CARD,
                        activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w")
         gr = tk.Frame(gc, bg=BG_CARD); gr.pack(fill="x", pady=(6, 0))
-        tk.Label(gr, text="Film Grain (0-30):", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(gr, text="Film Grain (0-30, odporúčané 3):", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
         tk.Scale(gr, from_=0, to=30, orient="horizontal", variable=self.v_grain,
                  bg=BG_CARD, fg=TEXT, highlightbackground=BG_CARD,
                  troughcolor=BG_CARD2, activebackground=ACCENT, length=180).pack(side="left", padx=8)

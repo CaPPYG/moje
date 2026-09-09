@@ -175,14 +175,14 @@ def generate_thumbnail(media_path: str, out_thumb_path: str, time_offset="00:00:
 
 
 def get_sharpen_filter() -> str:
-    """Vráti AMD FidelityFX CAS (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    """Vráti AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
     try:
         r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return "cas=0.35"
+            return "cas=0.45"
     except Exception:
         pass
-    return "unsharp=5:5:0.6:5:5:0.0"
+    return "unsharp=5:5:0.8:5:5:0.0"
 
 
 def build_spoof_filters() -> str:
@@ -268,7 +268,7 @@ def spoof_video_for_account(
     out_spoofed_path: str,
     region: str = "us",
     color_grade: bool = True,
-    grain: int = 9,
+    grain: int = 3,
     lut_path: str = None,
 ) -> dict:
     """
@@ -383,10 +383,10 @@ def download_reel(url: str, out_dir: str, cookies_path: str = None) -> str | Non
 def generate_anti_ai_lut(out_path=None, size=33):
     """
     Procedurálny 3D LUT (33×33×33 point .cube súbor) Anti-AI Filmic:
-    - Lifted Blacks: Jemné zdvihnutie čierneho bodu (+1.5 %) pre analógový filmový kontrast.
-    - Soft Highlight Roll-off: Stiahnutie najvyšších svetiel o 4 % s jemným oteplením (eliminácia digitálnych prepalov).
-    - Luma vs. Saturation: Desaturácia hlbokých tieňov (<10 % jasu) a extrémnych svetiel (>90 % jasu).
-    - Split Toning: Neutrálne/chladné tiene, prirodzené teplé tóny v stredoch, stiahnutie neónovej zelenej.
+    - Hlboká čierna (Deep Blacks): Zachováva 100% bohatý dynamický rozsah a kontrast originálu.
+    - Soft Highlight Roll-off: Jemné stiahnutie najvyšších prepalov s jemným oteplením (eliminácia digitálnych prepalov).
+    - Luma vs. Saturation: Desaturácia len extrémnych prepálených svetiel (>95 % jasu).
+    - Split Toning: Neutrálne/prirodzené pleťové tóny v stredoch, stiahnutie neónovej zelenej.
     """
     if out_path and os.path.isfile(out_path):
         return out_path
@@ -409,50 +409,48 @@ def generate_anti_ai_lut(out_path=None, size=33):
             g = g_idx / (size - 1)
             for r_idx in range(size):
                 r = r_idx / (size - 1)
-                lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-                r1 = 0.015 + 0.985 * r
-                g1 = 0.015 + 0.985 * g
-                b1 = 0.015 + 0.985 * b
-                y1 = 0.2126 * r1 + 0.7152 * g1 + 0.0722 * b1
 
-                if y1 > 0.75:
-                    hf = (y1 - 0.75) / 0.25
-                    roll = (hf ** 2) * 0.04
-                    r2 = r1 - roll * 0.80
+                # 1. Základný jas (Rec. 709)
+                lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+                # 2. Hlboká prirodzená čierna – bez umelého dvíhania (zachováva hlboký, bohatý kontrast originálu)
+                r1, g1, b1 = r, g, b
+                y1 = lum
+
+                # 3. Soft Highlight Roll-off (jemné stiahnutie najvyšších prepalov s jemným oteplením)
+                if y1 > 0.85:
+                    hf = (y1 - 0.85) / 0.15
+                    roll = (hf ** 2) * 0.025
+                    r2 = r1 - roll * 0.70
                     g2 = g1 - roll * 1.00
-                    b2 = b1 - roll * 1.30
+                    b2 = b1 - roll * 1.20
                 else:
                     r2, g2, b2 = r1, g1, b1
 
+                # 4. Prirodzené pleťové tóny v stredoch + potlačenie presýtených chemických farieb
                 r3, g3, b3 = r2, g2, b2
-                if y1 < 0.35:
-                    sw = (1.0 - y1 / 0.35) * 0.02
-                    r3 -= sw * 0.5
-                    b3 += sw
-                elif 0.30 <= y1 <= 0.75:
-                    mw = math.sin((y1 - 0.30) / 0.45 * math.pi) * 0.022
-                    r3 += mw * 1.2
-                    g3 += mw * 0.3
-                    b3 -= mw * 0.6
+                if 0.35 <= y1 <= 0.70:
+                    mw = math.sin((y1 - 0.35) / 0.35 * math.pi) * 0.012
+                    r3 += mw * 1.1
+                    g3 += mw * 0.2
+                    b3 -= mw * 0.5
 
+                # Stiahnutie neónovej zelenej
                 if g > r and g > b:
                     excess_g = g - max(r, b)
                     g3 -= excess_g * 0.22
 
+                # 5. Jemná desaturácia len extrémnych prepálených svetiel (>95 %)
                 lum3 = 0.2126 * r3 + 0.7152 * g3 + 0.0722 * b3
-                if y1 < 0.10:
-                    sat_f = y1 / 0.10
-                    r4 = lum3 + sat_f * (r3 - lum3)
-                    g4 = lum3 + sat_f * (g3 - lum3)
-                    b4 = lum3 + sat_f * (b3 - lum3)
-                elif y1 > 0.90:
-                    sat_f = 1.0 - 0.35 * ((y1 - 0.90) / 0.10)
+                if y1 > 0.95:
+                    sat_f = 1.0 - 0.20 * ((y1 - 0.95) / 0.05)
                     r4 = lum3 + sat_f * (r3 - lum3)
                     g4 = lum3 + sat_f * (g3 - lum3)
                     b4 = lum3 + sat_f * (b3 - lum3)
                 else:
                     r4, g4, b4 = r3, g3, b3
 
+                # 6. Clamp
                 rf = max(0.0, min(1.0, r4))
                 gf = max(0.0, min(1.0, g4))
                 bf = max(0.0, min(1.0, b4))
@@ -468,28 +466,25 @@ def color_grade_and_encode(
     src_path: str,
     out_path: str,
     lut_path: str = None,
-    grain: int = 8,
+    grain: int = 3,
     spoof: bool = True,
 ) -> bool:
     """
     Kompletný FFmpeg pipeline pre Instagram Reels (One-pass filter):
     1. Pomer strán a vycentrovaný orez na presných 1080x1920:
-       scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
-    2. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic alebo externý .cube cez lut3d
-    3. Filmové zrno: noise=alls={grain}:allf=t+u (predvolená hodnota: 8)
-    4. Audio Guard: anullsrc ak chýba audio stopa
-    5. Instagram Enkódovanie: H.264 High 4.2 / ultrafast, 14M / 16M / 20M, faststart, AAC 320k
+       scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
+    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.45 (Contrast Adaptive Sharpening) alebo unsharp
+    3. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic s hlbokým kontrastom alebo externý .cube cez lut3d
+    4. Filmové zrno: Jemná textúra noise=alls={grain}:allf=t+u (predvolená hodnota: 3, 0 = vypnuté)
+    5. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
+    6. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
     """
     has_a = has_audio_stream(src_path)
-
-    vf_parts = []
-    if spoof:
-        vf_parts.extend(build_spoof_filters().split(","))
 
     # Procedurálny Anti-AI Filmic LUT (ak používateľ nezadá vlastný .cube)
     if not lut_path or not os.path.isfile(lut_path):
         lut_path = generate_anti_ai_lut()
-        logger.info("Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33)")
+        logger.info("Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33 - hlboký kontrast)")
     else:
         logger.info(f"Aplikujem externý LUT: {os.path.basename(lut_path)}")
 
@@ -498,16 +493,12 @@ def color_grade_and_encode(
         lut_esc = lut_norm[0] + "\\\\:" + lut_norm[2:]
     else:
         lut_esc = lut_norm
-    vf_parts.append(f"lut3d={lut_esc}")
-
-    if grain and grain > 0:
-        vf_parts.append(f"noise=alls={grain}:allf=t+u")
 
     sharp_filter = get_sharpen_filter()
 
     # Kompletný reťazec v správnom poradí:
     # 1. Scale & vycentrovaný Crop na 1080x1920 (Lanczos)
-    # 2. Doostrenie (AMD CAS 0.35 alebo unsharp)
+    # 2. Doostrenie (AMD CAS 0.45)
     # 3. Spoof farebné odchýlky
     # 4. Color Grading (.cube LUT)
     # 5. Filmové zrno (až po doostrení, aby zrno nebolo preostrené)
@@ -532,11 +523,13 @@ def color_grade_and_encode(
     cmd += [
         "-map_metadata", "-1",
         "-vf", vf,
-        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-        "-preset", "veryfast",
-        "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
-        "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-ac", "2", "-b:a", "320k",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
+    ]
+    if has_a:
+        cmd += ["-c:a", "copy"]
+    else:
+        cmd += ["-c:a", "aac", "-ac", "2", "-b:a", "320k"]
+    cmd += [
         "-map", "0:v",
         "-map", ("0:a?" if has_a else "1:a"),
         "-movflags", "+faststart",
@@ -544,25 +537,22 @@ def color_grade_and_encode(
         out_path
     ]
 
-    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, 14 Mbps H.264")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + LUT + Grain {grain}, CRF 18 libx264")
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out_path):
-        logger.warning(f"Hlavny encode zlyhal, skusam fallback: {r.stderr[-300:]}")
+        logger.warning(f"Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback: {r.stderr[-300:]}")
         cmd2 = ["ffmpeg", "-y", "-i", src_path]
         if not has_a:
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
-            "-vf", f"scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2,{sharp_filter},lut3d={lut_esc},noise=alls={grain}:allf=t+u",
-            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-            "-preset", "slow",
-            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
-            "-pix_fmt", "yuv420p",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-ac", "2", "-b:a", "320k",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-movflags", "+faststart", "-shortest",
             out_path
         ]
-        r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=300)
+        r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=600)
         return r2.returncode == 0 and os.path.exists(out_path)
     return True
