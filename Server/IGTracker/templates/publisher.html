@@ -800,6 +800,111 @@
     .btn-publish-reel-now:hover { opacity: 0.95; transform: translateY(-1px); }
     .btn-publish-reel-now:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
+    /* ── Planner KPI & Time Glow Styling ── */
+    .planner-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .planner-kpi-card {
+      background: #151b26;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 13px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      position: relative;
+    }
+    .planner-kpi-lbl {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .planner-kpi-val {
+      font-size: 1.12rem;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.25;
+    }
+    .time-urgent {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(239, 68, 68, 0.2));
+      border: 1px solid rgba(236, 72, 153, 0.5);
+      color: #f472b6;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 0 10px rgba(236, 72, 153, 0.2);
+    }
+    .time-soon {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .time-normal {
+      background: rgba(16, 185, 129, 0.14);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #10b981;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .time-future {
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #cbd5e1;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .preset-count-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .preset-count-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border-color: #38bdf8;
+    }
+    .preset-count-btn.active {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border-color: #10b981;
+      font-weight: 700;
+    }
+
     /* ── Vault Picker & Tag Badges Styling ── */
     .btn-vault-picker-trigger {
       display: flex;
@@ -1069,7 +1174,7 @@
         <i class="fas fa-film"></i> 🎬 Media Vault (<span id="vaultCountBadge">0</span>)
       </button>
       <button type="button" class="view-tab-btn" id="viewBtnPlanner" onclick="switchMainView('planner')">
-        <i class="fas fa-calendar-alt"></i> 📅 Auto-Planner & Kalendár
+        <i class="fas fa-calendar-alt"></i> 📅 Auto-Planner & Rozvrh (<span id="topPlannerCountBadge">0</span>)
       </button>
     </div>
 
@@ -1392,46 +1497,99 @@
 
   <!-- ── View 3: Auto-Planner & Kalendár ── -->
   <div id="viewPlanner" class="view-panel" style="display: none;">
-    <div class="section-banner">
+    <div class="section-banner" style="margin-bottom: 16px;">
       <div class="section-title-wrap">
-        <h2><i class="fas fa-calendar-alt ig-gradient-text"></i> Auto-Planner — US Peak Scheduler & Spoofing Matrix</h2>
+        <h2><i class="fas fa-calendar-alt ig-gradient-text"></i> Auto-Planner & Rozvrh Reels</h2>
         <p>
-          Rozvrh cieliaci na americké špičky (US Lunch 13:15 EST / Evening 19:30 EST) prepočítané na stredoeurópsky čas s náhodným rozptylom (±7–23 min anti-bot jitter). Žiadne dva profily nepostnú rovnaký master v rovnaký deň.
+          Automatické publikovanie videí z Google Drive v optimálnych amerických časoch (US Prime) bez opakovaní.
         </p>
       </div>
-      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7); font-size: 0.92rem; padding: 10px 18px; font-weight: 700; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);">
+          <i class="fas fa-plus-circle"></i> 📤 Naplánovať sadu Reels z Google Drive
+        </button>
+        <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť rozvrh" style="padding: 10px 14px; font-size: 0.85rem;">
+          <i class="fas fa-rotate"></i> Obnoviť
+        </button>
+        <button type="button" class="btn-cancel" onclick="openPlanGeneratorModal()" style="font-size: 0.82rem; padding: 9px 13px; color: #94a3b8;" title="Manuálny jednodňový generátor">
+          <i class="fas fa-wand-magic-sparkles"></i> Denný Auto-Plan
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI Summary Dashboard -->
+    <div class="planner-kpi-grid" id="plannerKpiGrid">
+      <div class="planner-kpi-card">
+        <div class="planner-kpi-lbl"><i class="fas fa-clock" style="color:#38bdf8;"></i> Naplánované v rade</div>
+        <div class="planner-kpi-val" style="color: #38bdf8;"><span id="plannerKpiCount">--</span> <span style="font-size:0.85rem; font-weight:500; color:#94a3b8;">Reels</span></div>
+      </div>
+      <div class="planner-kpi-card">
+        <div class="planner-kpi-lbl"><i class="fas fa-bolt" style="color:#10b981;"></i> Najbližší Reel</div>
+        <div class="planner-kpi-val" style="font-size: 0.95rem; color: #10b981;" id="plannerKpiNext">--</div>
+      </div>
+      <div class="planner-kpi-card">
+        <div class="planner-kpi-lbl"><i class="fas fa-calendar-check" style="color:#fbbf24;"></i> Aktívny rozvrh do</div>
+        <div class="planner-kpi-val" style="font-size: 0.95rem; color: #fbbf24;" id="plannerKpiRange">--</div>
+      </div>
+      <div class="planner-kpi-card">
+        <div class="planner-kpi-lbl"><i class="fab fa-google-drive" style="color:#c084fc;"></i> Zásoba na Google Drive</div>
+        <div class="planner-kpi-val" style="font-size: 0.95rem; color: #c084fc;" id="plannerKpiDrive">130 videí (5 zložiek)</div>
+      </div>
+    </div>
+
+    <!-- Filter Bar: Accounts, Statuses, and Views -->
+    <div style="background: #151b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px 16px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px;">
+      <!-- Row 1: Account Filter Pills + View Mode -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 0.78rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px;">
+            <i class="fas fa-user-gear"></i> Profil:
+          </span>
+          <div id="plannerAccountFilterBar" style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
         <!-- View Mode: All Upcoming vs By Day -->
         <div style="display: flex; gap: 4px; background: rgba(255,255,255,0.05); padding: 3px; border-radius: 9px;">
           <button type="button" id="btnPlannerModeAll" onclick="setPlannerViewMode('all')" style="border: none; background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-weight: 700; font-size: 0.82rem; padding: 7px 12px; border-radius: 7px; cursor: pointer;">
-            <i class="fas fa-list-check"></i> Všetky naplánované (<span id="plannerTotalBadge">0</span>)
+            <i class="fas fa-list-check"></i> Celý rozvrh (<span id="plannerTotalBadge">0</span>)
           </button>
           <button type="button" id="btnPlannerModeDay" onclick="setPlannerViewMode('day')" style="border: none; background: transparent; color: #94a3b8; font-weight: 600; font-size: 0.82rem; padding: 7px 12px; border-radius: 7px; cursor: pointer;">
             <i class="fas fa-calendar-day"></i> Podľa dňa
           </button>
         </div>
+      </div>
 
-        <div id="plannerDayNavWrap" style="display: none; align-items: center; gap: 6px;">
-          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(-1)" title="Predchádzajúci deň" style="padding: 7px 10px;">
-            <i class="fas fa-chevron-left"></i>
+      <!-- Row 2: Status Pills + Day Nav (if active) -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px;">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+          <span style="font-size: 0.78rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 4px;">
+            <i class="fas fa-filter"></i> Stav:
+          </span>
+          <button type="button" class="vault-filter-pill active" id="plannerStatusFilterAll" onclick="setPlannerStatusFilter('all')">
+            Všetky (<span id="plannerStatusCountAll">0</span>)
           </button>
-          <input type="date" id="plannerDateInput" class="form-input" style="width: auto; padding: 6px 10px; font-size: 0.85rem;" onchange="loadPlannerPosts()">
-          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(1)" title="Nasledujúci deň" style="padding: 7px 10px;">
-            <i class="fas fa-chevron-right"></i>
+          <button type="button" class="vault-filter-pill" id="plannerStatusFilterReady" onclick="setPlannerStatusFilter('ready')">
+            <i class="fas fa-hourglass-half" style="color: #fbbf24;"></i> Čakajúce (<span id="plannerStatusCountReady">0</span>)
           </button>
-          <button type="button" class="btn-cancel" onclick="setPlannerToday()" title="Dnes" style="padding: 6px 10px; font-size: 0.8rem;">
-            Dnes
+          <button type="button" class="vault-filter-pill" id="plannerStatusFilterPublished" onclick="setPlannerStatusFilter('published')">
+            <i class="fas fa-circle-check" style="color: #10b981;"></i> Publikované (<span id="plannerStatusCountPub">0</span>)
           </button>
         </div>
 
-        <button type="button" class="btn-save" onclick="openPlanGeneratorModal()" style="font-size: 0.85rem; padding: 8px 14px;">
-          <i class="fas fa-wand-magic-sparkles"></i> 🤖 Generovať denný Auto-Plan
-        </button>
-        <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7); font-size: 0.85rem; padding: 8px 14px;">
-          <i class="fas fa-layer-group"></i> 📤 Naplánovať Set Reels pre účet
-        </button>
-        <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť zoznam" style="padding: 8px 11px;">
-          <i class="fas fa-rotate"></i>
-        </button>
+        <div id="plannerDayNavWrap" style="display: none; align-items: center; gap: 6px;">
+          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(-1)" title="Predchádzajúci deň" style="padding: 6px 10px;">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <input type="date" id="plannerDateInput" class="form-input" style="width: auto; padding: 5px 9px; font-size: 0.82rem;" onchange="loadPlannerPosts()">
+          <button type="button" class="btn-cancel" onclick="shiftPlannerDay(1)" title="Nasledujúci deň" style="padding: 6px 10px;">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+          <button type="button" class="btn-cancel" onclick="setPlannerToday()" title="Dnes" style="padding: 5px 9px; font-size: 0.78rem;">
+            Dnes
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1874,35 +2032,40 @@
           </div>
 
           <!-- GDrive Selection Options -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label"><i class="fas fa-list-ol"></i> Koľko videí naplánovať:</label>
-              <select id="setGdriveCountSelect" class="form-input" style="padding: 7px 10px; font-weight: 600;" onchange="onGdriveCountSelectChanged()">
-                <option value="7" selected>7 videí (1 týždeň)</option>
-                <option value="14">14 videí (2 týždne)</option>
-                <option value="30">30 videí (1 mesiac)</option>
-                <option value="all">Všetky dostupné videá</option>
-                <option value="custom">Vlastný počet...</option>
-              </select>
-              <input type="number" id="setGdriveCustomCount" class="form-input" style="display: none; margin-top: 6px; padding: 5px 8px; font-size: 0.8rem;" placeholder="Zadajte počet videí" min="1" oninput="updateSetPeakPreview()">
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label class="form-label"><i class="fas fa-list-ol"></i> Koľko videí zaradiť do rozvrhu:</label>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+              <button type="button" class="preset-count-btn active" id="btnCountAll" onclick="setPresetCount('all')">
+                <i class="fas fa-bolt"></i> Všetky zo zložky (<span id="setBtnAllCountBadge">26</span> videí)
+              </button>
+              <button type="button" class="preset-count-btn" id="btnCount7" onclick="setPresetCount('7')">
+                7 videí (1 týždeň)
+              </button>
+              <button type="button" class="preset-count-btn" id="btnCount14" onclick="setPresetCount('14')">
+                14 videí (2 týždne)
+              </button>
+              <button type="button" class="preset-count-btn" id="btnCountCustom" onclick="setPresetCount('custom')">
+                Vlastný počet...
+              </button>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label class="form-label"><i class="fas fa-filter"></i> Filter videí z Drive:</label>
-              <select id="setGdriveFilterSelect" class="form-input" style="padding: 7px 10px;" onchange="updateSetPeakPreview()">
-                <option value="unused" selected>Len nepoužité týmto účtom</option>
-                <option value="all">Všetky videá (aj už postnuté)</option>
-              </select>
-            </div>
+            <select id="setGdriveCountSelect" class="form-input" style="display: none;" onchange="onGdriveCountSelectChanged()">
+              <option value="all" selected>Všetky dostupné videá</option>
+              <option value="7">7 videí (1 týždeň)</option>
+              <option value="14">14 videí (2 týždne)</option>
+              <option value="30">30 videí (1 mesiac)</option>
+              <option value="custom">Vlastný počet...</option>
+            </select>
+            <input type="number" id="setGdriveCustomCount" class="form-input" style="display: none; margin-top: 6px; padding: 6px 10px; font-size: 0.82rem;" placeholder="Zadajte počet videí" min="1" oninput="updateSetPeakPreview()">
           </div>
 
           <!-- Randomize switch -->
           <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
             <div>
               <div style="font-weight: 600; font-size: 0.84rem; color: #f1f5f9;">
-                <i class="fas fa-shuffle" style="color: #38bdf8; margin-right: 6px;"></i> Náhodne zamiešať poradie (Randomize)
+                <i class="fas fa-shuffle" style="color: #38bdf8; margin-right: 6px;"></i> Náhodne premiešať poradie (Randomize)
               </div>
               <div style="font-size: 0.74rem; color: #94a3b8;">
-                Videá z Google Drive sa náhodne premiešajú naprieč dňami
+                Videá z vybranej zložky sa náhodne poprehadzujú naprieč dňami
               </div>
             </div>
             <input type="checkbox" id="setGdriveRandomize" checked style="width: 18px; height: 18px; cursor: pointer;">
@@ -1928,7 +2091,7 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
           <div class="form-group">
             <label class="form-label"><i class="fas fa-calendar-day"></i> Dátum začiatku:</label>
-            <input type="date" id="setStartDateInput" class="form-input" style="padding: 7px 10px;">
+            <input type="date" id="setStartDateInput" class="form-input" style="padding: 7px 10px;" onchange="updateSetPeakPreview()">
           </div>
           <div class="form-group">
             <label class="form-label"><i class="fas fa-clock"></i> Frekvencia & US Peak Okno:</label>
@@ -1942,9 +2105,11 @@
         </div>
 
         <!-- Peak window preview badge -->
-        <div id="setPeakPreviewBox" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 10px; padding: 9px 12px; font-size: 0.78rem; color: #94a3b8; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-          <i class="fas fa-bullseye" style="color: #38bdf8;"></i>
-          <span id="setPeakPreviewText">Časové špičky: Načítavam...</span>
+        <div id="setPeakPreviewBox" style="background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 12px 15px; font-size: 0.82rem; color: #f1f5f9; margin-bottom: 12px;">
+          <div style="font-weight: 700; color: #10b981; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+            <i class="fas fa-circle-check"></i> <span>Rozvrh po spustení:</span>
+          </div>
+          <div id="setPeakPreviewText">Načítavam parametre...</div>
         </div>
 
         <!-- Captions & Hashtags -->
@@ -1965,8 +2130,8 @@
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <button type="button" class="btn-cancel" onclick="closeAccountReelSetModal()">Zrušiť</button>
-        <button type="button" id="btnSubmitAccountReelSet" class="btn-save" onclick="submitAccountReelSet()" style="background: linear-gradient(135deg, #10b981, #0284c7);">
-          <i class="fas fa-rocket"></i> 🚀 Nahrať a Naplánovať Set
+        <button type="button" id="btnSubmitAccountReelSet" class="btn-save" onclick="submitAccountReelSet()" style="background: linear-gradient(135deg, #10b981, #0284c7); font-size: 0.95rem; padding: 11px 22px; font-weight: 700; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);">
+          <i class="fas fa-rocket"></i> 🚀 Spustiť rozvrh Reels
         </button>
       </div>
     </div>
@@ -2500,6 +2665,13 @@
 
     // ── Main View Switcher ──
     function switchMainView(view) {
+      localStorage.setItem('ig_active_tab', view);
+      try {
+        const url = new URL(window.location);
+        url.searchParams.set('tab', view);
+        window.history.replaceState({}, '', url);
+      } catch (e) {}
+
       const views = ['manual', 'vault', 'planner'];
       views.forEach(v => {
         const btn = document.getElementById(`viewBtn${v.charAt(0).toUpperCase() + v.slice(1)}`);
@@ -3364,7 +3536,9 @@
     }
 
     // ── Auto-Planner Logic ──
-    // ── Auto-Planner Logic ──
+    let plannerAllPostsCache = [];
+    let plannerFilterAccount = 'all';
+    let plannerFilterStatus = 'all';
     let plannerViewMode = 'all'; // 'all' or 'day'
 
     function setPlannerViewMode(mode) {
@@ -3402,10 +3576,247 @@
       }
     }
 
+    function formatRelativeTime(scheduledTimeStr) {
+      if (!scheduledTimeStr) return '--:--';
+      const postDate = new Date(scheduledTimeStr.replace(' ', 'T'));
+      const now = new Date();
+      const diffMs = postDate.getTime() - now.getTime();
+      const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      const timeOnly = scheduledTimeStr.substring(11, 16);
+      const dateOnly = scheduledTimeStr.substring(0, 10);
+      const parts = dateOnly.split('-');
+      const monthNames = ['jan', 'feb', 'mar', 'apr', 'máj', 'jún', 'júl', 'aug', 'sep', 'okt', 'nov', 'dec'];
+      const formattedDate = `${parseInt(parts[2])}. ${monthNames[parseInt(parts[1])-1]}`;
+
+      if (diffMs < 0) {
+        return `<span class="time-urgent"><i class="fas fa-bolt"></i> Čaká na odoslanie</span>`;
+      }
+      if (diffHours >= 0 && diffHours <= 6) {
+        const hrText = diffHours === 0 ? 'menej ako hodinu' : (diffHours === 1 ? '1 hodinu' : diffHours + ' hodiny');
+        return `<span class="time-urgent"><i class="fas fa-fire"></i> Dnes v noci o ${timeOnly} CET (o ${hrText})</span>`;
+      }
+      if (diffHours > 6 && diffHours <= 24) {
+        return `<span class="time-soon"><i class="fas fa-clock"></i> O ${diffHours}h (${timeOnly} CET)</span>`;
+      }
+      if (diffDays === 1) {
+        return `<span class="time-normal"><i class="fas fa-calendar-day"></i> Zajtra o ${timeOnly} CET</span>`;
+      }
+      return `<span class="time-future"><i class="fas fa-calendar-days"></i> ${formattedDate} o ${timeOnly} CET (o ${diffDays} dní)</span>`;
+    }
+
+    function updatePlannerKPIs(posts) {
+      const readyPosts = posts.filter(p => p.status !== 'published');
+      const pubPosts = posts.filter(p => p.status === 'published');
+
+      const countEl = document.getElementById('plannerKpiCount');
+      const topBadge = document.getElementById('topPlannerCountBadge');
+      const totalBadge = document.getElementById('plannerTotalBadge');
+      if (countEl) countEl.textContent = readyPosts.length;
+      if (topBadge) topBadge.textContent = readyPosts.length;
+      if (totalBadge) totalBadge.textContent = readyPosts.length;
+
+      const scAll = document.getElementById('plannerStatusCountAll');
+      const scReady = document.getElementById('plannerStatusCountReady');
+      const scPub = document.getElementById('plannerStatusCountPub');
+      if (scAll) scAll.textContent = posts.length;
+      if (scReady) scReady.textContent = readyPosts.length;
+      if (scPub) scPub.textContent = pubPosts.length;
+
+      const nextEl = document.getElementById('plannerKpiNext');
+      if (nextEl) {
+        if (readyPosts.length > 0) {
+          const p = readyPosts[0];
+          const timeOnly = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '';
+          const dateOnly = p.scheduled_time ? p.scheduled_time.substring(0, 10) : '';
+          const todayStr = new Date().toISOString().split('T')[0];
+          const tomorrowStr = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+          const dayLabel = dateOnly === todayStr ? 'Dnes' : (dateOnly === tomorrowStr ? 'Dnes v noci' : dateOnly);
+          nextEl.innerHTML = `<b>${dayLabel} o ${timeOnly} CET</b><br><span style="font-size:0.75rem; font-weight:600; color:#94a3b8;">@${escapeHtml(p.username)}</span>`;
+        } else {
+          nextEl.innerHTML = '<span style="color:#94a3b8; font-weight:500;">Žiadny v poradí</span>';
+        }
+      }
+
+      const rangeEl = document.getElementById('plannerKpiRange');
+      if (rangeEl) {
+        if (readyPosts.length > 0) {
+          const last = readyPosts[readyPosts.length - 1];
+          const lastDate = last.scheduled_time ? last.scheduled_time.substring(0, 10) : '';
+          rangeEl.innerHTML = `<b>Do ${lastDate}</b><br><span style="font-size:0.75rem; font-weight:600; color:#94a3b8;">(${readyPosts.length} dní pokrytých)</span>`;
+        } else {
+          rangeEl.innerHTML = '<span style="color:#94a3b8; font-weight:500;">Rozvrh je prázdny</span>';
+        }
+      }
+    }
+
+    function renderPlannerAccountFilters(posts) {
+      const bar = document.getElementById('plannerAccountFilterBar');
+      if (!bar) return;
+
+      const accCounts = {};
+      posts.forEach(p => {
+        accCounts[p.account_id] = (accCounts[p.account_id] || 0) + 1;
+      });
+
+      let html = `
+        <button type="button" class="vault-filter-pill ${plannerFilterAccount === 'all' ? 'active' : ''}" onclick="setPlannerAccountFilter('all')">
+          👥 Všetky profily (${posts.length})
+        </button>
+      `;
+
+      ALL_ACCOUNTS.forEach(a => {
+        const count = accCounts[a.id] || 0;
+        const isSelected = String(plannerFilterAccount) === String(a.id);
+        const flag = a.region === 'us' ? '🇺🇸' : '🇸🇰';
+        html += `
+          <button type="button" class="vault-filter-pill ${isSelected ? 'active' : ''}" onclick="setPlannerAccountFilter(${a.id})">
+            ${flag} @${escapeHtml(a.username)} (${count})
+          </button>
+        `;
+      });
+
+      bar.innerHTML = html;
+    }
+
+    function setPlannerAccountFilter(accId) {
+      plannerFilterAccount = accId;
+      renderPlannerAccountFilters(plannerAllPostsCache);
+      renderPlannerPosts();
+    }
+
+    function setPlannerStatusFilter(status) {
+      plannerFilterStatus = status;
+      ['All', 'Ready', 'Published'].forEach(s => {
+        const btn = document.getElementById(`plannerStatusFilter${s}`);
+        if (btn) btn.classList.toggle('active', s.toLowerCase() === status);
+      });
+      renderPlannerPosts();
+    }
+
+    function renderPlannerPosts() {
+      const container = document.getElementById('plannerTimelineContainer');
+      if (!container) return;
+
+      let filtered = plannerAllPostsCache.slice();
+
+      if (plannerFilterAccount !== 'all') {
+        filtered = filtered.filter(p => String(p.account_id) === String(plannerFilterAccount));
+      }
+
+      if (plannerFilterStatus === 'ready') {
+        filtered = filtered.filter(p => p.status !== 'published');
+      } else if (plannerFilterStatus === 'published') {
+        filtered = filtered.filter(p => p.status === 'published');
+      }
+
+      if (filtered.length === 0) {
+        const isAccountFiltered = plannerFilterAccount !== 'all';
+        container.innerHTML = `
+          <div style="text-align: center; padding: 48px 20px; background: rgba(255,255,255,0.02); border-radius: 18px; border: 1px dashed rgba(255,255,255,0.1);">
+            <div style="font-size: 2.4rem; color: #64748b; margin-bottom: 12px;"><i class="fas fa-calendar-xmark"></i></div>
+            <h3 style="color: #fff; margin: 0 0 8px 0;">${isAccountFiltered ? 'Tento profil nemá v rozvrhu žiadne posty' : 'Zatiaľ tu nie sú žiadne naplánované posty'}</h3>
+            <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 20px 0;">Naplánujte sadu Reels priamo z Google Drive (IG_VAULT) bez zaberania miesta na serveri.</p>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+              <button type="button" class="btn-save" onclick="openAccountReelSetModal(${isAccountFiltered ? plannerFilterAccount : 'null'})" style="background: linear-gradient(135deg, #10b981, #0284c7); padding: 10px 18px; font-weight: 700;">
+                <i class="fas fa-layer-group"></i> 📤 Naplánovať sadu Reels z Google Drive
+              </button>
+              ${isAccountFiltered ? `<button type="button" class="btn-cancel" onclick="setPlannerAccountFilter('all')"><i class="fas fa-users"></i> Zobraziť všetky profily</button>` : ''}
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(p => {
+        const isPublished = p.status === 'published';
+        const isFailed = p.status === 'failed';
+        const canPublish = !isPublished;
+
+        const statusBadge = isPublished
+          ? '<span class="health-pill healthy"><i class="fas fa-circle-check"></i> Publikované</span>'
+          : isFailed
+            ? `<span class="health-pill error"><i class="fas fa-triangle-exclamation"></i> Chyba: ${escapeHtml(p.error_message || '')}</span>`
+            : '<span class="health-pill warning"><i class="fas fa-hourglass-half"></i> Pripravené</span>';
+
+        const regionFlag = p.region === 'us' ? '🇺🇸' : '🇸🇰';
+        const dateOnly = p.scheduled_time ? p.scheduled_time.substring(0, 10) : '';
+        const timeFormatted = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '--:--';
+        const masterName = p.master_video_name || p.original_video_name || p.spoofed_video_path || 'Reel';
+        const folderLabel = p.vault_folder_name || 'kopie 1';
+
+        return `
+          <div class="planner-post-card" id="planner-card-${p.id}">
+            <!-- Left Video Preview -->
+            <div class="planner-video-col">
+              <video src="${p.video_url}" poster="${p.thumbnail_url || ''}" controls preload="metadata" playsinline></video>
+              <div style="position: absolute; top: 6px; left: 6px; background: rgba(15,23,42,0.85); padding: 3px 8px; border-radius: 6px; font-size: 0.68rem; color: #38bdf8; border: 1px solid rgba(56,189,248,0.3);">
+                <i class="fab fa-google-drive"></i> Drive Stream
+              </div>
+            </div>
+
+            <!-- Right Metadata & Editor -->
+            <div class="planner-info-col">
+              <div class="planner-header-row">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span style="font-weight: 700; font-size: 1.05rem; color: #fff;">
+                    ${regionFlag} @${escapeHtml(p.username)}
+                  </span>
+                  ${formatRelativeTime(p.scheduled_time)}
+                  <span class="peak-badge" title="Cieľové okno">
+                    <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || 'US Peak')}
+                  </span>
+                </div>
+                <div>${statusBadge}</div>
+              </div>
+
+              <!-- Details pills -->
+              <div class="spoof-breakdown" style="margin-top: 4px;">
+                <span class="spoof-tag-pill" style="background: rgba(56,189,248,0.1); color: #38bdf8; border-color: rgba(56,189,248,0.25);" title="Zložka na Google Drive">
+                  <i class="fas fa-folder-tree"></i> Zložka: <b>${escapeHtml(folderLabel)}</b>
+                </span>
+                <span class="spoof-tag-pill" title="Názov súboru">
+                  <i class="fas fa-film" style="color:#f59e0b;"></i> ${escapeHtml(masterName)}
+                </span>
+                <span class="spoof-tag-pill" title="Plánovaný čas v CET">
+                  <i class="fas fa-calendar-day" style="color:#10b981;"></i> ${dateOnly} o ${timeFormatted} CET
+                </span>
+              </div>
+
+              <!-- In-line Editable Caption & Hashtags -->
+              <div class="form-group" style="margin-top: 8px;">
+                <label class="form-label" style="font-size: 0.72rem;">Popis & Hashtagy (môžete kedykoľvek upraviť):</label>
+                <textarea id="planCaption-${p.id}" class="form-input" style="min-height: 56px; font-size: 0.82rem;" placeholder="Popis príspevku...">${escapeHtml(p.caption || '')}</textarea>
+                <input type="text" id="planHashtags-${p.id}" class="form-input" style="margin-top: 6px; font-size: 0.82rem;" value="${escapeHtml(p.hashtags || '')}" placeholder="#hashtagy">
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="planner-actions" style="margin-top: 8px;">
+                <button type="button" class="btn-cancel" onclick="savePlannedPostCaption(${p.id})" style="padding: 7px 12px; font-size: 0.8rem;">
+                  <i class="fas fa-floppy-disk"></i> Uložiť text
+                </button>
+
+                ${canPublish ? `
+                  <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})" style="padding: 7px 15px; font-size: 0.82rem;">
+                    <i class="fas fa-paper-plane"></i> Publikovať Reel teraz na @${escapeHtml(p.username)}
+                  </button>
+                ` : ''}
+
+                <div style="flex: 1;"></div>
+                <button type="button" class="btn-unlink" onclick="deletePlannedPost(${p.id})" title="Zmazať tento naplánovaný slot" style="padding: 7px 11px;">
+                  <i class="fas fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     async function loadPlannerPosts() {
       const container = document.getElementById('plannerTimelineContainer');
       const dateInput = document.getElementById('plannerDateInput');
-      const badgeTotal = document.getElementById('plannerTotalBadge');
       if (!container) return;
 
       let url = `${PREFIX}/api/planner/posts`;
@@ -3417,110 +3828,17 @@
         url += `?date=${encodeURIComponent(selectedDate)}`;
       }
 
-      container.innerHTML = '<div style="color:#94a3b8; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Načítavam naplánovaný rozvrh...</div>';
+      container.innerHTML = '<div style="color:#94a3b8; padding:24px; text-align:center;"><i class="fas fa-spinner fa-spin"></i> Načítavam naplánovaný rozvrh...</div>';
 
       try {
         const res = await fetch(url, { headers: { 'X-Master-Password': PWD } });
         const data = await res.json();
 
         if (res.ok && data.status === 'ok') {
-          const posts = data.posts || [];
-          if (badgeTotal) badgeTotal.textContent = data.total_upcoming != null ? data.total_upcoming : posts.length;
-
-          if (posts.length === 0) {
-            container.innerHTML = `
-              <div style="text-align: center; padding: 44px 20px; background: rgba(255,255,255,0.02); border-radius: 18px; border: 1px dashed rgba(255,255,255,0.1);">
-                <div style="font-size: 2.2rem; color: #64748b; margin-bottom: 12px;"><i class="fas fa-calendar-xmark"></i></div>
-                <h3 style="color: #fff; margin: 0 0 8px 0;">Zatiaľ tu nie sú žiadne naplánované posty</h3>
-                <p style="color: #94a3b8; font-size: 0.85rem; margin: 0 0 18px 0;">Naplánujte sadu Reels z Google Drive alebo spustite Auto-Planner.</p>
-                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                  <button type="button" class="btn-save" onclick="openAccountReelSetModal()" style="background: linear-gradient(135deg, #10b981, #0284c7);">
-                    <i class="fas fa-layer-group"></i> 📤 Naplánovať sadu Reels z Google Drive
-                  </button>
-                  <button type="button" class="btn-cancel" onclick="setPlannerViewMode('all')">
-                    <i class="fas fa-list-check"></i> Zobraziť všetky posty
-                  </button>
-                </div>
-              </div>
-            `;
-            return;
-          }
-
-          container.innerHTML = posts.map(p => {
-            const isScheduled = p.status === 'scheduled';
-            const isPublished = p.status === 'published';
-            const isFailed = p.status === 'failed';
-            const canPublish = !isPublished;
-
-            const statusBadge = isPublished
-              ? '<span class="health-pill healthy"><i class="fas fa-circle-check"></i> Publikované</span>'
-              : isFailed
-                ? `<span class="health-pill error"><i class="fas fa-triangle-exclamation"></i> Chyba: ${escapeHtml(p.error_message || '')}</span>`
-                : '<span class="health-pill warning"><i class="fas fa-hourglass-half"></i> Pripravené na publikovanie</span>';
-
-            const regionFlag = p.region === 'us' ? '🇺🇸' : '🇸🇰';
-            const dateOnly = p.scheduled_time ? p.scheduled_time.substring(0, 10) : '';
-            const timeFormatted = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '--:--';
-            const masterName = p.master_video_name || p.original_video_name || p.spoofed_video_path || 'Master';
-
-            return `
-              <div class="planner-post-card" id="planner-card-${p.id}">
-                <!-- Left Video Preview -->
-                <div class="planner-video-col">
-                  <video src="${p.video_url}" poster="${p.thumbnail_url || ''}" controls preload="metadata" playsinline></video>
-                </div>
-
-                <!-- Right Metadata & Editor -->
-                <div class="planner-info-col">
-                  <div class="planner-header-row">
-                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                      <span style="font-weight: 700; font-size: 1.05rem; color: #fff;">
-                        ${regionFlag} @${escapeHtml(p.username)}
-                      </span>
-                      <span class="peak-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 8px; border-radius: 6px; font-size: 0.78rem;">
-                        <i class="fas fa-calendar-day"></i> <b>${dateOnly}</b> o ${timeFormatted} CET
-                      </span>
-                      <span class="peak-badge">
-                        <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || 'US Peak')}
-                      </span>
-                    </div>
-                    <div>${statusBadge}</div>
-                  </div>
-
-                  <!-- Details pill -->
-                  <div class="spoof-breakdown" style="margin-top: 6px;">
-                    <span class="spoof-tag-pill" title="Miesto uloženia"><i class="fab fa-google-drive" style="color:#38bdf8;"></i> Google Drive Stream</span>
-                    <span class="spoof-tag-pill" title="Pôvodný názov videa"><i class="fas fa-film" style="color:#f59e0b;"></i> Video: ${escapeHtml(masterName)}</span>
-                  </div>
-
-                  <!-- In-line Editable Caption & Hashtags -->
-                  <div class="form-group" style="margin-top: 8px;">
-                    <label class="form-label" style="font-size: 0.72rem;">Popis & Hashtagy:</label>
-                    <textarea id="planCaption-${p.id}" class="form-input" style="min-height: 60px;" placeholder="Popis príspevku...">${escapeHtml(p.caption || '')}</textarea>
-                    <input type="text" id="planHashtags-${p.id}" class="form-input" style="margin-top: 6px;" value="${escapeHtml(p.hashtags || '')}" placeholder="#hashtagy">
-                  </div>
-
-                  <!-- Action Buttons -->
-                  <div class="planner-actions" style="margin-top: 10px;">
-                    <button type="button" class="btn-cancel" onclick="savePlannedPostCaption(${p.id})">
-                      <i class="fas fa-floppy-disk"></i> Uložiť zmeny
-                    </button>
-
-                    ${canPublish ? `
-                      <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})">
-                        <i class="fas fa-paper-plane"></i> Publikovať Reel teraz na @${escapeHtml(p.username)}
-                      </button>
-                    ` : ''}
-
-                    <div style="flex: 1;"></div>
-                    <button type="button" class="btn-unlink" onclick="deletePlannedPost(${p.id})" title="Zmazať tento naplánovaný slot">
-                      <i class="fas fa-trash-can"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            `;
-          }).join('');
+          plannerAllPostsCache = data.posts || [];
+          updatePlannerKPIs(plannerAllPostsCache);
+          renderPlannerAccountFilters(plannerAllPostsCache);
+          renderPlannerPosts();
         } else {
           container.innerHTML = `<div style="color:#ef4444; padding:20px;">Chyba načítania rozvrhu: ${data.message}</div>`;
         }
@@ -3528,6 +3846,18 @@
         console.error(err);
         container.innerHTML = '<div style="color:#ef4444; padding:20px;">Chyba komunikácie pri načítaní rozvrhu.</div>';
       }
+    }
+
+    async function fetchPlannerBadgeCount() {
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/posts`, { headers: { 'X-Master-Password': PWD } });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          const readyPosts = (data.posts || []).filter(p => p.status !== 'published');
+          const topBadge = document.getElementById('topPlannerCountBadge');
+          if (topBadge) topBadge.textContent = readyPosts.length;
+        }
+      } catch (e) {}
     }
 
     // Generator Modal
@@ -3728,8 +4058,10 @@
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
           showToast('Slot bol zmazaný.', 'info');
-          const card = document.getElementById(`planner-card-${postId}`);
-          if (card) card.remove();
+          plannerAllPostsCache = plannerAllPostsCache.filter(p => p.id !== postId);
+          updatePlannerKPIs(plannerAllPostsCache);
+          renderPlannerAccountFilters(plannerAllPostsCache);
+          renderPlannerPosts();
         } else {
           showToast(data.message || 'Chyba pri mazaní slotu.', 'error');
         }
@@ -3887,21 +4219,28 @@
       updateSetPeakPreview();
     }
 
-    function openAccountReelSetModal() {
+    function openAccountReelSetModal(preselectAccountId) {
       const modal = document.getElementById('accountReelSetModal');
       const selectEl = document.getElementById('setAccountSelect');
       const dateEl = document.getElementById('setStartDateInput');
       const filterDate = document.getElementById('plannerDateInput');
 
       if (dateEl) {
-        dateEl.value = filterDate && filterDate.value ? filterDate.value : new Date().toISOString().split('T')[0];
+        const now = new Date();
+        if (now.getHours() >= 20) {
+          const tomorrow = new Date(Date.now() + 86400000);
+          dateEl.value = tomorrow.toISOString().split('T')[0];
+        } else {
+          dateEl.value = filterDate && filterDate.value ? filterDate.value : now.toISOString().split('T')[0];
+        }
       }
 
       if (selectEl) {
         selectEl.innerHTML = ALL_ACCOUNTS.map(a => {
           const isHealthy = (a.health_status === 'healthy' || !a.health_status);
           const statusText = isHealthy ? '🟢 Ready' : (a.health_status === 'action_required' ? '🟡 Checkpoint' : '🔴 Chyba');
-          return `<option value="${a.id}">@${escapeHtml(a.username)} (🇺🇸 US Čas • ${statusText})</option>`;
+          const isSelected = preselectAccountId ? (String(a.id) === String(preselectAccountId)) : false;
+          return `<option value="${a.id}" ${isSelected ? 'selected' : ''}>@${escapeHtml(a.username)} (🇺🇸 US Čas • ${statusText})</option>`;
         }).join('');
       }
 
@@ -3920,9 +4259,33 @@
       if (progressBox) progressBox.style.display = 'none';
 
       setReelSetSource('gdrive');
+      setPresetCount('all');
       refreshGdrivePlannerSummary();
 
       if (modal) modal.style.display = 'flex';
+    }
+
+    function setPresetCount(preset) {
+      const countSel = document.getElementById('setGdriveCountSelect');
+      const customInput = document.getElementById('setGdriveCustomCount');
+      if (!countSel) return;
+
+      ['all', '7', '14', 'custom'].forEach(p => {
+        const btn = document.getElementById(`btnCount${p.charAt(0).toUpperCase() + p.slice(1)}`);
+        if (btn) btn.classList.toggle('active', p === preset);
+      });
+
+      if (preset === 'custom') {
+        countSel.value = 'custom';
+        if (customInput) {
+          customInput.style.display = 'block';
+          customInput.focus();
+        }
+      } else {
+        countSel.value = preset;
+        if (customInput) customInput.style.display = 'none';
+      }
+      updateSetPeakPreview();
     }
 
     function closeAccountReelSetModal() {
@@ -3959,18 +4322,23 @@
     function updateSetPeakPreview() {
       const selectEl = document.getElementById('setAccountSelect');
       const freqEl = document.getElementById('setFrequencySelect');
+      const dateEl = document.getElementById('setStartDateInput');
+      const folderSel = document.getElementById('setGdriveFolderSelect');
       const previewText = document.getElementById('setPeakPreviewText');
       if (!selectEl || !previewText) return;
 
+      const accName = selectEl.options[selectEl.selectedIndex]?.text?.split(' ')[0] || 'účet';
+      const folderName = folderSel ? folderSel.value : 'auto';
       const freq = freqEl ? freqEl.value : '1_evening';
-      let count = 0;
+      const startDate = dateEl && dateEl.value ? dateEl.value : 'dnes/zajtra';
 
+      let count = 0;
       if (currentSetSource === 'gdrive') {
         const countSel = document.getElementById('setGdriveCountSelect');
         const customCountEl = document.getElementById('setGdriveCustomCount');
         const filterSel = document.getElementById('setGdriveFilterSelect');
         const onlyUnused = filterSel ? filterSel.value === 'unused' : true;
-        const availableMax = gdriveSummaryData ? (onlyUnused ? gdriveSummaryData.unused_count : gdriveSummaryData.total_count) : 14;
+        const availableMax = gdriveSummaryData ? (onlyUnused ? gdriveSummaryData.unused_count : gdriveSummaryData.total_count) : 26;
 
         if (countSel) {
           if (countSel.value === 'all') {
@@ -3985,28 +4353,24 @@
         count = selectedSetFiles.length;
       }
 
-      let windowStr = '';
       let postsPerDay = 1;
-      if (freq === '1_evening') {
-        windowStr = '🇺🇸 US Prime Večer (~19:30 EST / 01:30 CET v noci)';
-        postsPerDay = 1;
-      } else if (freq === '1_lunch') {
-        windowStr = '🇺🇸 US Obed / Popoludnie (~13:15 EST / 19:15 CET)';
-        postsPerDay = 1;
-      } else if (freq === '2_daily' || freq === '2') {
-        windowStr = '🇺🇸 US Obed (~13:15 EST) + 🇺🇸 US Prime Večer (~19:30 EST)';
+      let windowDesc = 'US Prime večer (~19:30 EST / 01:30 CET u nás)';
+      if (freq === '1_lunch') {
+        windowDesc = 'US Obed (~13:15 EST / 19:15 CET)';
+      } else if (freq === '2_daily') {
         postsPerDay = 2;
-      } else if (freq === '3_daily' || freq === '3') {
-        windowStr = '🇺🇸 US Ráno (~09:15 EST) + Obed (~13:15 EST) + Prime Večer (~19:30 EST)';
+        windowDesc = '2x denne (US Obed + Prime večer)';
+      } else if (freq === '3_daily') {
         postsPerDay = 3;
-      } else {
-        windowStr = '🇺🇸 US Prime Večer (~19:30 EST / 01:30 CET v noci)';
-        postsPerDay = 1;
+        windowDesc = '3x denne (US Ráno + Obed + Večer)';
       }
 
-      let sourceLabel = currentSetSource === 'gdrive' ? 'z Google Drive' : 'z lokálneho PC';
-      let countStr = count > 0 ? `• <b>${count} videí ${sourceLabel}</b> bude rozvrhnutých na <b>${Math.ceil(count / postsPerDay)} dní</b>` : '';
-      previewText.innerHTML = `Všetky účty cielia na US čas: <b>${windowStr}</b> (anti-bot rozptyl ±7–23 min) ${countStr}`;
+      const daysCount = count > 0 ? Math.ceil(count / postsPerDay) : 0;
+      const folderBadge = (folderName === 'auto' || folderName === 'all') ? 'podľa priradenej kópie' : `zo zložky "<b>${escapeHtml(folderName)}</b>"`;
+
+      previewText.innerHTML = `
+        Pre profil <b>${escapeHtml(accName)}</b> sa rozvrhne <b>${count} videí</b> ${folderBadge} od <b>${startDate}</b> na <b>${daysCount} dní</b> (každý deň 1 Reel v <b>${windowDesc}</b> s anti-bot rozptylom ±7–23 min).
+      `;
     }
 
     async function submitAccountReelSet() {
@@ -4074,6 +4438,10 @@
           if (res.ok && data.status === 'ok') {
             showToast(`Úspešne naplánovaných ${data.created_count} Reels z Google Drive! 🎉`, 'success');
             closeAccountReelSetModal();
+            plannerViewMode = 'all';
+            plannerFilterAccount = 'all';
+            plannerFilterStatus = 'all';
+            switchMainView('planner');
             loadPlannerPosts();
           } else {
             showToast(data.message || 'Chyba pri plánovaní z Google Drive.', 'error');
@@ -4166,13 +4534,17 @@
         .replace(/'/g, '&#039;');
     }
 
-    // Auto-select tab if in query params
+    // Auto-select tab if in query params or localStorage
     document.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get('tab');
+      let tabParam = urlParams.get('tab');
+      if (!tabParam) {
+        tabParam = localStorage.getItem('ig_active_tab');
+      }
       if (tabParam && ['manual', 'vault', 'planner'].includes(tabParam)) {
         switchMainView(tabParam);
       }
+      fetchPlannerBadgeCount();
     });
   </script>
 </body>

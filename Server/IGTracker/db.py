@@ -525,7 +525,7 @@ def get_planned_posts(date_str=None, account_id=None, status=None):
     query = """
         SELECT p.*,
                a.username, a.full_name, a.avatar_url, a.region, a.health_status,
-               v.original_name as master_video_name, v.duration_seconds
+               v.original_name as master_video_name, v.duration_seconds, v.folder_name as vault_folder_name
         FROM planned_posts p
         JOIN tracked_accounts a ON a.id = p.account_id
         LEFT JOIN vault_videos v ON v.id = p.vault_video_id
