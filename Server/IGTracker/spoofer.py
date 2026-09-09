@@ -175,17 +175,18 @@ def generate_thumbnail(media_path: str, out_thumb_path: str, time_offset="00:00:
 
 
 def get_sharpen_filter() -> str:
-    """Vráti AMD FidelityFX CAS 0.4 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
+    """Vráti AMD FidelityFX CAS 0.3 (Contrast Adaptive Sharpening) alebo unsharp fallback."""
     try:
         r = subprocess.run(["ffmpeg", "-h", "filter=cas"], capture_output=True, timeout=2)
         if r.returncode == 0:
-            return "cas=0.4"
+            return "cas=0.3"
     except Exception:
         pass
-    return "unsharp=5:5:0.8:5:5:0.0"
+    return "unsharp=5:5:0.6:5:5:0.0"
 
 
-BASE_EQ_FILTER = "eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03"
+# Overené TOP univerzálne hodnoty pre maximálnu prirodzenosť a ľudské oko
+BASE_EQ_FILTER = "eq=contrast=1.055:brightness=-0.007:gamma=0.97:saturation=1.035"
 
 
 def build_spoof_filters(is_copy: bool = False) -> str:
@@ -196,13 +197,13 @@ def build_spoof_filters(is_copy: bool = False) -> str:
 
 
 def build_copy_jitter_filter() -> str:
-    """Jemný jitter okolo 1.0 pre kópie, aby bol každý pixelový hash pre algo unikátny."""
-    cont   = random.uniform(0.990, 1.010)
-    bright = random.uniform(-0.005, 0.005)
-    gamma  = random.uniform(0.990, 1.010)
-    sat    = random.uniform(0.990, 1.010)
-    ct     = random.uniform(-0.008, 0.008)
-    hue    = random.uniform(-0.6, 0.6)
+    """Jemný jitter okolo 1.0 pre kópie, aby bol každý pixelový hash pre algo unikátny a hodnoty zostali v TOP rozsahu."""
+    cont   = random.uniform(0.992, 1.008)
+    bright = random.uniform(-0.002, 0.002)
+    gamma  = random.uniform(0.992, 1.008)
+    sat    = random.uniform(0.992, 1.008)
+    ct     = random.uniform(-0.006, 0.006)
+    hue    = random.uniform(-0.5, 0.5)
     return (
         f"eq=contrast={cont:.4f}:brightness={bright:.4f}:gamma={gamma:.4f}:saturation={sat:.4f},"
         f"colorbalance=rs={ct:.4f}:gs=0:bs={-ct:.4f}:rm={ct/2:.4f}:gm=0:bm={-ct/2:.4f},"
@@ -479,8 +480,8 @@ def color_grade_and_encode(
     Kompletný FFmpeg pipeline pre Instagram Reels:
     1. Pomer strán a vycentrovaný orez na presných 1080x1920:
        scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
-    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.4 (alebo unsharp)
-    3. Cinematic EQ: eq=contrast=1.06:brightness=-0.01:gamma=0.97:saturation=1.03 (alebo jitter pre kópie)
+    2. Adaptívne doostrenie: AMD FidelityFX CAS 0.3 (alebo unsharp)
+    3. Cinematic EQ: eq=contrast=1.055:brightness=-0.007:gamma=0.97:saturation=1.035 (alebo jitter pre kópie)
     4. Audio Guard: -c:a copy pre bezstratový prenos, anullsrc stereo ak audio chýba
     5. Instagram Enkódovanie: libx264 CPU s -crf 18 -preset fast pre vizuálne bezstratový export
     6. Vymazané metadáta: -map_metadata -1
@@ -517,7 +518,7 @@ def color_grade_and_encode(
         out_path
     ]
 
-    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + {eq_filter[:40]}, CRF 18 libx264")
+    logger.info(f"color_grade_and_encode: 1080x1920 Lanczos + {sharp_filter} + {eq_filter[:45]}, CRF 18 libx264")
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if r.returncode != 0 or not os.path.exists(out_path):
         logger.warning(f"Enkódovanie s copy zlyhalo, prepínam na kompatibilný fallback: {r.stderr[-300:]}")
