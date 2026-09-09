@@ -307,15 +307,7 @@ def parse_instagram_html(username, html_text):
 
 def fetch_via_crawler(username):
     target_url = f"https://www.instagram.com/{username}/"
-    try:
-        r = requests.get(target_url, headers=CRAWLER_HEADERS, timeout=4)
-        if r.status_code == 200 and 'follower' in r.text.lower():
-            parsed = parse_instagram_html(username, r.text)
-            if parsed:
-                return parsed
-    except Exception:
-        pass
-
+    # Používame výhradne overené proxy, nikdy nie priamy unproxied request z datacenter IP VPS
     candidates = get_proxy_candidates()
     for p in candidates[:20]:
         proxies = {'http': f'http://{p}', 'https': f'http://{p}'}

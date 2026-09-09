@@ -1506,7 +1506,7 @@ def background_sync_worker():
 # Spustenie background workerov vo vedľajších vláknach
 worker_thread = threading.Thread(target=background_sync_worker, daemon=True)
 worker_thread.start()
-health_monitor.start_background_health_worker(interval_seconds=1800)
+health_monitor.start_background_health_worker(interval_seconds=7200)
 vault_planner.start_background_planner_worker(interval_seconds=60)
 
 

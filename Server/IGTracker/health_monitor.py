@@ -87,22 +87,7 @@ def check_account_health(account_id: int) -> dict:
             message = f"Chyba siete pri overovaní: {str(e)[:80]}"
             details = str(e)
 
-    # 2. Rýchla webová kontrola dostupnosti profilu (detekcia 404 zmazania / banu)
-    if new_status == "healthy" and username:
-        try:
-            head_res = httpx.get(
-                f"https://www.instagram.com/{username}/",
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
-                timeout=6,
-                follow_redirects=True,
-            )
-            if head_res.status_code == 404:
-                new_status = "error"
-                message = "Verejný profil vracia 404 (účet neexistuje alebo bol zmazaný)"
-        except Exception:
-            pass  # Nechceme označiť chybu len kvôli web scraper timeoutu
-
-    # 3. Zápis do databázy
+    # 2. Zápis do databázy (Meta Graph API /me už plne overilo aktivitu účtu)
     db.update_account_health(account_id, new_status, message)
 
     # 4. Webhook notifikácia pri zmene stavu na 🟡 alebo 🔴 (alebo návrate na 🟢)
