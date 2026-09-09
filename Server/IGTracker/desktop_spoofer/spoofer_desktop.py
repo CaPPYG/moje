@@ -395,7 +395,13 @@ def upscale_with_realesrgan(src, out, model="realesrgan-x4plus", binary="realesr
         if r1.returncode != 0: return False
         cnt = len(glob.glob(os.path.join(tmp_frames, "*.png")))
         if log: log(f"  Real-ESRGAN: Upscalujem {cnt} snimkov na GPU (AMD Radeon) cez {model}...")
-        cmd_up = [bin_path, "-i", tmp_frames, "-o", tmp_up, "-n", model, "-f", "png"]
+        cmd_up = [
+            bin_path, "-i", tmp_frames, "-o", tmp_up,
+            "-n", model,
+            "-t", "192",
+            "-j", "1:1:1",
+            "-f", "png"
+        ]
         if os.path.isdir(model_dir):
             cmd_up += ["-m", model_dir]
         r2 = subprocess.run(
@@ -460,8 +466,8 @@ def color_grade_and_encode(src, out, lut_path=None, grain=8, spoof=True, enc_arg
     if grain and grain > 0:
         vf_parts.append(f"noise=alls={grain}:allf=t+u")
 
-    # Finálny vycentrovaný scale a orez na presných 1080x1920
-    vf_parts.append("scale=1080:1920:force_original_aspect_ratio=increase")
+    # Finálny vycentrovaný scale a orez na presných 1080x1920 (Lanczos supersampling)
+    vf_parts.append("scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos")
     vf_parts.append("crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2")
 
     vf = ",".join(vf_parts)
@@ -510,38 +516,18 @@ def full_pipeline(src, out, config, enc_args, log=None):
     current = src
     temps = []
     try:
-        # 1. Upscaling
-        if upscale_method != "none":
+        # 1. AI Upscaling (iba ak je zvolený Real-ESRGAN)
+        if upscale_method == "realesrgan":
             tmp_up = tempfile.mktemp(suffix="_upscaled.mp4")
             temps.append(tmp_up)
-            ok = False
-            if upscale_method == "realesrgan":
-                ok = upscale_with_realesrgan(current, tmp_up, log=log)
-            if not ok:
-                if log and upscale_method == "realesrgan":
-                    log("  Real-ESRGAN zlyhal, pouzivam Lanczos fallback...")
-                # Lanczos supersampling
-                has_a = has_audio_stream(current)
-                cmd = ["ffmpeg", "-y", "-i", current]
-                if not has_a:
-                    cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
-                cmd += [
-                    "-map_metadata", "-1",
-                    "-vf", "scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920",
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "17", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "192k",
-                    "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
-                    "-movflags", "+faststart", "-shortest", tmp_up
-                ]
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-                ok = r.returncode == 0 and os.path.exists(tmp_up)
+            ok = upscale_with_realesrgan(current, tmp_up, log=log)
             if ok:
                 current = tmp_up
-                if log: log("  Upscaling OK.")
+                if log: log("  Real-ESRGAN AI Upscaling OK.")
             else:
-                if log: log("  Upscaling zlyhal, pokracujem s originalom.")
+                if log: log("  Real-ESRGAN zlyhal, pokracujem s rychlym Lanczos 1080p...")
 
-        # 2. Color grade + encode
+        # 2. Color grade + Lanczos 1080p + encode (všetko v 1 priechode na GPU)
         if do_grade:
             ok = color_grade_and_encode(
                 current, out,
@@ -667,7 +653,7 @@ class ReelsStudio(tk.Tk):
         self.v_output_dir = tk.StringVar()
         self.v_region     = tk.StringVar(value="us")
         self.v_variants   = tk.IntVar(value=1)
-        self.v_upscale    = tk.StringVar(value="none")
+        self.v_upscale    = tk.StringVar(value="lanczos")
         self.v_grade      = tk.BooleanVar(value=True)
         self.v_grain      = tk.IntVar(value=8)
         self.v_lut        = tk.StringVar()
@@ -859,9 +845,9 @@ class ReelsStudio(tk.Tk):
         uc = self._card(row, "📐  Upscaling")
         uc.pack(side="left", fill="both", expand=True)
         self._radio_row(uc, self.v_upscale, [
-            ("none", "Ziadny"),
-            ("lanczos", "Lanczos 1080p"),
-            ("realesrgan", "Real-ESRGAN (GPU)")
+            ("lanczos", "Lanczos 1080p (Rýchle & bezpečné - ODPORÚČANÉ)"),
+            ("none", "Žiadny (Pôvodné rozlíšenie)"),
+            ("realesrgan", "Real-ESRGAN AI (Vysoká záťaž GPU/zdroja)"),
         ])
 
         gc = self._card(parent, "🎨  Color Grading")
