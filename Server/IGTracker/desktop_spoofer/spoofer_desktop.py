@@ -97,26 +97,48 @@ def has_tool(name):
     return shutil.which(name) is not None
 
 
+def _probe_encoder(enc: str) -> bool:
+    """Otestuje ci dany hardverovy enkoder skutocne funguje na tejto grafickej karte."""
+    try:
+        cmd = ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=s=720x1280:d=0.04:rate=30", "-c:v", enc, "-f", "null", "-"]
+        r = subprocess.run(cmd, capture_output=True, timeout=5)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def detect_encoder():
+    """Dynamicky deteguje najrychlejsi podporovany GPU enkoder (Nvidia, AMD, Intel, alebo CPU)."""
     if not has_tool("ffmpeg"):
         return "libx264 (CPU)", ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"]
-    try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"], capture_output=True, text=True)
-        out = r.stdout or ""
-        if "h264_nvenc" in out:
-            return "h264_nvenc (Nvidia GPU)", ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "19",
-                                               "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"]
-        if "h264_qsv" in out:
-            return "h264_qsv (Intel QSV)", ["-c:v", "h264_qsv", "-preset", "faster",
-                                            "-global_quality", "20",
-                                            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"]
-        if "h264_amf" in out:
-            return "h264_amf (AMD GPU)", ["-c:v", "h264_amf", "-quality", "speed", "-rc", "cbr",
-                                          "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"]
-    except Exception:
-        pass
-    return "libx264 (CPU)", ["-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
-                              "-preset", "fast", "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"]
+
+    # 1. Nvidia NVENC
+    if _probe_encoder("h264_nvenc"):
+        return "h264_nvenc (Nvidia GPU)", [
+            "-c:v", "h264_nvenc", "-preset", "p4", "-cq", "19",
+            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
+        ]
+
+    # 2. AMD AMF (Radeon RX)
+    if _probe_encoder("h264_amf"):
+        return "h264_amf (AMD Radeon GPU)", [
+            "-c:v", "h264_amf", "-quality", "balanced",
+            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
+        ]
+
+    # 3. Intel QuickSync (QSV)
+    if _probe_encoder("h264_qsv"):
+        return "h264_qsv (Intel QSV)", [
+            "-c:v", "h264_qsv", "-preset", "faster", "-global_quality", "20",
+            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
+        ]
+
+    # 4. CPU fallback (libx264)
+    return "libx264 (CPU)", [
+        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+        "-preset", "veryfast", "-crf", "20",
+        "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M"
+    ]
 
 
 def build_spoof_filters():
@@ -132,9 +154,7 @@ def build_spoof_filters():
         f"colorbalance=rs={ct:.4f}:gs=0:bs={-ct:.4f}:rm={ct/2:.4f}:gm=0:bm={-ct/2:.4f}",
         f"hue=h={hue:.2f}",
         f"scale=iw*{zoom:.4f}:ih*{zoom:.4f},crop=iw/{zoom:.4f}:ih/{zoom:.4f}",
-        "unsharp=lx=5:ly=5:la=0.45:cx=5:cy=5:ca=0",
-        "hqdn3d=2.0:2.0:6.0:6.0",
-        "deband",
+        "unsharp=lx=3:ly=3:la=0.35:cx=3:cy=3:ca=0",
     ])
 
 
@@ -298,7 +318,7 @@ def color_grade_and_encode(src, out, lut_path=None, grain=9, spoof=True, enc_arg
         "crop=1080:1920",
     ]
     if lut_path and os.path.isfile(lut_path):
-        escaped = lut_path.replace("\\\\", "/").replace(":", "\\\\:")
+        escaped = lut_path.replace("\\", "/").replace(":", "\\:")
         vf_parts.append(f"lut3d='{escaped}'")
         if log: log(f"  LUT: {os.path.basename(lut_path)}")
     if grain and grain > 0:
