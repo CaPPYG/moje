@@ -587,26 +587,27 @@ def init_gdrive():
         from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
     except ImportError:
-        return None
+        return None, "Chybaju kniznice google-api-python-client a google-auth (pip install -r requirements.txt)"
     base = os.path.dirname(os.path.abspath(__file__))
     candidates = [
         os.path.join(base, "drive_token.json"),
         os.path.join(base, "..", "data", "drive_token.json"),
+        os.path.join(base, "..", "..", "Drive", "data", "drive_token.json"),
     ]
     token = next((c for c in candidates if os.path.exists(c)), None)
     if not token:
-        return None
+        return None, "Subor drive_token.json nebol najdeny."
     try:
-        scopes = ["https://www.googleapis.com/auth/drive.file",
-                  "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_authorized_user_file(token, scopes)
+        # Nacitanie bez pevnych scopes zabrani chybe 'invalid_scope' pri refreshovani
+        creds = Credentials.from_authorized_user_file(token)
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            with open(token, "w") as f:
+            with open(token, "w", encoding="utf-8") as f:
                 f.write(creds.to_json())
-        return build("drive", "v3", credentials=creds)
-    except Exception:
-        return None
+        svc = build("drive", "v3", credentials=creds)
+        return svc, None
+    except Exception as e:
+        return None, f"Chyba autentifikacie: {e}"
 
 
 def upload_to_drive(svc, path, name):
@@ -678,6 +679,7 @@ class ReelsStudio(tk.Tk):
 
         self._build_ui()
         self.after(300, self._check_tools)
+        self.after(500, self._connect_drive)
 
     def _card(self, parent, title=""):
         wrap = tk.Frame(parent, bg=BG_DARK, highlightbackground=BORDER, highlightthickness=1)
@@ -936,14 +938,14 @@ class ReelsStudio(tk.Tk):
 
     def _connect_drive(self):
         self.log("Pripajam Google Drive...")
-        svc = init_gdrive()
+        svc, err = init_gdrive()
         if svc:
             self.gdrive_svc = svc
             self._drive_lbl.configure(text="☁ Drive: Pripojeny", fg=GREEN)
             self.log("OK  Google Drive pripojeny!")
         else:
             self._drive_lbl.configure(text="☁ Drive: Chyba", fg=ACCENT2)
-            self.log("CHYBA  Drive token nebol najdeny.")
+            self.log(f"CHYBA  Drive: {err or 'Neznama chyba'}")
 
     def _on_start(self):
         in_dir = self.v_input_dir.get().strip()
