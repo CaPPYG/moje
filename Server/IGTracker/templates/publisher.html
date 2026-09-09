@@ -1803,25 +1803,89 @@
           Vyberte cieľový účet, nahrajte sadu hotových / spoofnutých videí (MP4/MOV) a systém ich automaticky rozvrhne na jednotlivé dni do peak okien s anti-bot časovým rozptylom.
         </p>
 
+        <!-- Source Switcher Tabs (Google Drive vs Local Upload) -->
+        <div style="display: flex; gap: 8px; background: rgba(255, 255, 255, 0.04); padding: 4px; border-radius: 12px; margin-bottom: 16px;">
+          <button type="button" id="btnSourceGdrive" onclick="setReelSetSource('gdrive')" style="flex: 1; border: none; background: rgba(56, 189, 248, 0.2); color: #38bdf8; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.88rem; padding: 10px 12px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <i class="fab fa-google-drive"></i> ☁️ Z Google Drive (IG_VAULT)
+          </button>
+          <button type="button" id="btnSourceLocal" onclick="setReelSetSource('local')" style="flex: 1; border: none; background: transparent; color: #94a3b8; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 0.88rem; padding: 10px 12px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <i class="fas fa-upload"></i> 💻 Nahrať z PC (Drag & Drop)
+          </button>
+        </div>
+
         <!-- Account Selector -->
         <div class="form-group">
           <label class="form-label"><i class="fas fa-user-check"></i> Vyberte cieľový účet:</label>
-          <select id="setAccountSelect" class="form-input" style="padding: 9px 12px; font-weight: 600;" onchange="updateSetPeakPreview()">
+          <select id="setAccountSelect" class="form-input" style="padding: 9px 12px; font-weight: 600;" onchange="onSetAccountChanged()">
             <!-- Populated via JS -->
           </select>
         </div>
 
-        <!-- Files Dropzone -->
-        <div class="form-group">
-          <label class="form-label"><i class="fas fa-film"></i> Vyberte alebo pretiahnite sadu videí (MP4/MOV):</label>
-          <input type="file" id="setFilesInput" multiple accept="video/mp4,video/quicktime,video/webm" class="file-input-hidden" onchange="handleSetFilesChosen(this.files)">
-          <div class="dropzone" id="setFilesDropzone" onclick="document.getElementById('setFilesInput').click()" style="padding: 22px 14px; border: 2px dashed rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.04); cursor: pointer;">
-            <div class="dropzone-icon" style="font-size: 1.8rem; margin-bottom: 6px;"><i class="fas fa-cloud-arrow-up" style="color: #38bdf8;"></i></div>
-            <div class="dropzone-text" style="font-size: 0.9rem;" id="setDropzoneText">Ťuknite sem a vyberte viacero MP4 videí (alebo pretiahnite zložku)</div>
-            <div class="dropzone-sub" id="setDropzoneSub" style="font-size: 0.75rem;">Podpora viacnásobného výberu (napr. 5 až 20 hotových videí naraz)</div>
+        <!-- Google Drive Source Section -->
+        <div id="setSectionGdrive" style="display: block;">
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 12px; padding: 13px 15px; margin-bottom: 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; color: #10b981; font-size: 0.92rem;">
+                <i class="fab fa-google-drive"></i> <span id="setGdriveStatusTitle">Google Drive IG_VAULT</span>
+              </div>
+              <button type="button" onclick="refreshGdrivePlannerSummary()" class="btn-cancel" style="padding: 3px 8px; font-size: 0.72rem;" title="Zosynchronizovať s Google Drive">
+                <i class="fas fa-rotate"></i> Obnoviť
+              </button>
+            </div>
+            <div id="setGdriveDetailsText" style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.4;">
+              Načítavam zoznam videí z Google Drive...
+            </div>
           </div>
-          <!-- Selected files summary list -->
-          <div id="setFilesListPreview" style="display: none; margin-top: 8px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1;"></div>
+
+          <!-- GDrive Selection Options -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label"><i class="fas fa-list-ol"></i> Koľko videí naplánovať:</label>
+              <select id="setGdriveCountSelect" class="form-input" style="padding: 7px 10px; font-weight: 600;" onchange="onGdriveCountSelectChanged()">
+                <option value="7" selected>7 videí (1 týždeň)</option>
+                <option value="14">14 videí (2 týždne)</option>
+                <option value="30">30 videí (1 mesiac)</option>
+                <option value="all">Všetky dostupné videá</option>
+                <option value="custom">Vlastný počet...</option>
+              </select>
+              <input type="number" id="setGdriveCustomCount" class="form-input" style="display: none; margin-top: 6px; padding: 5px 8px; font-size: 0.8rem;" placeholder="Zadajte počet videí" min="1" oninput="updateSetPeakPreview()">
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label"><i class="fas fa-filter"></i> Filter videí z Drive:</label>
+              <select id="setGdriveFilterSelect" class="form-input" style="padding: 7px 10px;" onchange="updateSetPeakPreview()">
+                <option value="unused" selected>Len nepoužité týmto účtom</option>
+                <option value="all">Všetky videá (aj už postnuté)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Randomize switch -->
+          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; font-size: 0.84rem; color: #f1f5f9;">
+                <i class="fas fa-shuffle" style="color: #38bdf8; margin-right: 6px;"></i> Náhodne zamiešať poradie (Randomize)
+              </div>
+              <div style="font-size: 0.74rem; color: #94a3b8;">
+                Videá z Google Drive sa náhodne premiešajú naprieč dňami
+              </div>
+            </div>
+            <input type="checkbox" id="setGdriveRandomize" checked style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
+        </div>
+
+        <!-- Local Upload Source Section -->
+        <div id="setSectionLocal" style="display: none;">
+          <div class="form-group">
+            <label class="form-label"><i class="fas fa-film"></i> Vyberte alebo pretiahnite sadu videí (MP4/MOV):</label>
+            <input type="file" id="setFilesInput" multiple accept="video/mp4,video/quicktime,video/webm" class="file-input-hidden" onchange="handleSetFilesChosen(this.files)">
+            <div class="dropzone" id="setFilesDropzone" onclick="document.getElementById('setFilesInput').click()" style="padding: 22px 14px; border: 2px dashed rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.04); cursor: pointer;">
+              <div class="dropzone-icon" style="font-size: 1.8rem; margin-bottom: 6px;"><i class="fas fa-cloud-arrow-up" style="color: #38bdf8;"></i></div>
+              <div class="dropzone-text" style="font-size: 0.9rem;" id="setDropzoneText">Ťuknite sem a vyberte viacero MP4 videí (alebo pretiahnite zložku)</div>
+              <div class="dropzone-sub" id="setDropzoneSub" style="font-size: 0.75rem;">Podpora viacnásobného výberu (napr. 5 až 20 hotových videí naraz)</div>
+            </div>
+            <!-- Selected files summary list -->
+            <div id="setFilesListPreview" style="display: none; margin-top: 8px; max-height: 120px; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 8px 12px; font-size: 0.78rem; color: #cbd5e1;"></div>
+          </div>
         </div>
 
         <!-- Scheduling parameters -->
@@ -3593,7 +3657,103 @@
     }
 
     // ── Account Reel Set Uploader & Scheduler ──────────────────────────
+    // ── Account Reel Set Uploader & Scheduler ──────────────────────────
     let selectedSetFiles = [];
+    let currentSetSource = 'gdrive'; // 'gdrive' or 'local'
+    let gdriveSummaryData = null;
+
+    function setReelSetSource(source) {
+      currentSetSource = source;
+      const btnGdrive = document.getElementById('btnSourceGdrive');
+      const btnLocal = document.getElementById('btnSourceLocal');
+      const secGdrive = document.getElementById('setSectionGdrive');
+      const secLocal = document.getElementById('setSectionLocal');
+      const submitBtn = document.getElementById('btnSubmitAccountReelSet');
+
+      if (source === 'gdrive') {
+        if (btnGdrive) {
+          btnGdrive.style.background = 'rgba(56, 189, 248, 0.2)';
+          btnGdrive.style.color = '#38bdf8';
+          btnGdrive.style.fontWeight = '700';
+        }
+        if (btnLocal) {
+          btnLocal.style.background = 'transparent';
+          btnLocal.style.color = '#94a3b8';
+          btnLocal.style.fontWeight = '600';
+        }
+        if (secGdrive) secGdrive.style.display = 'block';
+        if (secLocal) secLocal.style.display = 'none';
+        if (submitBtn) submitBtn.innerHTML = '<i class="fab fa-google-drive"></i> 🚀 Naplánovať Set z Google Drive';
+      } else {
+        if (btnLocal) {
+          btnLocal.style.background = 'rgba(56, 189, 248, 0.2)';
+          btnLocal.style.color = '#38bdf8';
+          btnLocal.style.fontWeight = '700';
+        }
+        if (btnGdrive) {
+          btnGdrive.style.background = 'transparent';
+          btnGdrive.style.color = '#94a3b8';
+          btnGdrive.style.fontWeight = '600';
+        }
+        if (secGdrive) secGdrive.style.display = 'none';
+        if (secLocal) secLocal.style.display = 'block';
+        if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať z PC a Naplánovať';
+      }
+      updateSetPeakPreview();
+    }
+
+    function onSetAccountChanged() {
+      updateSetPeakPreview();
+      if (currentSetSource === 'gdrive') {
+        refreshGdrivePlannerSummary();
+      }
+    }
+
+    function onGdriveCountSelectChanged() {
+      const select = document.getElementById('setGdriveCountSelect');
+      const customInput = document.getElementById('setGdriveCustomCount');
+      if (select && customInput) {
+        if (select.value === 'custom') {
+          customInput.style.display = 'block';
+          customInput.focus();
+        } else {
+          customInput.style.display = 'none';
+        }
+      }
+      updateSetPeakPreview();
+    }
+
+    async function refreshGdrivePlannerSummary() {
+      const selectEl = document.getElementById('setAccountSelect');
+      const titleEl = document.getElementById('setGdriveStatusTitle');
+      const textEl = document.getElementById('setGdriveDetailsText');
+      if (!selectEl) return;
+
+      const accId = selectEl.value;
+      if (titleEl) titleEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Zisťujem stav Google Drive...';
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/gdrive-summary?account_id=${accId || ''}`, {
+          headers: { 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        gdriveSummaryData = data;
+
+        if (data.status === 'ok' && data.connected) {
+          if (titleEl) titleEl.innerHTML = `☁️ Google Drive IG_VAULT (${data.total_count} videí na Drive)`;
+          if (textEl) {
+            textEl.innerHTML = `K dispozícii je <b>${data.total_count} videí</b> v priečinku IG_VAULT na 5 TB Drive. Z toho <b>${data.unused_count} videí</b> zatiaľ tento profil nepoužil.`;
+          }
+        } else {
+          if (titleEl) titleEl.innerHTML = '⚠️ Google Drive nepripojený';
+          if (textEl) textEl.textContent = data.message || 'Google Drive token sa nenašiel.';
+        }
+      } catch (e) {
+        if (titleEl) titleEl.innerHTML = '☁️ Google Drive IG_VAULT';
+        if (textEl) textEl.textContent = 'Chyba pri overovaní Google Drive.';
+      }
+      updateSetPeakPreview();
+    }
 
     function openAccountReelSetModal() {
       const modal = document.getElementById('accountReelSetModal');
@@ -3626,13 +3786,10 @@
       if (dropText) dropText.textContent = 'Ťuknite sem a vyberte viacero MP4 videí (alebo pretiahnite súbory)';
       const progressBox = document.getElementById('setUploadProgressBox');
       if (progressBox) progressBox.style.display = 'none';
-      const btn = document.getElementById('btnSubmitAccountReelSet');
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať a Naplánovať Set';
-      }
 
-      updateSetPeakPreview();
+      setReelSetSource('gdrive');
+      refreshGdrivePlannerSummary();
+
       if (modal) modal.style.display = 'flex';
     }
 
@@ -3674,7 +3831,27 @@
       if (!selectEl || !previewText) return;
 
       const freq = freqEl ? freqEl.value : '1_evening';
-      const count = selectedSetFiles.length;
+      let count = 0;
+
+      if (currentSetSource === 'gdrive') {
+        const countSel = document.getElementById('setGdriveCountSelect');
+        const customCountEl = document.getElementById('setGdriveCustomCount');
+        const filterSel = document.getElementById('setGdriveFilterSelect');
+        const onlyUnused = filterSel ? filterSel.value === 'unused' : true;
+        const availableMax = gdriveSummaryData ? (onlyUnused ? gdriveSummaryData.unused_count : gdriveSummaryData.total_count) : 14;
+
+        if (countSel) {
+          if (countSel.value === 'all') {
+            count = availableMax || 0;
+          } else if (countSel.value === 'custom') {
+            count = customCountEl && customCountEl.value ? parseInt(customCountEl.value) : 1;
+          } else {
+            count = parseInt(countSel.value) || 7;
+          }
+        }
+      } else {
+        count = selectedSetFiles.length;
+      }
 
       let windowStr = '';
       let postsPerDay = 1;
@@ -3695,38 +3872,10 @@
         postsPerDay = 1;
       }
 
-      let countStr = count > 0 ? `• <b>${count} videí</b> bude rozvrhnutých na <b>${Math.ceil(count / postsPerDay)} dní</b>` : '';
+      let sourceLabel = currentSetSource === 'gdrive' ? 'z Google Drive' : 'z lokálneho PC';
+      let countStr = count > 0 ? `• <b>${count} videí ${sourceLabel}</b> bude rozvrhnutých na <b>${Math.ceil(count / postsPerDay)} dní</b>` : '';
       previewText.innerHTML = `Všetky účty cielia na US čas: <b>${windowStr}</b> (anti-bot rozptyl ±7–23 min) ${countStr}`;
     }
-
-    // Drag & Drop event listeners for setFilesDropzone
-    document.addEventListener('DOMContentLoaded', () => {
-      const dropzone = document.getElementById('setFilesDropzone');
-      if (dropzone) {
-        ['dragenter', 'dragover'].forEach(eventName => {
-          dropzone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropzone.style.borderColor = '#10b981';
-            dropzone.style.background = 'rgba(16, 185, 129, 0.1)';
-          }, false);
-        });
-        ['dragleave', 'drop'].forEach(eventName => {
-          dropzone.addEventListener(eventName, (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropzone.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-            dropzone.style.background = 'rgba(56, 189, 248, 0.04)';
-          }, false);
-        });
-        dropzone.addEventListener('drop', (e) => {
-          const dt = e.dataTransfer;
-          if (dt && dt.files) {
-            handleSetFilesChosen(dt.files);
-          }
-        }, false);
-      }
-    });
 
     async function submitAccountReelSet() {
       const selectEl = document.getElementById('setAccountSelect');
@@ -3742,6 +3891,70 @@
         showToast('Vyberte cieľový účet.', 'error');
         return;
       }
+
+      if (currentSetSource === 'gdrive') {
+        // Plánovanie priamo z Google Drive
+        const countSel = document.getElementById('setGdriveCountSelect');
+        const customCountEl = document.getElementById('setGdriveCustomCount');
+        const filterSel = document.getElementById('setGdriveFilterSelect');
+        const randEl = document.getElementById('setGdriveRandomize');
+
+        let countVal = null;
+        if (countSel) {
+          if (countSel.value === 'all') countVal = null;
+          else if (countSel.value === 'custom') countVal = customCountEl && customCountEl.value ? parseInt(customCountEl.value) : 7;
+          else countVal = parseInt(countSel.value);
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Plánujem z Google Drive...';
+
+        if (progressBox) {
+          progressBox.style.display = 'block';
+          progressText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synchronizujem Google Drive a rozvrhujem US peak sloty...';
+        }
+
+        try {
+          const res = await fetch(`${PREFIX}/api/planner/gdrive-schedule`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Master-Password': PWD
+            },
+            body: JSON.stringify({
+              account_id: selectEl.value,
+              count: countVal,
+              start_date: dateEl ? dateEl.value : '',
+              frequency: freqEl ? freqEl.value : '1_evening',
+              randomize: randEl ? randEl.checked : true,
+              only_unused: filterSel ? filterSel.value === 'unused' : true,
+              caption: capEl ? capEl.value : '',
+              hashtags: tagEl ? tagEl.value : ''
+            })
+          });
+
+          const data = await res.json();
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fab fa-google-drive"></i> 🚀 Naplánovať Set z Google Drive';
+
+          if (res.ok && data.status === 'ok') {
+            showToast(`Úspešne naplánovaných ${data.created_count} Reels z Google Drive! 🎉`, 'success');
+            closeAccountReelSetModal();
+            loadPlannerPosts();
+          } else {
+            showToast(data.message || 'Chyba pri plánovaní z Google Drive.', 'error');
+            if (progressBox) progressBox.style.display = 'none';
+          }
+        } catch (e) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fab fa-google-drive"></i> 🚀 Naplánovať Set z Google Drive';
+          showToast('Chyba komunikácie so serverom.', 'error');
+          if (progressBox) progressBox.style.display = 'none';
+        }
+        return;
+      }
+
+      // Inak: Lokálny upload z PC
       if (!selectedSetFiles || selectedSetFiles.length === 0) {
         showToast('Vyberte aspoň jedno MP4/MOV video pre naplánovanie.', 'error');
         return;
@@ -3758,7 +3971,7 @@
       const formData = new FormData();
       formData.append('account_id', selectEl.value);
       formData.append('start_date', dateEl ? dateEl.value : '');
-      formData.append('frequency', freqEl ? freqEl.value : 1);
+      formData.append('frequency', freqEl ? freqEl.value : '1_evening');
       formData.append('caption', capEl ? capEl.value : '');
       formData.append('hashtags', tagEl ? tagEl.value : '');
 
@@ -3781,7 +3994,7 @@
 
       xhr.onload = () => {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať a Naplánovať Set';
+        btn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať z PC a Naplánovať';
 
         try {
           const res = JSON.parse(xhr.responseText);
@@ -3801,7 +4014,7 @@
 
       xhr.onerror = () => {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať a Naplánovať Set';
+        btn.innerHTML = '<i class="fas fa-rocket"></i> 🚀 Nahrať z PC a Naplánovať';
         showToast('Chyba sieťového spojenia pri uploade.', 'error');
         if (progressBox) progressBox.style.display = 'none';
       };

@@ -304,9 +304,9 @@ def oauth_connect(force_region=None):
     Odkaz pre mobil: otvorí natívny Instagram dialóg na prihlásenie a autorizáciu.
     Podporuje parameter ?region=sk|us a ?account_id=... pre spárovanie s existujúcim profilom.
     """
-    region = force_region or request.args.get("region", "sk").lower()
+    region = force_region or request.args.get("region", "us").lower()
     account_id = request.args.get("account_id", "")
-    app_id = META_APP_ID
+    app_id = US_META_APP_ID if region == "us" else META_APP_ID
     state = f"{region}:{account_id}" if account_id else region
 
     # Instagram Login scope pre Creator/Business
@@ -388,8 +388,8 @@ def oauth_callback():
     elif raw_state.isdigit():
         account_id_str = raw_state
 
-    active_app_id = META_APP_ID
-    active_app_secret = META_APP_SECRET
+    active_app_id = US_META_APP_ID if region == "us" else META_APP_ID
+    active_app_secret = US_META_APP_SECRET if region == "us" else META_APP_SECRET
 
     try:
         # 1. Výmena authorization_code za Access Token
@@ -924,7 +924,8 @@ def api_vault_sync_gdrive():
 
 
 @app.route("/api/vault/stream/<int:video_id>", methods=["GET", "HEAD"])
-def stream_vault_video(video_id):
+@app.route("/api/vault/stream/<int:video_id>/<path:filename>", methods=["GET", "HEAD"])
+def stream_vault_video(video_id, filename=None):
     """Streamovacia proxy pre Google Drive master video/foto s plnou podporou HTTP Range (206 Partial Content)."""
     video = db.get_vault_video_by_id(video_id)
     if not video:
@@ -1481,6 +1482,99 @@ def api_planner_bulk_upload():
         frequency=frequency,
         default_caption=caption,
         default_hashtags=hashtags
+    )
+    code = 200 if res.get("status") == "ok" else 400
+    return jsonify(res), code
+
+
+@app.route("/api/planner/gdrive-summary", methods=["GET"])
+@auth_required
+def api_planner_gdrive_summary():
+    """Vráti stav Google Drive IG_VAULT a počet dostupných/nepoužitých videí."""
+    connected = gdrive_vault.is_connected()
+    if not connected:
+        return jsonify({
+            "status": "ok",
+            "connected": False,
+            "message": "Google Drive nie je pripojený."
+        }), 200
+
+    account_id = request.args.get("account_id", type=int)
+    target_user = ""
+    if account_id:
+        acc = db.get_account_by_id(account_id)
+        if acc:
+            target_user = f"@{acc.get('username', '').lstrip('@')}"
+
+    # Rýchla synchronizácia
+    try:
+        gdrive_vault.sync_drive_vault_to_db(quick=True)
+    except Exception as e:
+        logger.warning(f"Sync error: {e}")
+
+    videos = [v for v in db.get_all_vault_videos() if v.get("storage_type") == "gdrive"]
+    total_count = len(videos)
+
+    if target_user:
+        unused_count = sum(1 for v in videos if target_user not in (v.get("used_by_accounts") or ""))
+    else:
+        unused_count = sum(1 for v in videos if (v.get("used_count") or 0) == 0)
+
+    sample_videos = []
+    for v in videos[:20]:
+        sample_videos.append({
+            "id": v["id"],
+            "name": v.get("original_name") or v.get("filename"),
+            "used_count": v.get("used_count", 0),
+            "used_by": v.get("used_by_accounts", ""),
+            "size_fmt": gdrive_vault.format_bytes(v.get("file_size", 0))
+        })
+
+    return jsonify({
+        "status": "ok",
+        "connected": True,
+        "total_count": total_count,
+        "unused_count": unused_count,
+        "target_user": target_user,
+        "sample_videos": sample_videos
+    }), 200
+
+
+@app.route("/api/planner/gdrive-schedule", methods=["POST"])
+@auth_required
+def api_planner_gdrive_schedule():
+    """Naplánuje sadu Reels priamo z Google Drive priečinka IG_VAULT."""
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = data.get("account_id")
+    try:
+        account_id = int(account_id)
+    except (ValueError, TypeError):
+        return jsonify({"status": "error", "message": "Chýba platné account_id."}), 400
+
+    count = data.get("count")
+    try:
+        count = int(count) if count else None
+    except (ValueError, TypeError):
+        count = None
+
+    start_date = data.get("start_date")
+    frequency = data.get("frequency") or "1_evening"
+    randomize = str(data.get("randomize", "true")).lower() in ("true", "1", "yes")
+    only_unused = str(data.get("only_unused", "true")).lower() in ("true", "1", "yes")
+    caption = data.get("caption") or ""
+    hashtags = data.get("hashtags") or ""
+    selected_ids = data.get("selected_ids") or []
+
+    res = vault_planner.schedule_gdrive_reel_set(
+        account_id=account_id,
+        count=count,
+        start_date_str=start_date,
+        frequency=frequency,
+        randomize=randomize,
+        only_unused=only_unused,
+        default_caption=caption,
+        default_hashtags=hashtags,
+        selected_video_ids=selected_ids
     )
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code

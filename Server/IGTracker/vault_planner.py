@@ -345,6 +345,142 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
     }
 
 
+def schedule_gdrive_reel_set(account_id: int, count: int = None,
+                             start_date_str: str = None, frequency: str = "1_evening",
+                             randomize: bool = True, only_unused: bool = True,
+                             default_caption: str = "", default_hashtags: str = "",
+                             selected_video_ids: list = None) -> dict:
+    """
+    Naplánuje sadu Reels priamo z Google Drive priečinka IG_VAULT pre konkrétny účet.
+    1. Zosynchronizuje zoznam videí z Google Drive bez zaťaženia VPS disku.
+    2. Nájde dostupné videá, náhodne ich premieša (randomize).
+    3. Rozvrhne ich do US časových špičiek (s anti-bot jitterom ±7 až 23 min).
+    4. Pri publikovaní ich server streamuje priamo z Google Drive.
+    """
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return {"status": "error", "message": "Účet nebol nájdený."}
+
+    username = account.get("username", "")
+
+    # 1. Rýchla synchronizácia Google Drive, aby sme mali všetky nové videá v DB
+    try:
+        gdrive_vault.sync_drive_vault_to_db(quick=True)
+    except Exception as e:
+        logger.warning(f"Quick drive sync varovanie: {e}")
+
+    # 2. Výber kandidátskych videí z Google Drive
+    all_vault = db.get_all_vault_videos()
+    gdrive_videos = [v for v in all_vault if v.get("storage_type") == "gdrive"]
+
+    if not gdrive_videos:
+        return {
+            "status": "error",
+            "message": "Na vašom Google Drive v priečinku IG_VAULT sa nenašli žiadne video súbory."
+        }
+
+    chosen_pool = []
+    if selected_video_ids:
+        selected_set = set(int(x) for x in selected_video_ids if str(x).isdigit())
+        chosen_pool = [v for v in gdrive_videos if v["id"] in selected_set]
+    else:
+        # Filter: voľné nepoužité týmto účtom
+        if only_unused:
+            clean_u = f"@{username.lstrip('@')}"
+            for v in gdrive_videos:
+                used_by = v.get("used_by_accounts") or ""
+                if clean_u not in used_by:
+                    chosen_pool.append(v)
+            if not chosen_pool:
+                # Ak sú všetky použité, vezmeme všetky
+                chosen_pool = list(gdrive_videos)
+        else:
+            chosen_pool = list(gdrive_videos)
+
+    if not chosen_pool:
+        return {"status": "error", "message": "Žiadne vhodné videá na Google Drive neboli nájdené."}
+
+    # 3. Randomizácia (premiešanie poradia)
+    if randomize:
+        random.shuffle(chosen_pool)
+
+    # Obmedzenie na požadovaný počet
+    if count and count > 0:
+        chosen_pool = chosen_pool[:count]
+
+    # 4. Frekvencia a US časové sloty
+    freq_str = str(frequency or "1_evening").lower()
+    if freq_str in ("1_lunch", "lunch"):
+        slot_types_sequence = ["lunch"]
+    elif freq_str in ("2", "2_daily", "2_day"):
+        slot_types_sequence = ["lunch", "evening"]
+    elif freq_str in ("3", "3_daily", "3_day"):
+        slot_types_sequence = ["morning", "lunch", "evening"]
+    else:
+        slot_types_sequence = ["evening"]
+
+    if start_date_str:
+        try:
+            curr_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            curr_date = datetime.now().date()
+    else:
+        curr_date = datetime.now().date()
+
+    created_posts = []
+    current_seq_idx = 0
+
+    for vid in chosen_pool:
+        # Výpočet času pre slot s US peak targetingom a anti-bot rozptylom
+        chosen_type = slot_types_sequence[current_seq_idx]
+        slot_time, window_label = calculate_slot_time(curr_date, current_seq_idx, region="us", slot_type=chosen_type)
+
+        caption = default_caption or f"Reel vibes ✨ @{username}"
+        hashtags = default_hashtags or "#reels #trending #viral #fyp"
+
+        thumb_filename = vid.get("thumbnail_path") or ""
+
+        post_id = db.add_planned_post(
+            account_id=account_id,
+            vault_video_id=vid["id"],
+            spoofed_video_path=vid["filename"],
+            thumbnail_path=thumb_filename,
+            scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+            peak_window=window_label,
+            caption=caption,
+            hashtags=hashtags,
+            first_comment=""
+        )
+
+        try:
+            db.mark_vault_video_used(vid["id"], username)
+        except Exception as e:
+            logger.warning(f"Chyba pri označovaní média ako použité: {e}")
+
+        created_posts.append({
+            "post_id": post_id,
+            "account": username,
+            "region": "US",
+            "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "peak_window": window_label,
+            "original_name": vid.get("original_name"),
+            "gdrive_file_id": vid.get("gdrive_file_id")
+        })
+
+        # Posun v rozvrhu
+        current_seq_idx += 1
+        if current_seq_idx >= len(slot_types_sequence):
+            current_seq_idx = 0
+            curr_date += timedelta(days=1)
+
+    return {
+        "status": "ok",
+        "message": f"Úspešne naplánovaných {len(created_posts)} Reels z Google Drive pre @{username} (cielené na US čas).",
+        "created_count": len(created_posts),
+        "posts": created_posts
+    }
+
+
 def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.online/ig") -> dict:
     """
     Okamžite vypublikuje naplánovaný post cez Instagram Graph API.
@@ -367,16 +503,24 @@ def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.
         db.update_planned_post(post_id, status="failed", error_message=err_msg)
         return {"status": "error", "message": err_msg}
 
-    spoofed_file = post.get("spoofed_video_path", "")
-    full_local_path = os.path.join(SPOOFED_DIR, spoofed_file)
+    vault_vid = db.get_vault_video_by_id(post["vault_video_id"]) if post.get("vault_video_id") else None
 
-    if not os.path.isfile(full_local_path):
-        err_msg = f"Súbor spoofnutého videa nebol nájdený na serveri: {spoofed_file}"
-        db.update_planned_post(post_id, status="failed", error_message=err_msg)
-        return {"status": "error", "message": err_msg}
-
-    # Verejná URL adresa videa, ktorú stiahne Instagram Graph API
-    public_video_url = f"{base_public_url.rstrip('/')}/media/vault/spoofed/{spoofed_file}"
+    if vault_vid and vault_vid.get("storage_type") == "gdrive":
+        # Video je uložené na Google Drive (5 TB) – streamujeme priamo z Drive bez zaťaženia VPS disku
+        public_video_url = f"{base_public_url.rstrip('/')}/api/vault/stream/{vault_vid['id']}/reel.mp4"
+    else:
+        spoofed_file = post.get("spoofed_video_path", "")
+        full_local_path = os.path.join(SPOOFED_DIR, spoofed_file)
+        if not os.path.isfile(full_local_path):
+            alt_path = os.path.join(VAULT_DIR, spoofed_file)
+            if os.path.isfile(alt_path):
+                public_video_url = f"{base_public_url.rstrip('/')}/media/vault/{spoofed_file}"
+            else:
+                err_msg = f"Súbor spoofnutého videa nebol nájdený na serveri: {spoofed_file}"
+                db.update_planned_post(post_id, status="failed", error_message=err_msg)
+                return {"status": "error", "message": err_msg}
+        else:
+            public_video_url = f"{base_public_url.rstrip('/')}/media/vault/spoofed/{spoofed_file}"
 
     # Zostavenie caption
     caption_text = (post.get("caption") or "").strip()

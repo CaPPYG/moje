@@ -338,12 +338,10 @@ def list_drive_vault_files():
         return []
 
 
-def sync_drive_vault_to_db():
+def sync_drive_vault_to_db(quick=True):
     """
     Synchronizuje videá a fotky z priečinka IG_VAULT na Google Drive do databázy vault_videos.
-    Používateľ môže nahrať médiá do Google Drive priamo (napr. z mobilu alebo PC aplikácie)
-    a kliknúť na 'Synchronizovať z Google Drive' vo webovom rozhraní.
-    Nevytvára žiadne trvalé video súbory na VPS disku!
+    V režime quick=True okamžite zaregistruje všetky súbory bez zbytočného sťahovania stoviek MB dát.
     """
     import spoofer
 
@@ -385,8 +383,7 @@ def sync_drive_vault_to_db():
         thumb_filename = f"thumb_gdrive_{file_id[:10]}.jpg"
         thumb_path = os.path.join(temp_thumb_dir, thumb_filename)
 
-        # Ak chýba thumbnail alebo trvanie videa, stiahneme dočasne na vygenerovanie thumbnailu
-        if not os.path.exists(thumb_path) or (not is_photo and duration == 0.0):
+        if not quick and (not os.path.exists(thumb_path) or (not is_photo and duration == 0.0)):
             try:
                 with temporary_master(file_id, ext=ext if ext else (".jpg" if is_photo else ".mp4")) as temp_media:
                     info = spoofer.probe_video_info(temp_media)
