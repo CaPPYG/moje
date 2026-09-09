@@ -10,6 +10,7 @@ import io
 import tempfile
 from flask import Flask, render_template, render_template_string, request, jsonify, redirect, url_for, session, flash, send_from_directory, Response, stream_with_context
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.utils import secure_filename
 import httpx
 import logging
 
@@ -1425,6 +1426,61 @@ def api_planner_generate():
         default_caption=caption,
         default_hashtags=hashtags,
         reuse_videos=True
+    )
+    code = 200 if res.get("status") == "ok" else 400
+    return jsonify(res), code
+
+
+@app.route("/api/planner/bulk-upload", methods=["POST"])
+@auth_required
+def api_planner_bulk_upload():
+    """
+    Hromadný upload sady hotových spoofnutých Reels pre jeden konkrétny účet.
+    Uloží videá a automaticky ich naplánuje cez schedule_account_reel_set.
+    """
+    account_id = request.form.get("account_id", type=int)
+    if not account_id:
+        return jsonify({"status": "error", "message": "Chýba account_id."}), 400
+
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return jsonify({"status": "error", "message": "Účet nebol nájdený."}), 404
+
+    username = account.get("username", "account")
+    start_date = request.form.get("start_date")
+    frequency = request.form.get("frequency", type=int) or 1
+    caption = request.form.get("caption") or ""
+    hashtags = request.form.get("hashtags") or ""
+
+    uploaded_files = request.files.getlist("files") or request.files.getlist("files[]")
+    if not uploaded_files:
+        return jsonify({"status": "error", "message": "Neboli nahrané žiadne video súbory."}), 400
+
+    saved_filenames = []
+    for f in uploaded_files:
+        if not f or not f.filename:
+            continue
+        orig_name = secure_filename(f.filename) or "reel.mp4"
+        _, ext = os.path.splitext(orig_name)
+        if ext.lower() not in (".mp4", ".mov", ".m4v", ".webm"):
+            continue
+
+        rand_token = uuid.uuid4().hex[:6]
+        save_name = f"spoofed_{username}_{int(time.time())}_{rand_token}.mp4"
+        dest_path = os.path.join(SPOOFED_DIR, save_name)
+        f.save(dest_path)
+        saved_filenames.append(save_name)
+
+    if not saved_filenames:
+        return jsonify({"status": "error", "message": "Žiadne platné MP4/MOV video súbory neboli nájdené."}), 400
+
+    res = vault_planner.schedule_account_reel_set(
+        account_id=account_id,
+        saved_video_files=saved_filenames,
+        start_date_str=start_date,
+        frequency=frequency,
+        default_caption=caption,
+        default_hashtags=hashtags
     )
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code

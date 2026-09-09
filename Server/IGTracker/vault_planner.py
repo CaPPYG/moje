@@ -228,6 +228,88 @@ def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
     }
 
 
+def schedule_account_reel_set(account_id: int, saved_video_files: list,
+                              start_date_str: str = None, frequency: int = 1,
+                              default_caption: str = "", default_hashtags: str = "") -> dict:
+    """
+    Naplánuje sadu vopred pripravených / spoofnutých Reels pre jeden konkrétny účet.
+    Rozdelí videá na jednotlivé dni a peak okná (US/SK podľa regiónu účtu) s anti-bot jitterom.
+    """
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return {"status": "error", "message": "Účet nebol nájdený."}
+
+    username = account.get("username", "")
+    region = (account.get("region") or "sk").lower()
+    frequency = max(1, min(3, int(frequency or 1)))
+
+    if start_date_str:
+        try:
+            curr_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            curr_date = datetime.now().date()
+    else:
+        curr_date = datetime.now().date()
+
+    created_posts = []
+    current_slot_in_day = 0
+
+    for idx, vid_filename in enumerate(saved_video_files):
+        video_full_path = os.path.join(SPOOFED_DIR, vid_filename)
+        if not os.path.isfile(video_full_path):
+            logger.warning(f"Súbor {video_full_path} neexistuje, preskakujem.")
+            continue
+
+        # Generovanie náhľadu (thumbnail) cez FFmpeg
+        thumb_filename = f"thumb_{os.path.splitext(vid_filename)[0]}.jpg"
+        thumb_out_path = os.path.join(THUMBS_DIR, thumb_filename)
+        if not os.path.isfile(thumb_out_path):
+            try:
+                spoofer.generate_thumbnail(video_full_path, thumb_out_path)
+            except Exception as e:
+                logger.warning(f"Chyba pri generovaní náhľadu pre {vid_filename}: {e}")
+
+        # Výpočet času pre slot s anti-bot rozptylom
+        slot_time, window_label = calculate_slot_time(curr_date, current_slot_in_day, region=region)
+
+        caption = default_caption or f"Reel vibes ✨ @{username}"
+        hashtags = default_hashtags or "#reels #trending #viral #fyp"
+
+        post_id = db.add_planned_post(
+            account_id=account_id,
+            vault_video_id=None,
+            spoofed_video_path=vid_filename,
+            thumbnail_path=thumb_filename,
+            scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+            peak_window=window_label,
+            caption=caption,
+            hashtags=hashtags,
+            first_comment=""
+        )
+
+        created_posts.append({
+            "post_id": post_id,
+            "account": username,
+            "region": region.upper(),
+            "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "peak_window": window_label,
+            "spoofed_filename": vid_filename
+        })
+
+        # Posun v rozvrhu na ďalší slot alebo ďalší deň
+        current_slot_in_day += 1
+        if current_slot_in_day >= frequency:
+            current_slot_in_day = 0
+            curr_date += timedelta(days=1)
+
+    return {
+        "status": "ok",
+        "message": f"Úspešne naplánovaných {len(created_posts)} Reels pre @{username}.",
+        "created_count": len(created_posts),
+        "posts": created_posts
+    }
+
+
 def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.online/ig") -> dict:
     """
     Okamžite vypublikuje naplánovaný post cez Instagram Graph API.
