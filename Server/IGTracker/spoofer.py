@@ -7,6 +7,7 @@ Guarantees unique frame hashes and metadata across distributed accounts.
 New in v2: download_reel (yt-dlp), color_grade_and_encode (14 Mbps H.264 + LUT + film grain).
 """
 import os
+import math
 import random
 import shutil
 import subprocess
@@ -371,45 +372,133 @@ def download_reel(url: str, out_dir: str, cookies_path: str = None) -> str | Non
     return None
 
 
+def generate_anti_ai_lut(out_path=None, size=33):
+    """
+    Procedurálny 3D LUT (33×33×33 point .cube súbor) Anti-AI Filmic:
+    - Lifted Blacks: Jemné zdvihnutie čierneho bodu (+1.5 %) pre analógový filmový kontrast.
+    - Soft Highlight Roll-off: Stiahnutie najvyšších svetiel o 4 % s jemným oteplením (eliminácia digitálnych prepalov).
+    - Luma vs. Saturation: Desaturácia hlbokých tieňov (<10 % jasu) a extrémnych svetiel (>90 % jasu).
+    - Split Toning: Neutrálne/chladné tiene, prirodzené teplé tóny v stredoch, stiahnutie neónovej zelenej.
+    """
+    if out_path and os.path.isfile(out_path):
+        return out_path
+    if not out_path:
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "luts")
+        os.makedirs(cache_dir, exist_ok=True)
+        out_path = os.path.join(cache_dir, "anti_ai_filmic_33.cube")
+        if os.path.isfile(out_path):
+            return out_path
+
+    lines = [
+        '# Procedural Anti-AI Filmic 3D LUT (33x33x33)',
+        'TITLE "Anti-AI Filmic"',
+        f'LUT_3D_SIZE {size}',
+        ''
+    ]
+    for b_idx in range(size):
+        b = b_idx / (size - 1)
+        for g_idx in range(size):
+            g = g_idx / (size - 1)
+            for r_idx in range(size):
+                r = r_idx / (size - 1)
+                lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+                r1 = 0.015 + 0.985 * r
+                g1 = 0.015 + 0.985 * g
+                b1 = 0.015 + 0.985 * b
+                y1 = 0.2126 * r1 + 0.7152 * g1 + 0.0722 * b1
+
+                if y1 > 0.75:
+                    hf = (y1 - 0.75) / 0.25
+                    roll = (hf ** 2) * 0.04
+                    r2 = r1 - roll * 0.80
+                    g2 = g1 - roll * 1.00
+                    b2 = b1 - roll * 1.30
+                else:
+                    r2, g2, b2 = r1, g1, b1
+
+                r3, g3, b3 = r2, g2, b2
+                if y1 < 0.35:
+                    sw = (1.0 - y1 / 0.35) * 0.02
+                    r3 -= sw * 0.5
+                    b3 += sw
+                elif 0.30 <= y1 <= 0.75:
+                    mw = math.sin((y1 - 0.30) / 0.45 * math.pi) * 0.022
+                    r3 += mw * 1.2
+                    g3 += mw * 0.3
+                    b3 -= mw * 0.6
+
+                if g > r and g > b:
+                    excess_g = g - max(r, b)
+                    g3 -= excess_g * 0.22
+
+                lum3 = 0.2126 * r3 + 0.7152 * g3 + 0.0722 * b3
+                if y1 < 0.10:
+                    sat_f = y1 / 0.10
+                    r4 = lum3 + sat_f * (r3 - lum3)
+                    g4 = lum3 + sat_f * (g3 - lum3)
+                    b4 = lum3 + sat_f * (b3 - lum3)
+                elif y1 > 0.90:
+                    sat_f = 1.0 - 0.35 * ((y1 - 0.90) / 0.10)
+                    r4 = lum3 + sat_f * (r3 - lum3)
+                    g4 = lum3 + sat_f * (g3 - lum3)
+                    b4 = lum3 + sat_f * (b3 - lum3)
+                else:
+                    r4, g4, b4 = r3, g3, b3
+
+                rf = max(0.0, min(1.0, r4))
+                gf = max(0.0, min(1.0, g4))
+                bf = max(0.0, min(1.0, b4))
+                lines.append(f"{rf:.6f} {gf:.6f} {bf:.6f}")
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return out_path
+
+
 def color_grade_and_encode(
     src_path: str,
     out_path: str,
     lut_path: str = None,
-    grain: int = 9,
+    grain: int = 8,
     spoof: bool = True,
 ) -> bool:
     """
-    Instagram-ready FFmpeg pipeline:
-    - Smart vertical aspect scaling (1080p pre HD, 720p pre SD)
-    - Volitelny .cube LUT (lut3d filter)
-    - Film grain (noise=alls=<grain>:allf=t)
-    - Spoof jitter filtre (eq, hue, colorbalance, zoom, unsharp)
-    - H.264 ultrafast CRF 20, yuv420p, faststart
-    - AAC stereo 192k (doplni tichu stopu ak chyba audio)
+    Kompletný FFmpeg pipeline pre Instagram Reels (One-pass filter):
+    1. Pomer strán a vycentrovaný orez na presných 1080x1920:
+       scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2
+    2. Color Grading: Procedurálny 33x33x33 Anti-AI Filmic alebo externý .cube cez lut3d
+    3. Filmové zrno: noise=alls={grain}:allf=t+u (predvolená hodnota: 8)
+    4. Audio Guard: anullsrc ak chýba audio stopa
+    5. Instagram Enkódovanie: H.264 High 4.2 / ultrafast, 14M / 16M / 20M, faststart, AAC 320k
     """
     has_a = has_audio_stream(src_path)
-    info = probe_video_info(src_path)
-    w = info.get("width") or 0
-    h = info.get("height") or 0
 
     vf_parts = []
-    if w > 0 and h > 0:
-        target_w = 1080 if w >= 1000 else (720 if w >= 600 else (w - (w % 2)))
-        target_h = int(target_w * 16 / 9)
-        target_h = target_h - (target_h % 2)
-        vf_parts.append(f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase:flags=fast_bilinear")
-        vf_parts.append(f"crop={target_w}:{target_h}")
-    else:
-        vf_parts.append("scale=1080:1920:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=1080:1920")
-
-    if lut_path and os.path.isfile(lut_path):
-        escaped = lut_path.replace("\\", "/").replace(":", "\\:")
-        vf_parts.append(f"lut3d='{escaped}'")
-        logger.info(f"Aplikujem LUT: {os.path.basename(lut_path)}")
-    if grain and grain > 0:
-        vf_parts.append(f"noise=alls={grain}:allf=t")
     if spoof:
         vf_parts.extend(build_spoof_filters().split(","))
+
+    # Procedurálny Anti-AI Filmic LUT (ak používateľ nezadá vlastný .cube)
+    if not lut_path or not os.path.isfile(lut_path):
+        lut_path = generate_anti_ai_lut()
+        logger.info("Aplikujem procedurálny Anti-AI Filmic LUT (33×33×33)")
+    else:
+        logger.info(f"Aplikujem externý LUT: {os.path.basename(lut_path)}")
+
+    lut_norm = os.path.abspath(lut_path).replace("\\", "/")
+    if len(lut_norm) >= 2 and lut_norm[1] == ":":
+        lut_esc = lut_norm[0] + "\\\\:" + lut_norm[2:]
+    else:
+        lut_esc = lut_norm
+    vf_parts.append(f"lut3d={lut_esc}")
+
+    if grain and grain > 0:
+        vf_parts.append(f"noise=alls={grain}:allf=t+u")
+
+    # Finálny vycentrovaný scale a orez na presných 1080x1920
+    vf_parts.append("scale=1080:1920:force_original_aspect_ratio=increase")
+    vf_parts.append("crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2")
+
     vf = ",".join(vf_parts)
 
     cmd = ["ffmpeg", "-y", "-i", src_path]
@@ -418,9 +507,11 @@ def color_grade_and_encode(
     cmd += [
         "-map_metadata", "-1",
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+        "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+        "-preset", "veryfast",
+        "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-ac", "2", "-b:a", "192k",
+        "-c:a", "aac", "-ac", "2", "-b:a", "320k",
         "-map", "0:v",
         "-map", ("0:a?" if has_a else "1:a"),
         "-movflags", "+faststart",
@@ -428,24 +519,25 @@ def color_grade_and_encode(
         out_path
     ]
 
-    logger.info(f"color_grade_and_encode: grain={grain}, lut={'ano' if lut_path else 'nie'}")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    logger.info(f"color_grade_and_encode: grain={grain}, pomer=1080x1920 center-crop, 14 Mbps H.264")
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
     if r.returncode != 0 or not os.path.exists(out_path):
         logger.warning(f"Hlavny encode zlyhal, skusam fallback: {r.stderr[-300:]}")
-        # Fallback: jednoduchy scale bez LUT/grain
         cmd2 = ["ffmpeg", "-y", "-i", src_path]
         if not has_a:
             cmd2 += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
         cmd2 += [
             "-map_metadata", "-1",
-            "-vf", "scale=1080:1920:force_original_aspect_ratio=increase:flags=fast_bilinear,crop=1080:1920",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+            "-vf", f"lut3d={lut_esc},noise=alls={grain}:allf=t+u,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920:(in_w-1080)/2:(in_h-1920)/2",
+            "-c:v", "libx264", "-profile:v", "high", "-level:v", "4.2",
+            "-preset", "slow",
+            "-b:v", "14M", "-maxrate", "16M", "-bufsize", "20M",
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-ac", "2", "-b:a", "192k",
+            "-c:a", "aac", "-ac", "2", "-b:a", "320k",
             "-map", "0:v", "-map", ("0:a?" if has_a else "1:a"),
             "-movflags", "+faststart", "-shortest",
             out_path
         ]
-        r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=180)
+        r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=300)
         return r2.returncode == 0 and os.path.exists(out_path)
     return True
