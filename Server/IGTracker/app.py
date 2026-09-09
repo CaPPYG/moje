@@ -1448,7 +1448,7 @@ def api_planner_bulk_upload():
 
     username = account.get("username", "account")
     start_date = request.form.get("start_date")
-    frequency = request.form.get("frequency", type=int) or 1
+    frequency = request.form.get("frequency") or "1_evening"
     caption = request.form.get("caption") or ""
     hashtags = request.form.get("hashtags") or ""
 

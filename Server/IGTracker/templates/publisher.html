@@ -1831,10 +1831,12 @@
             <input type="date" id="setStartDateInput" class="form-input" style="padding: 7px 10px;">
           </div>
           <div class="form-group">
-            <label class="form-label"><i class="fas fa-clock"></i> Frekvencia publikovania:</label>
-            <select id="setFrequencySelect" class="form-input" style="padding: 7px 10px;" onchange="updateSetPeakPreview()">
-              <option value="1">1 Reel denne (Evening Peak)</option>
-              <option value="2">2 Reely denne (Lunch + Evening)</option>
+            <label class="form-label"><i class="fas fa-clock"></i> Frekvencia & US Peak Okno:</label>
+            <select id="setFrequencySelect" class="form-input" style="padding: 7px 10px; font-weight: 600;" onchange="updateSetPeakPreview()">
+              <option value="1_evening" selected>1 Reel denne — 🇺🇸 US Prime Večer (~19:30 EST / 01:30 CET)</option>
+              <option value="1_lunch">1 Reel denne — 🇺🇸 US Obed / Popoludnie (~13:15 EST / 19:15 CET)</option>
+              <option value="2_daily">2 Reely denne — 🇺🇸 US Obed (13:15 EST) + Prime Večer (19:30 EST)</option>
+              <option value="3_daily">3 Reely denne — 🇺🇸 US Ráno (09:15 EST) + Obed + Prime Večer</option>
             </select>
           </div>
         </div>
@@ -3606,10 +3608,8 @@
       if (selectEl) {
         selectEl.innerHTML = ALL_ACCOUNTS.map(a => {
           const isHealthy = (a.health_status === 'healthy' || !a.health_status);
-          const flag = a.region === 'us' ? '🇺🇸' : '🇸🇰';
-          const regText = a.region === 'us' ? 'US Profil' : 'SK Profil';
           const statusText = isHealthy ? '🟢 Ready' : (a.health_status === 'action_required' ? '🟡 Checkpoint' : '🔴 Chyba');
-          return `<option value="${a.id}">@${escapeHtml(a.username)} (${flag} ${regText} — ${statusText})</option>`;
+          return `<option value="${a.id}">@${escapeHtml(a.username)} (🇺🇸 US Čas • ${statusText})</option>`;
         }).join('');
       }
 
@@ -3673,21 +3673,30 @@
       const previewText = document.getElementById('setPeakPreviewText');
       if (!selectEl || !previewText) return;
 
-      const accId = parseInt(selectEl.value);
-      const acc = ALL_ACCOUNTS.find(a => a.id === accId);
-      const region = acc ? (acc.region || 'sk') : 'sk';
-      const freq = freqEl ? parseInt(freqEl.value) : 1;
+      const freq = freqEl ? freqEl.value : '1_evening';
       const count = selectedSetFiles.length;
 
       let windowStr = '';
-      if (region === 'us') {
-        windowStr = freq === 1 ? '🇺🇸 US Evening Peak (~19:30 EST / 01:30 CET)' : '🇺🇸 US Lunch (~13:15 EST) + Evening (~19:30 EST)';
+      let postsPerDay = 1;
+      if (freq === '1_evening') {
+        windowStr = '🇺🇸 US Prime Večer (~19:30 EST / 01:30 CET v noci)';
+        postsPerDay = 1;
+      } else if (freq === '1_lunch') {
+        windowStr = '🇺🇸 US Obed / Popoludnie (~13:15 EST / 19:15 CET)';
+        postsPerDay = 1;
+      } else if (freq === '2_daily' || freq === '2') {
+        windowStr = '🇺🇸 US Obed (~13:15 EST) + 🇺🇸 US Prime Večer (~19:30 EST)';
+        postsPerDay = 2;
+      } else if (freq === '3_daily' || freq === '3') {
+        windowStr = '🇺🇸 US Ráno (~09:15 EST) + Obed (~13:15 EST) + Prime Večer (~19:30 EST)';
+        postsPerDay = 3;
       } else {
-        windowStr = freq === 1 ? '🇸🇰 SK Prime Večer (~19:45 CET)' : '🇸🇰 SK Obed (~12:45 CET) + Večer (~19:45 CET)';
+        windowStr = '🇺🇸 US Prime Večer (~19:30 EST / 01:30 CET v noci)';
+        postsPerDay = 1;
       }
 
-      let countStr = count > 0 ? `• <b>${count} videí</b> bude rozvrhnutých na <b>${Math.ceil(count / freq)} dní</b>` : '';
-      previewText.innerHTML = `Špičky: <b>${windowStr}</b> (rozptyl ±7–23 min) ${countStr}`;
+      let countStr = count > 0 ? `• <b>${count} videí</b> bude rozvrhnutých na <b>${Math.ceil(count / postsPerDay)} dní</b>` : '';
+      previewText.innerHTML = `Všetky účty cielia na US čas: <b>${windowStr}</b> (anti-bot rozptyl ±7–23 min) ${countStr}`;
     }
 
     // Drag & Drop event listeners for setFilesDropzone

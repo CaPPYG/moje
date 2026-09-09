@@ -29,9 +29,10 @@ os.makedirs(SPOOFED_DIR, exist_ok=True)
 os.makedirs(THUMBS_DIR, exist_ok=True)
 
 
-def calculate_slot_time(target_date: date, slot_index: int, region: str = "us") -> tuple[datetime, str]:
+def calculate_slot_time(target_date: date, slot_index: int, region: str = "us", slot_type: str = None) -> tuple[datetime, str]:
     """
-    Vypočíta čas pre post s US/SK peak time targetingom a náhodným časovým jitterom (± 7 až 23 minút).
+    Vypočíta čas pre post s US peak time targetingom a náhodným časovým jitterom (± 7 až 23 minút).
+    Všetky profily cielia na americké publikum (EST/PST).
     Vracia: (datetime_v_cet, peak_window_label)
     """
     # Náhodný časový jitter: ± 7 až 23 minút
@@ -39,34 +40,57 @@ def calculate_slot_time(target_date: date, slot_index: int, region: str = "us") 
     jitter_mins = jitter_sign * random.randint(7, 23)
     jitter_secs = random.randint(0, 59)
 
-    reg = (region or "sk").lower()
+    reg = (region or "us").lower()
 
     if reg == "us":
-        if slot_index == 0:
-            # Slot 1: US Lunch / Popoludnie (13:15 EST = 19:15 CET)
+        if slot_type == "lunch":
+            # US Lunch / Popoludnie (13:15 EST = 19:15 CET)
             base_dt = datetime.combine(target_date, dtime(19, 15, 0))
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             est_hour = (slot_dt.hour - 6) % 24
-            window_label = f"🇺🇸 US Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-        else:
-            # Slot 2: US Prime Evening (19:30 EST = 01:30 CET nasledujúci deň)
+            window_label = f"🇺🇸 US Lunch/Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+        elif slot_type == "morning":
+            # US Ráno (09:15 EST = 15:15 CET)
+            base_dt = datetime.combine(target_date, dtime(15, 15, 0))
+            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+            est_hour = (slot_dt.hour - 6) % 24
+            window_label = f"🇺🇸 US Ráno ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+        elif slot_type == "evening":
+            # US Prime Evening (19:30 EST = 01:30 CET nasledujúci deň)
             base_dt = datetime.combine(target_date, dtime(1, 30, 0)) + timedelta(days=1)
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             est_hour = (slot_dt.hour - 6) % 24
             window_label = f"🇺🇸 US Prime Evening ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-
-    else:
-        # Slovenský rozvrh (CET)
-        if slot_index == 0:
-            # Slot 1: Obed (12:45 CET)
-            base_dt = datetime.combine(target_date, dtime(12, 45, 0))
-            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-            window_label = f"🇸🇰 SK Obed ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
         else:
-            # Slot 2: Večer (19:45 CET)
+            # Sekvencia podľa indexu:
+            # Slot 0 = US Prime Evening (hlavná zlatá špička 19:30 EST = 01:30 CET)
+            # Slot 1 = US Lunch / Popoludnie (13:15 EST = 19:15 CET)
+            # Slot 2 = US Ráno (09:15 EST = 15:15 CET)
+            if slot_index == 0:
+                base_dt = datetime.combine(target_date, dtime(1, 30, 0)) + timedelta(days=1)
+                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+                est_hour = (slot_dt.hour - 6) % 24
+                window_label = f"🇺🇸 US Prime Evening ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+            elif slot_index == 1:
+                base_dt = datetime.combine(target_date, dtime(19, 15, 0))
+                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+                est_hour = (slot_dt.hour - 6) % 24
+                window_label = f"🇺🇸 US Lunch/Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+            else:
+                base_dt = datetime.combine(target_date, dtime(15, 15, 0))
+                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+                est_hour = (slot_dt.hour - 6) % 24
+                window_label = f"🇺🇸 US Ráno ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+    else:
+        # Fallback
+        if slot_index == 0:
             base_dt = datetime.combine(target_date, dtime(19, 45, 0))
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             window_label = f"🇸🇰 SK Prime Večer ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+        else:
+            base_dt = datetime.combine(target_date, dtime(12, 45, 0))
+            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+            window_label = f"🇸🇰 SK Obed ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
 
     return slot_dt, window_label
 
@@ -159,8 +183,8 @@ def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
             storage_type = master_video.get("storage_type", "local")
             gdrive_id = master_video.get("gdrive_file_id")
 
-            region = acc.get("region", "sk")
-            slot_time, window_label = calculate_slot_time(target_date, slot_idx, region=region)
+            region = "us"
+            slot_time, window_label = calculate_slot_time(target_date, slot_idx, region="us")
 
             # Vygenerovanie unikátneho spoofnutého videa pre tento konkrétny slot a účet
             rand_token = random.randint(1000, 9999)
@@ -173,7 +197,7 @@ def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
                 if storage_type == "gdrive" and gdrive_id:
                     logger.info(f"Sťahujem dočasný master z Google Drive (ID: {gdrive_id}) pre @{acc['username']}...")
                     with gdrive_vault.temporary_master(gdrive_id) as temp_master_path:
-                        spoofer.spoof_video_for_account(temp_master_path, spoofed_out_path, region=region)
+                        spoofer.spoof_video_for_account(temp_master_path, spoofed_out_path, region="us")
                         spoofer.generate_thumbnail(spoofed_out_path, thumb_out_path)
                 else:
                     master_path = os.path.join(VAULT_DIR, master_video["filename"])
@@ -229,19 +253,29 @@ def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
 
 
 def schedule_account_reel_set(account_id: int, saved_video_files: list,
-                              start_date_str: str = None, frequency: int = 1,
+                              start_date_str: str = None, frequency: str = "1_evening",
                               default_caption: str = "", default_hashtags: str = "") -> dict:
     """
     Naplánuje sadu vopred pripravených / spoofnutých Reels pre jeden konkrétny účet.
-    Rozdelí videá na jednotlivé dni a peak okná (US/SK podľa regiónu účtu) s anti-bot jitterom.
+    Všetky profily cielia na US čas (New York EDT / LA PDT) s anti-bot časovým rozptylom.
     """
     account = db.get_account_by_id(account_id)
     if not account:
         return {"status": "error", "message": "Účet nebol nájdený."}
 
     username = account.get("username", "")
-    region = (account.get("region") or "sk").lower()
-    frequency = max(1, min(3, int(frequency or 1)))
+    region = "us"
+
+    freq_str = str(frequency or "1_evening").lower()
+    if freq_str in ("1_lunch", "lunch"):
+        slot_types_sequence = ["lunch"]
+    elif freq_str in ("2", "2_daily", "2_day"):
+        slot_types_sequence = ["lunch", "evening"]
+    elif freq_str in ("3", "3_daily", "3_day"):
+        slot_types_sequence = ["morning", "lunch", "evening"]
+    else:
+        # Predvolené: 1 Reel denne na US Prime Evening (~19:30 EST)
+        slot_types_sequence = ["evening"]
 
     if start_date_str:
         try:
@@ -252,7 +286,7 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
         curr_date = datetime.now().date()
 
     created_posts = []
-    current_slot_in_day = 0
+    current_seq_idx = 0
 
     for idx, vid_filename in enumerate(saved_video_files):
         video_full_path = os.path.join(SPOOFED_DIR, vid_filename)
@@ -269,8 +303,9 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
             except Exception as e:
                 logger.warning(f"Chyba pri generovaní náhľadu pre {vid_filename}: {e}")
 
-        # Výpočet času pre slot s anti-bot rozptylom
-        slot_time, window_label = calculate_slot_time(curr_date, current_slot_in_day, region=region)
+        # Výpočet času pre slot s US peak targetingom a anti-bot rozptylom
+        chosen_type = slot_types_sequence[current_seq_idx]
+        slot_time, window_label = calculate_slot_time(curr_date, current_seq_idx, region="us", slot_type=chosen_type)
 
         caption = default_caption or f"Reel vibes ✨ @{username}"
         hashtags = default_hashtags or "#reels #trending #viral #fyp"
@@ -290,21 +325,21 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
         created_posts.append({
             "post_id": post_id,
             "account": username,
-            "region": region.upper(),
+            "region": "US",
             "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
             "peak_window": window_label,
             "spoofed_filename": vid_filename
         })
 
         # Posun v rozvrhu na ďalší slot alebo ďalší deň
-        current_slot_in_day += 1
-        if current_slot_in_day >= frequency:
-            current_slot_in_day = 0
+        current_seq_idx += 1
+        if current_seq_idx >= len(slot_types_sequence):
+            current_seq_idx = 0
             curr_date += timedelta(days=1)
 
     return {
         "status": "ok",
-        "message": f"Úspešne naplánovaných {len(created_posts)} Reels pre @{username}.",
+        "message": f"Úspešne naplánovaných {len(created_posts)} Reels pre @{username} (cielené na US čas).",
         "created_count": len(created_posts),
         "posts": created_posts
     }
