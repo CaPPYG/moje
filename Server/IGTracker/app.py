@@ -320,13 +320,13 @@ def api_update_account_audience(account_id):
 
 # ─── Meta / Instagram OAuth Login Flow ────────────────────────────────────────
 
-# SK Developer App (Slovenské profily)
+# Hlavná fungujúca Meta Developer App (poster-IG, ID: 1397331775709610) pre všetky profily
 META_APP_ID = os.environ.get("META_APP_ID", "1397331775709610")
 META_APP_SECRET = os.environ.get("META_APP_SECRET", "784a1f481055751ed2ba7636febeb07b")
 
-# US Developer App (Oddelené americké profily z Multiloginu)
-US_META_APP_ID = os.environ.get("US_META_APP_ID", "1638354147863673")
-US_META_APP_SECRET = os.environ.get("US_META_APP_SECRET", "2dc9ca5122dc634465b5508cd9068b10")
+# Smerujeme aj US appku na rovnakú fungujúcu appku (poster-IG)
+US_META_APP_ID = os.environ.get("US_META_APP_ID", "1397331775709610")
+US_META_APP_SECRET = os.environ.get("US_META_APP_SECRET", "784a1f481055751ed2ba7636febeb07b")
 
 META_REDIRECT_URI = os.environ.get("META_REDIRECT_URI", "https://garcarzp.online/ig/oauth/callback")
 
