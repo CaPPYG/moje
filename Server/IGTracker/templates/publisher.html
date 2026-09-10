@@ -4816,6 +4816,8 @@
           statusEl.className = 'health-pill warning';
           statusEl.textContent = '📱 MANUÁLNE POSTOVANIE';
         }
+      }
+
       const dev = acc.device_model || (acc.username.toLowerCase() === 'clarigarzi' ? 'Nothing Phone (2a)' : 'Samsung Galaxy S24');
       const devSelect = document.getElementById('modalPhoneDeviceSelect');
       if (devSelect) {
