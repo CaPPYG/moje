@@ -2170,7 +2170,7 @@
   </div>
 
   <!-- GoroTools-Inspired Phone / Account Detail Modal -->
-  <div id="phoneDetailModal" class="modal-overlay" style="display: none; z-index: 1050;">
+  <div id="phoneDetailModal" class="modal-overlay" style="display: none; z-index: 1050;" onclick="if (event.target === this) closePhoneDetailModal()">
     <div class="modal-card" style="max-width: 920px; width: 96%; max-height: 92vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0c101a; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 20px 60px rgba(0,0,0,0.85); border-radius: 20px;">
       
       <!-- Top Modal Header -->
@@ -4374,6 +4374,18 @@
       }
     }
 
+    let plannerCurrentPage = 1;
+    const PLANNER_PAGE_SIZE = 15;
+
+    function changePlannerPage(page) {
+      plannerCurrentPage = page;
+      renderPlannerPosts();
+      const container = document.getElementById('plannerTimelineContainer');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
     function renderPlannerAccountFilters(posts) {
       const bar = document.getElementById('plannerAccountFilterBar');
       if (!bar) return;
@@ -4405,12 +4417,14 @@
 
     function setPlannerAccountFilter(accId) {
       plannerFilterAccount = accId;
+      plannerCurrentPage = 1;
       renderPlannerAccountFilters(plannerAllPostsCache);
       renderPlannerPosts();
     }
 
     function setPlannerStatusFilter(status) {
       plannerFilterStatus = status;
+      plannerCurrentPage = 1;
       ['All', 'Ready', 'Published'].forEach(s => {
         const btn = document.getElementById(`plannerStatusFilter${s}`);
         if (btn) btn.classList.toggle('active', s.toLowerCase() === status);
@@ -4452,7 +4466,15 @@
         return;
       }
 
-      container.innerHTML = filtered.map(p => {
+      const totalPosts = filtered.length;
+      const totalPages = Math.ceil(totalPosts / PLANNER_PAGE_SIZE) || 1;
+      if (plannerCurrentPage > totalPages) plannerCurrentPage = totalPages;
+      if (plannerCurrentPage < 1) plannerCurrentPage = 1;
+
+      const startIndex = (plannerCurrentPage - 1) * PLANNER_PAGE_SIZE;
+      const pagePosts = filtered.slice(startIndex, startIndex + PLANNER_PAGE_SIZE);
+
+      const cardsHtml = pagePosts.map(p => {
         const isPublished = p.status === 'published';
         const isFailed = p.status === 'failed';
         const canPublish = !isPublished;
@@ -4479,24 +4501,21 @@
               </div>
             </div>
 
-            <!-- Right Metadata & Editor -->
+            <!-- Right Details and Controls -->
             <div class="planner-info-col">
-              <div class="planner-header-row">
-                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                  <span style="font-weight: 700; font-size: 1.05rem; color: #fff;">
-                    ${regionFlag} @${escapeHtml(p.username)}
-                  </span>
-                  ${formatRelativeTime(p.scheduled_time)}
-                  <span class="peak-badge" title="Cieľové okno">
-                    <i class="fas fa-sun"></i> ${escapeHtml(p.peak_window || 'US Peak')}
-                  </span>
+              <!-- Top Header: User + Status + Schedule badge -->
+              <div class="planner-top-row">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-weight: 800; font-size: 0.95rem; color: #fff;">@${escapeHtml(p.username)}</span>
+                  <span style="font-size: 0.75rem; color: #94a3b8;">${regionFlag}</span>
+                  ${p.is_burner ? '<span class="phone-tag-chip" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; font-size: 0.68rem;"><i class="fas fa-fire"></i> Burner</span>' : ''}
                 </div>
                 <div>${statusBadge}</div>
               </div>
 
-              <!-- Details pills -->
-              <div class="spoof-breakdown" style="margin-top: 4px;">
-                <span class="spoof-tag-pill" style="background: rgba(56,189,248,0.1); color: #38bdf8; border-color: rgba(56,189,248,0.25);" title="Zložka na Google Drive">
+              <!-- Metadata Pills -->
+              <div class="planner-meta-row">
+                <span class="spoof-tag-pill" title="Zložka z Drive">
                   <i class="fas fa-folder-tree"></i> Zložka: <b>${escapeHtml(folderLabel)}</b>
                 </span>
                 <span class="spoof-tag-pill" title="Názov súboru">
@@ -4541,9 +4560,9 @@
                   <i class="fas fa-angles-down"></i> ↓ Popisok pre všetky dni
                 </button>
 
-                <a href="${PREFIX}/api/planner/posts/${p.id}/download" class="btn-clip-download" title="Stiahnuť hotové naspoofované video pre manuálne postovanie">
+                <button type="button" class="btn-clip-download" onclick="downloadPlannerClip(${p.id}, '${escapeHtml(p.username || 'clip')}_${p.id}.mp4')" title="Stiahnuť hotové naspoofované video pre manuálne postovanie">
                   <i class="fas fa-download"></i> Stiahnuť klip (.mp4)
-                </a>
+                </button>
 
                 <button type="button" class="btn-skip-day" onclick="skipPlannerPost(${p.id})" title="Preskočiť post pre tento deň">
                   <i class="fas fa-forward-step"></i> Preskočiť
@@ -4564,6 +4583,30 @@
           </div>
         `;
       }).join('');
+
+      let paginationHtml = '';
+      if (totalPages > 1) {
+        paginationHtml = `
+          <div class="planner-pagination" style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: rgba(18, 24, 38, 0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; margin-top: 20px; flex-wrap: wrap; gap: 10px;">
+            <span style="font-size: 0.84rem; color: #94a3b8;">
+              Zobrazených <b>${startIndex + 1} - ${Math.min(startIndex + PLANNER_PAGE_SIZE, totalPosts)}</b> z <b>${totalPosts}</b> príspevkov
+            </span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button type="button" class="btn-cancel" onclick="changePlannerPage(${plannerCurrentPage - 1})" ${plannerCurrentPage <= 1 ? 'disabled style="opacity: 0.4; cursor: not-allowed; padding: 6px 12px;"' : 'style="padding: 6px 12px;"'}>
+                <i class="fas fa-chevron-left"></i> Predchádzajúca
+              </button>
+              <span style="font-size: 0.84rem; font-weight: 700; color: #fff; padding: 0 10px;">
+                Strana ${plannerCurrentPage} / ${totalPages}
+              </span>
+              <button type="button" class="btn-cancel" onclick="changePlannerPage(${plannerCurrentPage + 1})" ${plannerCurrentPage >= totalPages ? 'disabled style="opacity: 0.4; cursor: not-allowed; padding: 6px 12px;"' : 'style="padding: 6px 12px;"'}>
+                Ďalšia <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = cardsHtml + paginationHtml;
     }
 
 
@@ -4886,9 +4929,9 @@
                 <div style="font-size: 0.72rem; color: #10b981; margin-top: 2px;"><i class="fas fa-circle-check"></i> 2/2 copies ready (Unikátny spoof vygenerovaný)</div>
               </div>
               <div>
-                <a href="${PREFIX}/api/planner/posts/${p.id}/download" class="btn-clip-download" title="Okamžité stiahnutie hotového videa do PC">
+                <button type="button" class="btn-clip-download" onclick="downloadPlannerClip(${p.id}, '${escapeHtml(currentModalAccount ? currentModalAccount.username : 'clip')}_${p.id}.mp4')" title="Okamžité stiahnutie hotového videa do PC">
                   <i class="fas fa-download"></i> Stiahnuť klip (.mp4)
-                </a>
+                </button>
               </div>
             </div>
 
@@ -5376,8 +5419,8 @@
     }
 
     async function applyCaptionToAllDays(postId, accountId) {
-      const capEl = document.getElementById(`planCaption-${postId}`);
-      const tagEl = document.getElementById(`planHashtags-${postId}`);
+      const capEl = document.getElementById(`modalPlanCap-${postId}`) || document.getElementById(`planCaption-${postId}`);
+      const tagEl = document.getElementById(`modalPlanHashtags-${postId}`) || document.getElementById(`planHashtags-${postId}`);
       const caption = capEl ? capEl.value.trim() : '';
       const hashtags = tagEl ? tagEl.value.trim() : '';
 
@@ -5393,6 +5436,9 @@
         if (res.ok && data.status === 'ok') {
           showToast('Popisok bol úspešne aplikovaný na všetky nadchádzajúce dni! ✨', 'success');
           loadPlannerPosts();
+          if (currentModalAccount && currentModalAccount.id === accountId) {
+            setTimeout(() => renderModalPhoneDays(accountId), 400);
+          }
         } else {
           showToast(data.message || 'Chyba pri aplikovaní popisu.', 'error');
         }
@@ -5401,6 +5447,44 @@
         showToast('Chyba spojenia.', 'error');
       }
     }
+
+    async function downloadPlannerClip(postId, filename) {
+      try {
+        showToast('⏳ Pripravujem sťahovanie videa...', 'info');
+        const res = await fetch(`${PREFIX}/api/planner/posts/${postId}/download?pwd=${encodeURIComponent(PWD)}`, {
+          headers: { 'X-Master-Password': PWD }
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          showToast('Chyba pri sťahovaní: ' + err, 'error');
+          return;
+        }
+        const blob = await res.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = blobUrl;
+        a.download = filename || `clip_${postId}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(a);
+        }, 1000);
+        showToast('✓ Video bolo úspešne stiahnuté.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba pri sťahovaní: ' + err.message, 'error');
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closePhoneDetailModal();
+        const setModal = document.getElementById('accountReelSetModal');
+        if (setModal) setModal.style.display = 'none';
+      }
+    });
 
     async function triggerReSpreadPool() {
       if (!confirm('Naozaj chcete prerozdeliť fond nepostnutých klipov naprieč všetkými profilmi? Systém zabezpečí, že žiadne 2 profily nebudú mať rovnaké video v ten istý deň.')) return;

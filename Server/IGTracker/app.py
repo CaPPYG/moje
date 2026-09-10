@@ -54,7 +54,8 @@ def auth_required(f):
     @wraps(f)
     def wrapper(*a, **kw):
         auth_header = request.headers.get("X-Master-Password")
-        if is_authenticated() or auth_header == MASTER_PASSWORD:
+        auth_query = request.args.get("pwd") or request.args.get("token") or request.args.get("password")
+        if is_authenticated() or auth_header == MASTER_PASSWORD or auth_query == MASTER_PASSWORD:
             return f(*a, **kw)
         if request.path.startswith("/api/"):
             return jsonify({"status": "error", "message": "Neautorizovaný prístup. Zadajte heslo."}), 401
