@@ -439,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBox.style.background = '';
         statusBox.style.color = '';
         statusBox.textContent = '❌ Chyba spojenia so serverom.';
+      }
     }
   };
 
