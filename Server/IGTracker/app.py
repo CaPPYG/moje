@@ -8,7 +8,7 @@ import uuid
 
 import io
 import tempfile
-from flask import Flask, render_template, render_template_string, request, jsonify, redirect, url_for, session, flash, send_from_directory, Response, stream_with_context
+from flask import Flask, render_template, render_template_string, request, jsonify, redirect, url_for, session, flash, send_from_directory, Response, stream_with_context, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 import httpx
@@ -1803,6 +1803,85 @@ def api_planner_re_spread_pool():
     res = vault_planner.re_spread_vault_pool(days=days, posts_per_day=posts_per_day)
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code
+
+
+@app.route("/api/planner/summary", methods=["GET"])
+@auth_required
+def api_planner_summary():
+    """Vráti celkový prehľad stavu plánovača (GoroTools Attention bar a zoznam účtov)."""
+    res = vault_planner.get_planner_summary()
+    return jsonify(res), 200
+
+
+@app.route("/api/planner/account/<int:account_id>/settings", methods=["POST"])
+@auth_required
+def api_planner_account_settings(account_id):
+    """Uloží nastavenia plánovača pre konkrétny profil (burner, časovanie, šablóna, zariadenie)."""
+    data = request.get_json(silent=True) or {}
+    db.update_account_planner_settings(
+        account_id=account_id,
+        is_burner=data.get("is_burner"),
+        burner_vault_ids=data.get("burner_vault_ids"),
+        default_time=data.get("default_time"),
+        default_jitter=data.get("default_jitter"),
+        default_caption=data.get("default_caption"),
+        device_model=data.get("device_model")
+    )
+    acc = db.get_account_by_id(account_id)
+    return jsonify({"status": "ok", "message": "Nastavenia profilu boli uložené.", "account": acc}), 200
+
+
+@app.route("/api/planner/apply-time-all", methods=["POST"])
+@auth_required
+def api_planner_apply_time_all():
+    """Hromadne nastaví čas publikovania a jitter pre všetky účty."""
+    data = request.get_json(silent=True) or {}
+    default_time = data.get("default_time", "19:15")
+    default_jitter = int(data.get("default_jitter", 10))
+
+    db.apply_time_to_all_accounts(default_time, default_jitter)
+    return jsonify({"status": "ok", "message": f"Čas {default_time} (±{default_jitter}m) bol nastavený pre všetky účty."}), 200
+
+
+@app.route("/api/planner/account/<int:account_id>/shuffle-unposted", methods=["POST"])
+@auth_required
+def api_planner_shuffle_account(account_id):
+    """Premieša nepostnuté sloty pre vybraný profil."""
+    res = vault_planner.shuffle_account_unposted(account_id)
+    return jsonify(res), 200
+
+
+@app.route("/api/planner/posts/<int:post_id>/skip", methods=["POST"])
+@auth_required
+def api_planner_skip_post(post_id):
+    """Preskočí post na daný deň (Skip day)."""
+    db.skip_planned_post(post_id)
+    return jsonify({"status": "ok", "message": "Deň/post bol úspešne preskočený."}), 200
+
+
+@app.route("/api/planner/posts/<int:post_id>/download", methods=["GET"])
+@auth_required
+def api_planner_download_clip(post_id):
+    """Umožňuje 1-klikové stiahnutie pripraveného videa pre manuálne postovanie."""
+    post = db.get_planned_post_by_id(post_id)
+    if not post:
+        return "Príspevok nebol nájdený", 404
+
+    spoofed_filename = post.get("spoofed_video_path")
+    if not spoofed_filename:
+        return "Video pre tento post nebolo nájdené", 404
+
+    sp_path = os.path.join(SPOOFED_DIR, spoofed_filename)
+    if os.path.isfile(sp_path):
+        dl_name = f"{post['username']}_{os.path.basename(sp_path)}"
+        return send_file(sp_path, as_attachment=True, download_name=dl_name, mimetype="video/mp4")
+
+    v_path = os.path.join(VAULT_DIR, spoofed_filename)
+    if os.path.isfile(v_path):
+        dl_name = f"{post['username']}_{os.path.basename(v_path)}"
+        return send_file(v_path, as_attachment=True, download_name=dl_name, mimetype="video/mp4")
+
+    return "Súbor videa na disku neexistuje", 404
 
 
 @app.route("/api/ig-tracker/<int:account_id>/facebook", methods=["POST"])

@@ -1487,10 +1487,122 @@
       border: 1px solid rgba(245, 158, 11, 0.4);
       color: #fbbf24;
     }
-    .health-pill.error {
-      background: rgba(239, 68, 68, 0.16);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      color: #f87171;
+    /* ─── GoroTools-Inspired Phone Cards, Attention Banner & Detail Drawer ─── */
+    .planner-attention-banner {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.08));
+      border: 1.5px solid rgba(245, 158, 11, 0.4);
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+    .attention-badge-pill {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      padding: 3px 9px;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .phones-list-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .phone-row-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1.5px solid var(--card-border);
+      border-radius: 14px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+      transition: all 0.22s ease;
+      text-decoration: none;
+      color: #f1f5f9;
+    }
+    .phone-row-card:hover {
+      border-color: rgba(168, 85, 247, 0.55);
+      background: rgba(26, 34, 52, 0.9);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+    }
+    .phone-tag-chip {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .phone-device-pill {
+      background: rgba(255, 255, 255, 0.05);
+      color: #cbd5e1;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 0.74rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .btn-clip-download {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 6px 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+    .btn-clip-download:hover {
+      background: rgba(56, 189, 248, 0.25);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .btn-skip-day {
+      background: rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 6px 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-skip-day:hover {
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.1);
+    }
+    .phone-day-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.2s;
+    }
+    .phone-day-card:hover {
+      border-color: rgba(255, 255, 255, 0.15);
     }
   </style>
 </head>
@@ -1924,26 +2036,54 @@
       </div>
     </div>
 
-    <!-- Smart Pool Distribution Banner (Inspired by GoroTools) -->
-    <div id="smartPoolBanner" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(168, 85, 247, 0.08)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+    <!-- ── GoroTools-Inspired Attention Box ── -->
+    <div id="plannerAttentionBanner" class="planner-attention-banner" style="display: none;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fas fa-triangle-exclamation" style="color: #f59e0b; font-size: 1.25rem;"></i>
+          <span style="font-weight: 800; font-size: 0.98rem; color: #fff;" id="attentionBannerTitle">⚠️ 0 profilov vyžaduje pozornosť</span>
+        </div>
+        <span class="attention-badge-pill" id="attentionBadgeCount">0 upozornení</span>
+      </div>
+      <div id="attentionBannerItems" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: #cbd5e1; margin-top: 6px;">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
+    <!-- ── Capacity Warning & Re-spread Pool Bar ── -->
+    <div id="plannerCapacityBanner" style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
       <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(168, 85, 247, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #c084fc;">
-          <i class="fas fa-network-wired"></i>
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(245, 158, 11, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #fbbf24;">
+          <i class="fas fa-film"></i>
         </div>
         <div>
           <div style="font-weight: 700; font-size: 0.92rem; color: #fff; display: flex; align-items: center; gap: 8px;">
-            <span>Smart Pool Distribution</span>
-            <span style="font-size: 0.7rem; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 7px; border-radius: 6px; font-weight: 600;">Anti-Duplicate Pool</span>
+            <span id="capacityTitleText">Kapacita Vaultu & Smart Pool</span>
+            <span id="capacityBadgePill" style="font-size: 0.7rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 7px; border-radius: 6px; font-weight: 600;">Striktný režim</span>
           </div>
-          <div id="smartPoolNoticeText" style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
-            Rozdelí videá z Vaultu tak, aby žiadne 2 profily nepostovali rovnaký master v ten istý deň (s náhodným časovým rozptylom ±10m).
+          <div id="capacityDetailText" style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
+            Počítam kapacitu klipov...
           </div>
         </div>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
-        <button type="button" class="btn-save" id="btnReSpreadPool" onclick="triggerReSpreadPool()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); font-size: 0.82rem; padding: 8px 14px; font-weight: 600;">
+        <button type="button" class="btn-save" id="btnReSpreadPool" onclick="triggerReSpreadPool()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); font-size: 0.82rem; padding: 9px 16px; font-weight: 700; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);">
           <i class="fas fa-shuffle"></i> ↻ Prerozdeliť fond (Re-spread Pool)
         </button>
+      </div>
+    </div>
+
+    <!-- ── Phones / Profiles Cards Section ── -->
+    <div style="margin-bottom: 22px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+        <div style="font-weight: 700; font-size: 0.92rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+          <i class="fas fa-mobile-screen-button" style="color: #c084fc;"></i>
+          <span>PHONES / PROFILY</span>
+          <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 500;">(Kliknutím otvoríte detail profilu, nastavenie času, popiskov a stiahnutie klipov)</span>
+        </div>
+      </div>
+      <div id="plannerPhonesGrid" class="phones-list-grid">
+        <!-- Rendered dynamically -->
       </div>
     </div>
 
@@ -2029,7 +2169,160 @@
     </div>
   </div>
 
-  </main>
+  <!-- GoroTools-Inspired Phone / Account Detail Modal -->
+  <div id="phoneDetailModal" class="modal-overlay" style="display: none; z-index: 1050;">
+    <div class="modal-card" style="max-width: 920px; width: 96%; max-height: 92vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0c101a; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 20px 60px rgba(0,0,0,0.85); border-radius: 20px;">
+      
+      <!-- Top Modal Header -->
+      <div style="padding: 16px 22px; background: rgba(18, 24, 38, 0.95); border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="btn-cancel" onclick="closePhoneDetailModal()" style="padding: 6px 12px; font-size: 0.8rem;">
+            <i class="fas fa-times"></i> Zavrieť
+          </button>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="modalPhoneNumBadge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); font-size: 0.76rem; font-weight: 800; padding: 2px 7px; border-radius: 6px;">#1</span>
+            <span id="modalPhoneUsername" style="font-weight: 800; font-size: 1.15rem; color: #fff; font-family: 'Outfit', sans-serif;">@username</span>
+            <span id="modalPhoneStatusBadge" class="health-pill healthy" style="font-size: 0.72rem;">🟢 AKTÍVNY</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 0.75rem; color: #94a3b8;"><i class="fas fa-mobile-screen"></i> Model:</span>
+          <input type="text" id="modalPhoneDeviceInput" class="form-input" style="width: 180px; height: 32px; font-size: 0.8rem; padding: 3px 8px;" placeholder="Samsung Galaxy S24" onchange="savePhoneDeviceModel()">
+        </div>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div style="flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 18px;">
+        
+        <!-- Networks Status Box -->
+        <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 14px 18px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(225,48,108,0.15); display: flex; align-items: center; justify-content: center; color: #e1306c;">
+                <i class="fab fa-instagram"></i>
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 0.88rem; color: #fff;">Instagram Reels</div>
+                <div id="modalPhoneIgDesc" style="font-size: 0.75rem; color: #94a3b8;">Pripojené cez Meta Graph API</div>
+              </div>
+            </div>
+            <div id="modalPhoneIgAction">
+              <span class="health-pill healthy" style="font-size: 0.72rem;">Prepojené</span>
+            </div>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.04); padding-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(24,119,242,0.15); display: flex; align-items: center; justify-content: center; color: #1877f2;">
+                <i class="fab fa-facebook"></i>
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 0.88rem; color: #fff;">Facebook Stránka (Reels)</div>
+                <div id="modalPhoneFbDesc" style="font-size: 0.75rem; color: #94a3b8;">Automatické crosspostovanie na prepojenú FB stránku</div>
+              </div>
+            </div>
+            <div id="modalPhoneFbAction"></div>
+          </div>
+
+          <div style="border-top: 1px solid rgba(255,255,255,0.04); padding-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; color: #fff;">
+                <i class="fab fa-x-twitter"></i>
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 0.88rem; color: #fff;">X (Twitter)</div>
+                <div style="font-size: 0.75rem; color: #64748b;">Pripravené pre Fázu 2 (X Developer API)</div>
+              </div>
+            </div>
+            <div>
+              <span style="font-size: 0.72rem; color: #64748b; font-weight: 600;">Fáza 2</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timing, Jitter and Defaults Toolbar -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+            <div>
+              <div style="font-weight: 700; font-size: 0.88rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+                <span>PUBLISH AT & JITTER</span>
+                <span style="font-size: 0.68rem; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 1px 6px; border-radius: 4px;">Anti-Bot Timing</span>
+              </div>
+              <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 3px;">
+                Čas publikovania v CET s náhodným rozptylom ±X minút pre každý post.
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.78rem; color: #94a3b8; font-weight: 600;">Čas:</span>
+                  <input type="time" id="modalPhoneTimeInput" class="form-input" style="width: 100px; height: 34px; font-size: 0.85rem; padding: 4px 8px;" value="19:15" onchange="savePhoneTimingSettings()">
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="font-size: 0.85rem; color: #f59e0b; font-weight: 700;">±</span>
+                  <input type="number" id="modalPhoneJitterInput" class="form-input" style="width: 65px; height: 34px; font-size: 0.85rem; padding: 4px 8px;" min="1" max="60" value="10" onchange="savePhoneTimingSettings()">
+                  <span style="font-size: 0.78rem; color: #94a3b8; font-weight: 600;">MIN</span>
+                </div>
+                <button type="button" class="btn-cancel" onclick="applyTimeToAllPhones()" style="padding: 7px 12px; font-size: 0.78rem; color: #38bdf8;" title="Nastaviť tento čas a jitter pre celú farmu">
+                  <i class="fas fa-arrows-split-up-and-left"></i> Aplikovať na všetky profily
+                </button>
+              </div>
+            </div>
+
+            <!-- Burner Profile Switch -->
+            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; max-width: 320px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="modalPhoneBurnerToggle" onchange="togglePhoneBurnerMode()">
+                <span style="font-weight: 700; font-size: 0.84rem; color: #f59e0b;"><i class="fas fa-fire"></i> Burner profil</span>
+              </label>
+              <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px;">
+                Mimo rotácie fondu: každý deň točí zvolené video s novým unikátnym spoofom.
+              </div>
+              <div id="modalPhoneBurnerSelectorWrap" style="display: none; margin-top: 8px;">
+                <select id="modalPhoneBurnerVideoSelect" class="form-input" style="font-size: 0.76rem; padding: 4px 6px;" onchange="savePhoneBurnerVideo()">
+                  <!-- Populated dynamically -->
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Default Caption Template for this Profile -->
+          <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 0.76rem; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Predvolená šablóna popisku (pre tento profil):</span>
+              <button type="button" class="btn-cancel" onclick="applyModalCaptionToAllDays()" style="padding: 4px 10px; font-size: 0.74rem; color: #38bdf8;">
+                <i class="fas fa-angles-down"></i> Použiť popisok pre všetky dni
+              </button>
+            </div>
+            <textarea id="modalPhoneDefaultCaption" class="form-input" style="min-height: 48px; font-size: 0.8rem;" placeholder="Predvolený popisok pre tento profil..."></textarea>
+          </div>
+        </div>
+
+        <!-- Phone Action Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding: 4px 0;">
+          <div style="font-weight: 700; font-size: 0.88rem; color: #fff; display: flex; align-items: center; gap: 10px;">
+            <span id="modalPhonePostsCountBadge">0 príspevkov</span>
+            <span style="color: #64748b;">·</span>
+            <span id="modalPhoneDaysContentBadge" style="color: #38bdf8;">0 dní obsahu</span>
+            <span style="color: #64748b;">·</span>
+            <span id="modalPhoneCopiesReadyBadge" style="color: #10b981;">0/0 pripravené na stiahnutie</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" class="btn-cancel" onclick="shuffleCurrentPhonePosts()" style="padding: 7px 12px; font-size: 0.8rem; color: #c084fc;">
+              <i class="fas fa-shuffle"></i> Premiešať nepostnuté (Shuffle)
+            </button>
+            <button type="button" class="btn-unlink" onclick="clearCurrentPhonePosts()" style="padding: 7px 12px; font-size: 0.8rem;">
+              <i class="fas fa-trash-can"></i> Vyčistiť plán
+            </button>
+          </div>
+        </div>
+
+        <!-- Day-by-Day Post Cards Container -->
+        <div id="modalPhoneDaysContainer" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Rendered dynamically -->
+        </div>
+
+      </div>
+    </div>
+  </div>
 
   <!-- Vault Picker Modal for Manual Studio -->
   <div id="vaultPickerModal" class="modal-overlay" style="display: none;">
@@ -4248,6 +4541,14 @@
                   <i class="fas fa-angles-down"></i> ↓ Popisok pre všetky dni
                 </button>
 
+                <a href="${PREFIX}/api/planner/posts/${p.id}/download" class="btn-clip-download" title="Stiahnuť hotové naspoofované video pre manuálne postovanie">
+                  <i class="fas fa-download"></i> Stiahnuť klip (.mp4)
+                </a>
+
+                <button type="button" class="btn-skip-day" onclick="skipPlannerPost(${p.id})" title="Preskočiť post pre tento deň">
+                  <i class="fas fa-forward-step"></i> Preskočiť
+                </button>
+
                 ${canPublish ? `
                   <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})" style="padding: 7px 15px; font-size: 0.82rem;">
                     <i class="fas fa-paper-plane"></i> Publikovať teraz na @${escapeHtml(p.username)}
@@ -4291,12 +4592,545 @@
           updatePlannerKPIs(plannerAllPostsCache);
           renderPlannerAccountFilters(plannerAllPostsCache);
           renderPlannerPosts();
+          loadPlannerSummary();
         } else {
           container.innerHTML = `<div style="color:#ef4444; padding:20px;">Chyba načítania rozvrhu: ${data.message}</div>`;
         }
       } catch (err) {
         console.error(err);
         container.innerHTML = '<div style="color:#ef4444; padding:20px;">Chyba komunikácie pri načítaní rozvrhu.</div>';
+      }
+    }
+
+    let currentModalAccount = null;
+    let plannerSummaryData = null;
+
+    async function loadPlannerSummary() {
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/summary`, { headers: { 'X-Master-Password': PWD } });
+        const data = await res.json();
+        if (!res.ok || data.status !== 'ok') return;
+
+        plannerSummaryData = data;
+
+        // 1. Attention Banner
+        const attBanner = document.getElementById('plannerAttentionBanner');
+        const attTitle = document.getElementById('attentionBannerTitle');
+        const attItems = document.getElementById('attentionBannerItems');
+        const attBadge = document.getElementById('attentionBadgeCount');
+
+        if (attBanner && attItems) {
+          if (data.attention_count > 0) {
+            attBanner.style.display = 'block';
+            if (attTitle) attTitle.textContent = `⚠️ ${data.attention_count} ${data.attention_count === 1 ? 'profil vyžaduje' : (data.attention_count < 5 ? 'profily vyžadujú' : 'profilov vyžaduje')} pozornosť`;
+            if (attBadge) attBadge.textContent = `${data.attention_count} upozornení`;
+
+            let itemsHtml = '';
+            data.attention_accounts.forEach(att => {
+              itemsHtml += `
+                <div style="display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.25); padding: 6px 12px; border-radius: 8px;">
+                  <span style="font-weight: 700; color: #fff; min-width: 140px;">@${escapeHtml(att.username)}:</span>
+                  <span style="color: #fbbf24;">${att.issues.join(' · ')}</span>
+                </div>
+              `;
+            });
+            attItems.innerHTML = itemsHtml;
+          } else {
+            attBanner.style.display = 'none';
+          }
+        }
+
+        // 2. Capacity Banner
+        const capBanner = document.getElementById('plannerCapacityBanner');
+        const capTitle = document.getElementById('capacityTitleText');
+        const capDetail = document.getElementById('capacityDetailText');
+        const capBadge = document.getElementById('capacityBadgePill');
+
+        if (capBanner && capDetail) {
+          if (data.missing_clips > 0) {
+            capBanner.style.background = 'rgba(245, 158, 11, 0.1)';
+            capBanner.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+            if (capTitle) capTitle.textContent = `⚠️ Nahrajte ešte ${data.missing_clips} klipov do Vaultu`;
+            if (capBadge) { capBadge.textContent = 'Kapacita nedosiahnutá'; capBadge.style.color = '#fbbf24'; capBadge.style.background = 'rgba(245, 158, 11, 0.2)'; }
+            capDetail.innerHTML = `${data.regular_count || data.total_accounts} profilov x 1/deň potrebuje aspoň <b>${data.needed_for_7_days} klipov</b> na 7 dní bez duplikátov v rovnaký deň — v zásobníku máte <b>${data.available_videos}</b>.`;
+          } else {
+            capBanner.style.background = 'rgba(16, 185, 129, 0.08)';
+            capBanner.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+            if (capTitle) capTitle.textContent = '✅ Zásobník videí má dostatočnú kapacitu';
+            if (capBadge) { capBadge.textContent = 'Fond pripravený'; capBadge.style.color = '#10b981'; capBadge.style.background = 'rgba(16, 185, 129, 0.2)'; }
+            capDetail.innerHTML = `Máte <b>${data.available_videos} master videí</b> pre ${data.total_accounts} profilov. Každý profil má unikátny obsah bez duplicity.`;
+          }
+        }
+
+        // 3. Render Phones List Grid
+        renderPhonesGrid(data.accounts || []);
+
+      } catch (err) {
+        console.error('Chyba načítania summary plánovača:', err);
+      }
+    }
+
+    function renderPhonesGrid(accounts) {
+      const grid = document.getElementById('plannerPhonesGrid');
+      if (!grid) return;
+
+      if (!accounts || accounts.length === 0) {
+        grid.innerHTML = '<div style="color: #94a3b8; font-size: 0.84rem; padding: 12px;">Žiadne profily v systéme.</div>';
+        return;
+      }
+
+      grid.innerHTML = accounts.map((acc, idx) => {
+        const num = `#${idx + 1}`;
+        const hasToken = acc.has_token;
+        const fbReady = Boolean(acc.fb_enabled && acc.fb_page_id);
+        const isBurner = Boolean(acc.is_burner);
+
+        let igIcon = hasToken 
+          ? '<i class="fab fa-instagram" style="color: #10b981;" title="Instagram: Prepojené"></i>'
+          : '<i class="fab fa-instagram" style="color: #64748b;" title="Instagram: Bez tokenu (manuálne postovanie)"></i>';
+
+        let fbIcon = fbReady
+          ? '<i class="fab fa-facebook" style="color: #1877f2;" title="Facebook Stránka: Prepojená"></i>'
+          : '<i class="fab fa-facebook" style="color: #475569;" title="Facebook: Neprepojená"></i>';
+
+        let xIcon = '<i class="fab fa-x-twitter" style="color: #475569;" title="X (Twitter): Fáza 2"></i>';
+
+        let statusBadge = hasToken
+          ? '<span class="phone-tag-chip" style="background: rgba(16, 185, 129, 0.15); color: #10b981;"><i class="fas fa-check"></i> API aktívne</span>'
+          : '<span class="phone-tag-chip" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;"><i class="fas fa-hand"></i> Manuálne postovanie</span>';
+
+        let burnerBadge = isBurner
+          ? '<span class="phone-tag-chip" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b;"><i class="fas fa-fire"></i> Burner</span>'
+          : '';
+
+        let daysBadge = acc.days_left > 0
+          ? `<span class="phone-tag-chip" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;">${acc.days_left} dní obsahu</span>`
+          : `<span class="phone-tag-chip" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">0 dní (dôjdu klipy)</span>`;
+
+        let captionBadge = acc.missing_caption_count > 0
+          ? `<span class="phone-tag-chip" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24;">${acc.missing_caption_count} bez popisku</span>`
+          : '';
+
+        let readyBadge = `<span class="phone-tag-chip" style="background: rgba(255, 255, 255, 0.05); color: #cbd5e1;">${acc.copies_ready}/${acc.unposted_count} pripravené</span>`;
+
+        return `
+          <div class="phone-row-card" onclick="openPhoneDetailModal(${acc.id})">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span style="font-weight: 800; font-size: 0.8rem; color: #fbbf24; background: rgba(245, 158, 11, 0.15); padding: 2px 7px; border-radius: 6px;">${num}</span>
+              <span style="font-weight: 700; font-size: 0.95rem; color: #fff;">@${escapeHtml(acc.username)}</span>
+              <div style="display: flex; gap: 8px; align-items: center; font-size: 0.9rem; margin-left: 4px;">
+                ${igIcon} ${fbIcon} ${xIcon}
+              </div>
+              ${statusBadge}
+              ${burnerBadge}
+              ${daysBadge}
+              ${captionBadge}
+              ${readyBadge}
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span class="phone-device-pill"><i class="fas fa-mobile-screen"></i> ${escapeHtml(acc.device_model || 'Samsung Galaxy S24')}</span>
+              <i class="fas fa-chevron-right" style="color: #64748b; font-size: 0.85rem;"></i>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openPhoneDetailModal(accountId) {
+      if (!plannerSummaryData || !plannerSummaryData.accounts) return;
+      const acc = plannerSummaryData.accounts.find(a => a.id === accountId);
+      if (!acc) return;
+
+      currentModalAccount = acc;
+      const modal = document.getElementById('phoneDetailModal');
+      if (!modal) return;
+
+      const accIdx = plannerSummaryData.accounts.findIndex(a => a.id === accountId);
+      const numBadge = document.getElementById('modalPhoneNumBadge');
+      const userEl = document.getElementById('modalPhoneUsername');
+      const statusEl = document.getElementById('modalPhoneStatusBadge');
+      const devInput = document.getElementById('modalPhoneDeviceInput');
+
+      if (numBadge) numBadge.textContent = `#${accIdx + 1}`;
+      if (userEl) userEl.textContent = `@${acc.username}`;
+      if (statusEl) {
+        if (acc.has_token) {
+          statusEl.className = 'health-pill healthy';
+          statusEl.textContent = '🟢 AKTÍVNY';
+        } else {
+          statusEl.className = 'health-pill warning';
+          statusEl.textContent = '📱 MANUÁLNE POSTOVANIE';
+        }
+      }
+      if (devInput) devInput.value = acc.device_model || 'Samsung Galaxy S24';
+
+      // Networks
+      const igDesc = document.getElementById('modalPhoneIgDesc');
+      const igAct = document.getElementById('modalPhoneIgAction');
+      if (igDesc && igAct) {
+        if (acc.has_token) {
+          igDesc.textContent = 'Prepojené cez Meta Graph API';
+          igAct.innerHTML = '<span class="health-pill healthy" style="font-size:0.72rem;">Prepojené</span>';
+        } else {
+          igDesc.textContent = 'Nie je pripojený API token (klipy si stiahnete v .mp4)';
+          igAct.innerHTML = `<a href="/ig/connect" class="btn-cancel" style="padding: 4px 10px; font-size: 0.74rem; color: #38bdf8;">Pripojiť IG</a>`;
+        }
+      }
+
+      const fbDesc = document.getElementById('modalPhoneFbDesc');
+      const fbAct = document.getElementById('modalPhoneFbAction');
+      if (fbDesc && fbAct) {
+        if (acc.fb_page_id) {
+          fbDesc.textContent = `Prepojená FB stránka: ${acc.fb_page_id}`;
+          fbAct.innerHTML = '<span class="health-pill healthy" style="font-size:0.72rem;">FB Ready</span>';
+        } else {
+          fbDesc.textContent = 'FB stránka nie je zvolená (automaticky pri /connect)';
+          fbAct.innerHTML = `<a href="/ig/connect" class="btn-cancel" style="padding: 4px 10px; font-size: 0.74rem; color: #1877f2;">Pripojiť FB</a>`;
+        }
+      }
+
+      // Timing & Settings
+      const timeIn = document.getElementById('modalPhoneTimeInput');
+      const jitterIn = document.getElementById('modalPhoneJitterInput');
+      const burnerToggle = document.getElementById('modalPhoneBurnerToggle');
+      const burnerWrap = document.getElementById('modalPhoneBurnerSelectorWrap');
+      const defCap = document.getElementById('modalPhoneDefaultCaption');
+
+      if (timeIn) timeIn.value = acc.default_time || '19:15';
+      if (jitterIn) jitterIn.value = acc.default_jitter || 10;
+      if (burnerToggle) burnerToggle.checked = Boolean(acc.is_burner);
+      if (burnerWrap) burnerWrap.style.display = acc.is_burner ? 'block' : 'none';
+      if (defCap) defCap.value = acc.default_caption || '';
+
+      // Populate Burner videos select
+      const bSelect = document.getElementById('modalPhoneBurnerVideoSelect');
+      if (bSelect) {
+        const vaultVids = (typeof ALL_VAULT_VIDEOS !== 'undefined' && ALL_VAULT_VIDEOS) ? ALL_VAULT_VIDEOS : [];
+        bSelect.innerHTML = '<option value="">-- Vyberte master video z Vaultu --</option>' + vaultVids.map(v => {
+          const isSel = (String(acc.burner_vault_ids) === String(v.id));
+          return `<option value="${v.id}" ${isSel ? 'selected' : ''}>${escapeHtml(v.original_name)}</option>`;
+        }).join('');
+      }
+
+      // Render account's day-by-day posts
+      renderModalPhoneDays(accountId);
+
+      modal.style.display = 'flex';
+    }
+
+    function closePhoneDetailModal() {
+      const modal = document.getElementById('phoneDetailModal');
+      if (modal) modal.style.display = 'none';
+      currentModalAccount = null;
+    }
+
+    function renderModalPhoneDays(accountId) {
+      const container = document.getElementById('modalPhoneDaysContainer');
+      if (!container) return;
+
+      const posts = plannerAllPostsCache.filter(p => String(p.account_id) === String(accountId));
+
+      const cntBadge = document.getElementById('modalPhonePostsCountBadge');
+      const daysBadge = document.getElementById('modalPhoneDaysContentBadge');
+      const readyBadge = document.getElementById('modalPhoneCopiesReadyBadge');
+
+      const uniqueDays = new Set(posts.map(p => (p.scheduled_time || '').substring(0, 10)).filter(Boolean));
+      if (cntBadge) cntBadge.textContent = `${posts.length} ${posts.length === 1 ? 'príspevok' : 'príspevkov'}`;
+      if (daysBadge) daysBadge.textContent = `${uniqueDays.size} dní obsahu`;
+      if (readyBadge) readyBadge.textContent = `${posts.length}/${posts.length} pripravené na stiahnutie`;
+
+      if (posts.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center; padding: 32px 16px; background: rgba(255,255,255,0.02); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.08);">
+            <div style="font-size: 1.8rem; color: #64748b; margin-bottom: 8px;"><i class="fas fa-calendar-xmark"></i></div>
+            <div style="color: #fff; font-weight: 700;">Pre tento profil nie sú naplánované žiadne príspevky.</div>
+            <div style="color: #94a3b8; font-size: 0.78rem; margin-top: 4px;">Použite tlačidlo "Prerozdeliť fond (Re-spread Pool)" pre automatické pridelenie klipov z Vaultu.</div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = posts.map(p => {
+        const isPublished = (p.status === 'published');
+        const canPublish = !isPublished;
+        const dateOnly = p.scheduled_time ? p.scheduled_time.substring(0, 10) : '';
+        const timeOnly = p.scheduled_time ? p.scheduled_time.substring(11, 16) : '19:15';
+        const vidName = p.master_video_name || p.original_video_name || p.spoofed_video_path || 'Video';
+
+        return `
+          <div class="phone-day-card" id="phone-day-card-${p.id}">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 0.9rem; color: #fff;"><i class="fas fa-calendar-day" style="color:#38bdf8;"></i> ${dateOnly}</span>
+                <span style="font-size: 0.75rem; color: #94a3b8;">(${p.peak_window || 'US Peak'})</span>
+                ${isPublished ? '<span class="health-pill healthy" style="font-size:0.7rem;">Publikované</span>' : '<span class="health-pill warning" style="font-size:0.7rem;">Pripravené</span>'}
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button type="button" class="btn-skip-day" onclick="skipPlannerPost(${p.id})">
+                  <i class="fas fa-forward-step"></i> Preskočiť deň
+                </button>
+                <button type="button" class="btn-unlink" onclick="deletePlannedPost(${p.id})" style="padding: 5px 9px;" title="Odstrániť tento slot">
+                  <i class="fas fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Media details and download button -->
+            <div style="display: flex; gap: 14px; align-items: center; background: rgba(0,0,0,0.2); padding: 10px 12px; border-radius: 10px;">
+              <div style="width: 50px; height: 50px; border-radius: 8px; background: #000; overflow: hidden; position: relative; flex-shrink: 0;">
+                <img src="${p.thumbnail_url || ''}" onerror="this.style.display='none'" style="width: 100%; height: 100%; object-fit: cover;">
+                <i class="fas fa-play" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(255,255,255,0.7); font-size: 0.8rem;"></i>
+              </div>
+              <div style="flex: 1; min-width: 180px;">
+                <div style="font-weight: 700; font-size: 0.84rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(vidName)}</div>
+                <div style="font-size: 0.72rem; color: #10b981; margin-top: 2px;"><i class="fas fa-circle-check"></i> 2/2 copies ready (Unikátny spoof vygenerovaný)</div>
+              </div>
+              <div>
+                <a href="${PREFIX}/api/planner/posts/${p.id}/download" class="btn-clip-download" title="Okamžité stiahnutie hotového videa do PC">
+                  <i class="fas fa-download"></i> Stiahnuť klip (.mp4)
+                </a>
+              </div>
+            </div>
+
+            <!-- In-line caption and hashtags -->
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-size: 0.72rem; color: #94a3b8; font-weight: 700;">Popisok:</span>
+                <button type="button" class="btn-cancel" onclick="applyCaptionToAllDays(${p.id}, ${p.account_id})" style="padding: 2px 7px; font-size: 0.72rem; color: #38bdf8;">
+                  <i class="fas fa-angles-down"></i> Použiť pre všetky dni
+                </button>
+              </div>
+              <textarea id="modalPlanCap-${p.id}" class="form-input" style="min-height: 48px; font-size: 0.8rem;" onchange="saveModalPostCaption(${p.id})">${escapeHtml(p.caption || '')}</textarea>
+            </div>
+
+            <!-- Platform targets -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.76rem; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 4px; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="modalPlanIg-${p.id}" ${p.post_to_ig !== 0 ? 'checked' : ''} onchange="saveModalPostPlatforms(${p.id})">
+                  <i class="fab fa-instagram" style="color: #e1306c;"></i> IG
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="modalPlanFb-${p.id}" ${p.post_to_fb !== 0 ? 'checked' : ''} onchange="saveModalPostPlatforms(${p.id})">
+                  <i class="fab fa-facebook" style="color: #1877f2;"></i> FB
+                </label>
+              </div>
+              ${canPublish ? `
+                <button type="button" class="btn-publish-reel-now" onclick="publishPlannedPost(${p.id})" style="padding: 5px 12px; font-size: 0.76rem;">
+                  <i class="fas fa-paper-plane"></i> Publikovať teraz
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function applyTimeToAllPhones() {
+      const timeIn = document.getElementById('modalPhoneTimeInput');
+      const jitterIn = document.getElementById('modalPhoneJitterInput');
+      const default_time = timeIn ? timeIn.value : '19:15';
+      const default_jitter = jitterIn ? parseInt(jitterIn.value) : 10;
+
+      if (!confirm(`Naozaj chcete nastaviť čas ${default_time} (±${default_jitter}m) pre VŠETKY profily vo farme?`)) return;
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/apply-time-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ default_time, default_jitter })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message, 'success');
+          loadPlannerSummary();
+        } else {
+          showToast(data.message || 'Chyba nastavenia času.', 'error');
+        }
+      } catch (err) {
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    async function savePhoneTimingSettings() {
+      if (!currentModalAccount) return;
+      const timeIn = document.getElementById('modalPhoneTimeInput');
+      const jitterIn = document.getElementById('modalPhoneJitterInput');
+      const default_time = timeIn ? timeIn.value : '19:15';
+      const default_jitter = jitterIn ? parseInt(jitterIn.value) : 10;
+
+      try {
+        await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ default_time, default_jitter })
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function savePhoneDeviceModel() {
+      if (!currentModalAccount) return;
+      const devInput = document.getElementById('modalPhoneDeviceInput');
+      const device_model = devInput ? devInput.value.trim() : 'Samsung Galaxy S24';
+
+      try {
+        await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ device_model })
+        });
+        showToast('Model zariadenia uložený.', 'info');
+        loadPlannerSummary();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function togglePhoneBurnerMode() {
+      if (!currentModalAccount) return;
+      const burnerToggle = document.getElementById('modalPhoneBurnerToggle');
+      const burnerWrap = document.getElementById('modalPhoneBurnerSelectorWrap');
+      const is_burner = burnerToggle && burnerToggle.checked ? 1 : 0;
+      if (burnerWrap) burnerWrap.style.display = is_burner ? 'block' : 'none';
+
+      try {
+        await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ is_burner })
+        });
+        showToast(is_burner ? 'Profil nastavený ako Burner.' : 'Profil vrátený do štandardnej rotácie.', 'info');
+        loadPlannerSummary();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function savePhoneBurnerVideo() {
+      if (!currentModalAccount) return;
+      const bSelect = document.getElementById('modalPhoneBurnerVideoSelect');
+      const burner_vault_ids = bSelect ? bSelect.value : '';
+
+      try {
+        await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ burner_vault_ids })
+        });
+        showToast('Burner video nastavené.', 'info');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function shuffleCurrentPhonePosts() {
+      if (!currentModalAccount) return;
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/shuffle-unposted`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message, 'success');
+          loadPlannerPosts();
+          setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+        } else {
+          showToast(data.message || 'Chyba pri premiešaní.', 'error');
+        }
+      } catch (err) {
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    async function clearCurrentPhonePosts() {
+      if (!currentModalAccount) return;
+      if (!confirm(`Naozaj chcete vymazať všetky nepublikované príspevky pre @${currentModalAccount.username}?`)) return;
+
+      const posts = plannerAllPostsCache.filter(p => String(p.account_id) === String(currentModalAccount.id) && p.status !== 'published');
+      for (const p of posts) {
+        try {
+          await fetch(`${PREFIX}/api/planner/posts/${p.id}`, {
+            method: 'DELETE',
+            headers: { 'X-Master-Password': PWD }
+          });
+        } catch (e) {}
+      }
+      showToast('Plán profilu bol vyčistený.', 'info');
+      loadPlannerPosts();
+      setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+    }
+
+    async function skipPlannerPost(postId) {
+      if (!confirm('Naozaj chcete preskočiť tento post/deň?')) return;
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/posts/${postId}/skip`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD }
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Deň bol preskočený.', 'info');
+          loadPlannerPosts();
+          if (currentModalAccount) {
+            setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+          }
+        }
+      } catch (err) {
+        showToast('Chyba komunikácie.', 'error');
+      }
+    }
+
+    async function saveModalPostCaption(postId) {
+      const capEl = document.getElementById(`modalPlanCap-${postId}`);
+      const caption = capEl ? capEl.value : '';
+      try {
+        await fetch(`${PREFIX}/api/planner/posts/${postId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ caption })
+        });
+        showToast('Popisok uložený.', 'info');
+      } catch (err) {}
+    }
+
+    async function saveModalPostPlatforms(postId) {
+      const igCb = document.getElementById(`modalPlanIg-${postId}`);
+      const fbCb = document.getElementById(`modalPlanFb-${postId}`);
+      const post_to_ig = igCb && igCb.checked ? 1 : 0;
+      const post_to_fb = fbCb && fbCb.checked ? 1 : 0;
+      try {
+        await fetch(`${PREFIX}/api/planner/posts/${postId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ post_to_ig, post_to_fb })
+        });
+      } catch (err) {}
+    }
+
+    async function applyModalCaptionToAllDays() {
+      if (!currentModalAccount) return;
+      const defCap = document.getElementById('modalPhoneDefaultCaption');
+      const caption = defCap ? defCap.value.trim() : '';
+
+      try {
+        await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ default_caption: caption })
+        });
+        await fetch(`${PREFIX}/api/planner/apply-caption-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ account_id: currentModalAccount.id, caption })
+        });
+        showToast('Popisok nastavený pre všetky dni!', 'success');
+        loadPlannerPosts();
+        setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+      } catch (err) {
+        showToast('Chyba komunikácie.', 'error');
       }
     }
 

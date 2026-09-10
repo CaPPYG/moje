@@ -30,70 +30,82 @@ os.makedirs(SPOOFED_DIR, exist_ok=True)
 os.makedirs(THUMBS_DIR, exist_ok=True)
 
 
-def calculate_slot_time(target_date: date, slot_index: int, region: str = "us", slot_type: str = None) -> tuple[datetime, str]:
+def calculate_slot_time(target_date: date, slot_index: int = 0, region: str = "us", slot_type: str = None,
+                        time_str: str = None, jitter_minutes: int = 10) -> tuple[datetime, str]:
     """
-    Vypočíta čas pre post s US peak time targetingom a náhodným časovým jitterom (± 7 až 23 minút).
-    Všetky profily cielia na americké publikum (EST/PST).
+    Vypočíta čas pre post s voliteľným vlastným časom (HH:MM), anti-bot jitterom (± X minút)
+    alebo US peak time targetingom.
     Vracia: (datetime_v_cet, peak_window_label)
     """
-    # Náhodný časový jitter: ± 7 až 23 minút
+    j_mins_limit = max(1, int(jitter_minutes or 10))
     jitter_sign = random.choice([-1, 1])
-    jitter_mins = jitter_sign * random.randint(7, 23)
+    jitter_mins = jitter_sign * random.randint(1, j_mins_limit)
     jitter_secs = random.randint(0, 59)
 
-    reg = (region or "us").lower()
+    if time_str and ":" in str(time_str):
+        try:
+            parts = str(time_str).strip().split(":")
+            th = int(parts[0]) % 24
+            tm = int(parts[1]) % 60
+            base_dt = datetime.combine(target_date, dtime(th, tm, 0))
+            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+            est_hour = (slot_dt.hour - 6) % 24
+            window_label = f"🇺🇸 US Peak ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET ±{j_mins_limit}m)"
+            return slot_dt, window_label
+        except Exception:
+            pass
 
+    reg = (region or "us").lower()
     if reg == "us":
-        if slot_type == "lunch":
-            # US Lunch / Popoludnie (13:15 EST = 19:15 CET)
+        if slot_type == "lunch" or slot_index == 1:
             base_dt = datetime.combine(target_date, dtime(19, 15, 0))
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             est_hour = (slot_dt.hour - 6) % 24
-            window_label = f"🇺🇸 US Lunch/Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-        elif slot_type == "morning":
-            # US Ráno (09:15 EST = 15:15 CET)
+            window_label = f"🇺🇸 US Lunch/Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET ±{j_mins_limit}m)"
+        elif slot_type == "morning" or slot_index >= 2:
             base_dt = datetime.combine(target_date, dtime(15, 15, 0))
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             est_hour = (slot_dt.hour - 6) % 24
-            window_label = f"🇺🇸 US Ráno ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-        elif slot_type == "evening":
-            # US Prime Evening (19:30 EST = 01:30 CET nasledujúci deň)
+            window_label = f"🇺🇸 US Ráno ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET ±{j_mins_limit}m)"
+        else:
             base_dt = datetime.combine(target_date, dtime(1, 30, 0)) + timedelta(days=1)
             slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
             est_hour = (slot_dt.hour - 6) % 24
-            window_label = f"🇺🇸 US Prime Evening ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-        else:
-            # Sekvencia podľa indexu:
-            # Slot 0 = US Prime Evening (hlavná zlatá špička 19:30 EST = 01:30 CET)
-            # Slot 1 = US Lunch / Popoludnie (13:15 EST = 19:15 CET)
-            # Slot 2 = US Ráno (09:15 EST = 15:15 CET)
-            if slot_index == 0:
-                base_dt = datetime.combine(target_date, dtime(1, 30, 0)) + timedelta(days=1)
-                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-                est_hour = (slot_dt.hour - 6) % 24
-                window_label = f"🇺🇸 US Prime Evening ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-            elif slot_index == 1:
-                base_dt = datetime.combine(target_date, dtime(19, 15, 0))
-                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-                est_hour = (slot_dt.hour - 6) % 24
-                window_label = f"🇺🇸 US Lunch/Popoludnie ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-            else:
-                base_dt = datetime.combine(target_date, dtime(15, 15, 0))
-                slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-                est_hour = (slot_dt.hour - 6) % 24
-                window_label = f"🇺🇸 US Ráno ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+            window_label = f"🇺🇸 US Prime Evening ({est_hour:02d}:{slot_dt.minute:02d} EST / {slot_dt.hour:02d}:{slot_dt.minute:02d} CET ±{j_mins_limit}m)"
     else:
-        # Fallback
-        if slot_index == 0:
-            base_dt = datetime.combine(target_date, dtime(19, 45, 0))
-            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-            window_label = f"🇸🇰 SK Prime Večer ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
-        else:
-            base_dt = datetime.combine(target_date, dtime(12, 45, 0))
-            slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
-            window_label = f"🇸🇰 SK Obed ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET)"
+        base_dt = datetime.combine(target_date, dtime(19, 45, 0))
+        slot_dt = base_dt + timedelta(minutes=jitter_mins, seconds=jitter_secs)
+        window_label = f"🇸🇰 SK Prime Večer ({slot_dt.hour:02d}:{slot_dt.minute:02d} CET ±{j_mins_limit}m)"
 
     return slot_dt, window_label
+
+
+def create_spoofed_copy_for_slot(master_video: dict, username: str, target_date: date, slot_idx: int) -> tuple[str, str]:
+    """Vygeneruje unikátne spoofnuté video a thumbnail pre konkrétny slot a účet."""
+    storage_type = master_video.get("storage_type", "local")
+    gdrive_id = master_video.get("gdrive_file_id")
+    rand_token = random.randint(1000, 9999)
+    spoofed_filename = f"spoof_{username}_{target_date.strftime('%Y%m%d')}_s{slot_idx+1}_{rand_token}.mp4"
+    spoofed_out_path = os.path.join(SPOOFED_DIR, spoofed_filename)
+    thumb_filename = f"thumb_{os.path.splitext(spoofed_filename)[0]}.jpg"
+    thumb_out_path = os.path.join(THUMBS_DIR, thumb_filename)
+
+    try:
+        if storage_type == "gdrive" and gdrive_id:
+            with gdrive_vault.temporary_master(gdrive_id) as temp_master_path:
+                spoofer.spoof_video_for_account(temp_master_path, spoofed_out_path, region="us")
+                spoofer.generate_thumbnail(spoofed_out_path, thumb_out_path)
+        else:
+            master_path = os.path.join(VAULT_DIR, master_video["filename"])
+            if os.path.isfile(master_path):
+                spoofer.spoof_video_for_account(master_path, spoofed_out_path, region="us")
+                spoofer.generate_thumbnail(spoofed_out_path, thumb_out_path)
+            else:
+                return master_video["filename"], master_video.get("thumbnail_path") or ""
+        return spoofed_filename, thumb_filename
+    except Exception as e:
+        logger.error(f"Chyba pri vytváraní spoof kópie pre @{username}: {e}")
+        return master_video["filename"], master_video.get("thumbnail_path") or ""
 
 
 def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
@@ -641,57 +653,81 @@ def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.
 def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption: str = "", default_hashtags: str = "") -> dict:
     """
     Smart Pool Distribution inšpirovaná GoroTools:
-    Rozdelí nepostnuté klipy z Vaultu naprieč všetkými aktívnymi účtami tak,
-    aby ŽIADNE dva účty nedostali rovnaké video v rovnaký deň.
-    Už uverejnené posty zostanú nedotknuté.
+    - Striktný anti-duplikátový režim pre bežné profily (žiadne dva účty nedostanú rovnaký master klip v rovnaký deň).
+    - Ak klipy vo Vaulte dôjdu, naplánujú sa len dni s dostupnými klipmi a vráti sa kapacitné varovanie.
+    - Podpora Burner profilov: točia 1-2 vybrané videá z Vaultu s denným unikátnym re-spoofom.
+    - Účty bez tokenu sa zaradia tiež s príznakom is_manual_post=1 pre okamžité stiahnutie klipu (.mp4).
     """
     all_accounts = db.get_accounts_with_metrics()
-    active_accounts = [a for a in all_accounts if a.get("has_token") and a.get("health_status") != "error"]
-
-    if not active_accounts:
-        active_accounts = [a for a in all_accounts if a.get("has_token")]
-    if not active_accounts:
-        active_accounts = all_accounts
-
-    if not active_accounts:
+    if not all_accounts:
         return {"status": "error", "message": "Žiadne účty nie sú k dispozícii v systéme."}
 
     vault_videos = db.get_all_vault_videos()
     if not vault_videos:
-        return {"status": "error", "message": "Zásobník videí (Vault) je prázdny! Nahrajte klipy."}
+        return {"status": "error", "message": "Zásobník videí (Vault) je prázdny! Najprv nahrajte klipy."}
 
-    n_accs = len(active_accounts)
-    total_slots_needed = n_accs * days * posts_per_day
+    vault_by_id = {v["id"]: v for v in vault_videos}
+    shuffled_vault = list(vault_videos)
+    random.shuffle(shuffled_vault)
+
+    burner_accounts = [a for a in all_accounts if a.get("is_burner") == 1]
+    regular_accounts = [a for a in all_accounts if a.get("is_burner") != 1]
+
+    n_reg = len(regular_accounts)
+    posts_per_day = max(1, min(3, int(posts_per_day or 1)))
+    days = max(1, min(30, int(days or 7)))
+
+    total_reg_slots_needed = n_reg * days * posts_per_day
     available_videos = len(vault_videos)
-    missing_clips = max(0, total_slots_needed - available_videos)
+    missing_clips = max(0, total_reg_slots_needed - available_videos)
 
     today = datetime.now().date()
     created_posts = []
 
-    # Vymažeme staré nepublikované ready/scheduled posty od dneška, aby sme prerozdelili fond načisto
+    # Vymažeme staré nepublikované ready/scheduled posty od dneška
     with db.get_db() as conn:
         conn.execute("DELETE FROM planned_posts WHERE status IN ('ready', 'scheduled') AND DATE(scheduled_time) >= DATE('now')")
 
-    shuffled_vault = list(vault_videos)
-    random.shuffle(shuffled_vault)
-
+    # 1. Naplánovanie pre bežné účty (striktná alokácia bez duplikátov v rovnaký deň)
+    vid_cursor = 0
     for day_idx in range(days):
         target_date = today + timedelta(days=day_idx)
 
         for slot_idx in range(posts_per_day):
-            for acc_idx, acc in enumerate(active_accounts):
-                vid_step = (day_idx * posts_per_day * n_accs) + (slot_idx * n_accs) + acc_idx
-                vid = shuffled_vault[vid_step % len(shuffled_vault)]
+            # Skontrolujeme, či máme dosť unikátnych klipov pre všetkých regular_accounts v tomto slote
+            if vid_cursor >= len(shuffled_vault):
+                # Klipy sa minuli! Striktný režim: neopakujeme duplikáty
+                break
 
-                slot_time, window_label = calculate_slot_time(target_date, slot_idx, region="us")
-                caption = default_caption or f"Reel vibes ✨ @{acc['username']}"
+            for acc_idx, acc in enumerate(regular_accounts):
+                if vid_cursor >= len(shuffled_vault):
+                    break
+
+                master_video = shuffled_vault[vid_cursor]
+                vid_cursor += 1
+
+                # Vypočítame čas podľa nastavení účtu
+                acc_time = acc.get("default_time") or "19:15"
+                acc_jitter = acc.get("default_jitter") or 10
+                slot_time, window_label = calculate_slot_time(
+                    target_date, slot_idx, region="us",
+                    time_str=acc_time, jitter_minutes=acc_jitter
+                )
+
+                # Generovanie unikátneho spoof súboru a náhľadu
+                spoofed_name, thumb_name = create_spoofed_copy_for_slot(
+                    master_video, acc["username"], target_date, slot_idx
+                )
+
+                caption = acc.get("default_caption") or default_caption or f"Reel vibes ✨ @{acc['username']}"
                 hashtags = default_hashtags or "#reels #trending #viral #fyp"
+                is_manual = 0 if acc.get("has_token") else 1
 
                 post_id = db.add_planned_post(
                     account_id=acc["id"],
-                    vault_video_id=vid["id"],
-                    spoofed_video_path=vid["filename"],
-                    thumbnail_path=vid.get("thumbnail_path") or "",
+                    vault_video_id=master_video["id"],
+                    spoofed_video_path=spoofed_name,
+                    thumbnail_path=thumb_name,
                     scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
                     peak_window=window_label,
                     caption=caption,
@@ -699,27 +735,189 @@ def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption:
                     first_comment=""
                 )
 
+                if is_manual:
+                    with db.get_db() as conn:
+                        conn.execute("UPDATE planned_posts SET is_manual_post = 1 WHERE id = ?", (post_id,))
+
                 created_posts.append({
                     "post_id": post_id,
                     "account": acc["username"],
                     "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "video_name": vid.get("original_name")
+                    "video_name": master_video.get("original_name"),
+                    "is_burner": False,
+                    "is_manual": is_manual
+                })
+
+    # 2. Naplánovanie pre Burner účty (točia svoje zvolené video s denným unikátnym re-spoofom)
+    for b_acc in burner_accounts:
+        burner_vids_str = str(b_acc.get("burner_vault_ids") or "").strip()
+        burner_vid_ids = [int(x.strip()) for x in burner_vids_str.split(",") if x.strip().isdigit()]
+        
+        # Ak nemá vybrané video, použijeme prvé z Vaultu
+        assigned_vids = [vault_by_id[vid] for vid in burner_vid_ids if vid in vault_by_id]
+        if not assigned_vids:
+            assigned_vids = [vault_videos[0]]
+
+        acc_time = b_acc.get("default_time") or "19:15"
+        acc_jitter = b_acc.get("default_jitter") or 10
+
+        for day_idx in range(days):
+            target_date = today + timedelta(days=day_idx)
+            for slot_idx in range(posts_per_day):
+                master_video = assigned_vids[(day_idx * posts_per_day + slot_idx) % len(assigned_vids)]
+
+                slot_time, window_label = calculate_slot_time(
+                    target_date, slot_idx, region="us",
+                    time_str=acc_time, jitter_minutes=acc_jitter
+                )
+
+                spoofed_name, thumb_name = create_spoofed_copy_for_slot(
+                    master_video, b_acc["username"], target_date, slot_idx
+                )
+
+                caption = b_acc.get("default_caption") or default_caption or f"Viral vibes ✨ @{b_acc['username']}"
+                hashtags = default_hashtags or "#reels #trending #viral #fyp"
+                is_manual = 0 if b_acc.get("has_token") else 1
+
+                post_id = db.add_planned_post(
+                    account_id=b_acc["id"],
+                    vault_video_id=master_video["id"],
+                    spoofed_video_path=spoofed_name,
+                    thumbnail_path=thumb_name,
+                    scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    peak_window=window_label,
+                    caption=caption,
+                    hashtags=hashtags,
+                    first_comment=""
+                )
+
+                if is_manual:
+                    with db.get_db() as conn:
+                        conn.execute("UPDATE planned_posts SET is_manual_post = 1 WHERE id = ?", (post_id,))
+
+                created_posts.append({
+                    "post_id": post_id,
+                    "account": b_acc["username"],
+                    "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "video_name": master_video.get("original_name"),
+                    "is_burner": True,
+                    "is_manual": is_manual
                 })
 
     warning_msg = ""
-    if missing_clips > 0:
-        warning_msg = f"Nahrajte ešte {missing_clips} klipov. {n_accs} profilov x {posts_per_day}/deň potrebuje aspoň {total_slots_needed} klipov na {days} dní (máte {available_videos})."
+    if missing_clips > 0 and n_reg > 0:
+        warning_msg = f"Nahrajte ešte {missing_clips} klipov. {n_reg} bežných profilov x {posts_per_day}/deň potrebuje aspoň {total_reg_slots_needed} klipov na {days} dní (k dispozícii je {available_videos})."
 
     return {
         "status": "ok",
-        "message": f"Zásobník bol úspešne prerozdelený ({len(created_posts)} slotov pre {n_accs} profilov na {days} dní bez duplikátov v rovnaký deň).",
+        "message": f"Zásobník bol úspešne prerozdelený ({len(created_posts)} slotov naplánovaných pre {len(all_accounts)} profilov na {days} dní).",
         "warning": warning_msg,
         "created_count": len(created_posts),
-        "accounts_count": n_accs,
+        "accounts_count": len(all_accounts),
+        "regular_count": n_reg,
+        "burner_count": len(burner_accounts),
         "days": days,
         "missing_clips": missing_clips,
-        "total_needed": total_slots_needed,
+        "total_needed": total_reg_slots_needed,
         "available_videos": available_videos
+    }
+
+
+def shuffle_account_unposted(account_id: int) -> dict:
+    """Premieša nepostnuté videá pre daný účet."""
+    posts = db.get_unposted_posts_by_account(account_id)
+    if len(posts) <= 1:
+        return {"status": "ok", "message": "Nie je dosť nepostnutých príspevkov na premiešanie."}
+
+    v_ids = [p["vault_video_id"] for p in posts]
+    random.shuffle(v_ids)
+
+    with db.get_db() as conn:
+        for p, vid in zip(posts, v_ids):
+            conn.execute("UPDATE planned_posts SET vault_video_id = ? WHERE id = ?", (vid, p["id"]))
+
+    return {"status": "ok", "message": f"Úspešne premiešaných {len(posts)} nepostnutých príspevkov pre účet."}
+
+
+def get_planner_summary() -> dict:
+    """Vráti GoroTools-inšpirovaný súhrn pre Plánovač (pozornosť, chýbajúce klipy, účty)."""
+    accounts = db.get_accounts_with_metrics()
+    vault_videos = db.get_all_vault_videos()
+    available_videos = len(vault_videos)
+
+    attention_accounts = []
+    accounts_summary = []
+    total_unposted = 0
+
+    for acc in accounts:
+        aid = acc["id"]
+        unposted = db.get_unposted_posts_by_account(aid)
+        total_unposted += len(unposted)
+
+        has_token = bool(acc.get("has_token"))
+        fb_enabled = bool(acc.get("fb_enabled", 1) and acc.get("fb_page_id"))
+        is_burner = bool(acc.get("is_burner", 0))
+
+        # Kontrola chýbajúcich popiskov
+        missing_caption_count = sum(1 for p in unposted if not p.get("caption") or not p["caption"].strip())
+
+        # Kontrola počtu dní obsahu
+        unique_days = set()
+        for p in unposted:
+            st = p.get("scheduled_time")
+            if st:
+                unique_days.add(st[:10])
+        days_left = len(unique_days)
+
+        issues = []
+        if not has_token:
+            issues.append("Chýba pripojenie k sieti (manuálne postovanie)")
+        if days_left == 0:
+            issues.append("Žiadne naplánované príspevky")
+        elif days_left <= 1:
+            issues.append(f"Zostáva obsah len na {days_left} deň")
+        if missing_caption_count > 0:
+            issues.append(f"{missing_caption_count} bez popisku")
+
+        if issues:
+            attention_accounts.append({
+                "account_id": aid,
+                "username": acc["username"],
+                "issues": issues
+            })
+
+        accounts_summary.append({
+            "id": aid,
+            "username": acc["username"],
+            "has_token": has_token,
+            "fb_page_id": acc.get("fb_page_id"),
+            "fb_enabled": fb_enabled,
+            "x_handle": acc.get("x_handle"),
+            "is_burner": is_burner,
+            "burner_vault_ids": acc.get("burner_vault_ids", ""),
+            "device_model": acc.get("device_model", "Samsung Galaxy S24"),
+            "default_time": acc.get("default_time", "19:15"),
+            "default_jitter": acc.get("default_jitter", 10),
+            "default_caption": acc.get("default_caption", ""),
+            "days_left": days_left,
+            "unposted_count": len(unposted),
+            "missing_caption_count": missing_caption_count,
+            "copies_ready": len(unposted)
+        })
+
+    regular_count = sum(1 for a in accounts if not a.get("is_burner"))
+    needed_for_7_days = regular_count * 7
+    missing_clips = max(0, needed_for_7_days - available_videos)
+
+    return {
+        "status": "ok",
+        "total_accounts": len(accounts),
+        "available_videos": available_videos,
+        "missing_clips": missing_clips,
+        "needed_for_7_days": needed_for_7_days,
+        "attention_count": len(attention_accounts),
+        "attention_accounts": attention_accounts,
+        "accounts": accounts_summary
     }
 
 

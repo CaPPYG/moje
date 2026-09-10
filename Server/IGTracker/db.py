@@ -57,6 +57,18 @@ def init_db():
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN top_countries_json TEXT DEFAULT NULL")
         if "x_handle" not in cols:
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN x_handle TEXT DEFAULT NULL")
+        if "is_burner" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN is_burner INTEGER DEFAULT 0")
+        if "burner_vault_ids" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN burner_vault_ids TEXT DEFAULT ''")
+        if "default_time" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN default_time TEXT DEFAULT '19:15'")
+        if "default_jitter" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN default_jitter INTEGER DEFAULT 10")
+        if "default_caption" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN default_caption TEXT DEFAULT ''")
+        if "device_model" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN device_model TEXT DEFAULT 'Samsung Galaxy S24'")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS snapshots (
@@ -174,6 +186,10 @@ def init_db():
             conn.execute("ALTER TABLE planned_posts ADD COLUMN x_caption TEXT DEFAULT NULL")
         if "jitter_minutes" not in plan_cols:
             conn.execute("ALTER TABLE planned_posts ADD COLUMN jitter_minutes INTEGER DEFAULT 10")
+        if "is_manual_post" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN is_manual_post INTEGER DEFAULT 0")
+        if "is_skipped" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN is_skipped INTEGER DEFAULT 0")
 
         # ── App Settings (Webhook URLs, intervals, etc.) ─────────────────
         conn.execute("""
@@ -332,6 +348,17 @@ def get_accounts_with_metrics():
         # USA audience: buď zo snapshotu alebo priamo z profilu (fallback)
         acc_usa = acc["usa_audience_pct"] if "usa_audience_pct" in acc.keys() else None
 
+        fb_page_id = acc["fb_page_id"] if "fb_page_id" in acc.keys() else None
+        fb_page_name = acc["fb_page_name"] if "fb_page_name" in acc.keys() else None
+        fb_enabled = acc["fb_enabled"] if "fb_enabled" in acc.keys() else 1
+        x_handle = acc["x_handle"] if "x_handle" in acc.keys() else None
+        is_burner = acc["is_burner"] if "is_burner" in acc.keys() and acc["is_burner"] is not None else 0
+        burner_vault_ids = acc["burner_vault_ids"] if "burner_vault_ids" in acc.keys() and acc["burner_vault_ids"] else ""
+        default_time = acc["default_time"] if "default_time" in acc.keys() and acc["default_time"] else "19:15"
+        default_jitter = acc["default_jitter"] if "default_jitter" in acc.keys() and acc["default_jitter"] is not None else 10
+        default_caption = acc["default_caption"] if "default_caption" in acc.keys() and acc["default_caption"] else ""
+        device_model = acc["device_model"] if "device_model" in acc.keys() and acc["device_model"] else "Samsung Galaxy S24"
+
         if latest:
             followers = latest["followers"]
             prev_followers = prev["followers"] if prev else followers
@@ -387,6 +414,16 @@ def get_accounts_with_metrics():
                 "last_post_likes": last_post_likes,
                 "last_post_likes_fmt": format_number(last_post_likes) if last_post_likes > 0 else str(last_post_likes),
                 "usa_audience_pct": round(usa_audience_pct, 1) if usa_audience_pct is not None else None,
+                "fb_page_id": fb_page_id,
+                "fb_page_name": fb_page_name,
+                "fb_enabled": fb_enabled,
+                "x_handle": x_handle,
+                "is_burner": is_burner,
+                "burner_vault_ids": burner_vault_ids,
+                "default_time": default_time,
+                "default_jitter": default_jitter,
+                "default_caption": default_caption,
+                "device_model": device_model,
                 "last_updated": latest["timestamp"]
             }
         else:
@@ -428,6 +465,16 @@ def get_accounts_with_metrics():
                 "last_post_likes": 0,
                 "last_post_likes_fmt": "-",
                 "usa_audience_pct": round(acc_usa, 1) if acc_usa is not None else None,
+                "fb_page_id": fb_page_id,
+                "fb_page_name": fb_page_name,
+                "fb_enabled": fb_enabled,
+                "x_handle": x_handle,
+                "is_burner": is_burner,
+                "burner_vault_ids": burner_vault_ids,
+                "default_time": default_time,
+                "default_jitter": default_jitter,
+                "default_caption": default_caption,
+                "device_model": device_model,
                 "last_updated": None
             }
         result.append(item)
@@ -757,4 +804,65 @@ def delete_planned_post(post_id):
         row = conn.execute("SELECT spoofed_video_path, thumbnail_path FROM planned_posts WHERE id = ?", (post_id,)).fetchone()
         conn.execute("DELETE FROM planned_posts WHERE id = ?", (post_id,))
         return dict(row) if row else None
+
+
+def update_account_planner_settings(account_id, is_burner=None, burner_vault_ids=None,
+                                    default_time=None, default_jitter=None,
+                                    default_caption=None, device_model=None):
+    """Aktualizuje nastavenia plánovača pre konkrétny profil."""
+    updates = []
+    params = []
+    if is_burner is not None:
+        updates.append("is_burner = ?")
+        params.append(int(is_burner))
+    if burner_vault_ids is not None:
+        updates.append("burner_vault_ids = ?")
+        params.append(str(burner_vault_ids))
+    if default_time is not None:
+        updates.append("default_time = ?")
+        params.append(str(default_time))
+    if default_jitter is not None:
+        updates.append("default_jitter = ?")
+        params.append(int(default_jitter))
+    if default_caption is not None:
+        updates.append("default_caption = ?")
+        params.append(str(default_caption))
+    if device_model is not None:
+        updates.append("device_model = ?")
+        params.append(str(device_model))
+
+    if not updates:
+        return
+    params.append(account_id)
+    with get_db() as conn:
+        conn.execute(f"UPDATE tracked_accounts SET {', '.join(updates)} WHERE id = ?", params)
+
+
+def apply_time_to_all_accounts(default_time, default_jitter=10):
+    """Hromadne nastaví čas publikovania a jitter pre všetky účty."""
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE tracked_accounts
+            SET default_time = ?, default_jitter = ?
+        """, (default_time, int(default_jitter)))
+
+
+def skip_planned_post(post_id):
+    """Označí naplánovaný post ako preskočený a zruší jeho publikovanie."""
+    with get_db() as conn:
+        conn.execute("UPDATE planned_posts SET status = 'skipped', is_skipped = 1 WHERE id = ?", (post_id,))
+
+
+def get_unposted_posts_by_account(account_id):
+    """Vráti všetky čakajúce (nepublikované) posty daného účtu zoradené podľa času."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT p.*, v.original_name as video_original_name
+            FROM planned_posts p
+            LEFT JOIN vault_videos v ON v.id = p.vault_video_id
+            WHERE p.account_id = ? AND p.status IN ('ready', 'scheduled')
+            ORDER BY p.scheduled_time ASC
+        """, (account_id,)).fetchall()
+        return [dict(r) for r in rows]
+
 
