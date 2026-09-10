@@ -15,6 +15,7 @@ from datetime import datetime, date, time as dtime, timedelta, timezone
 import db
 import spoofer
 import ig_api
+import fb_api
 import gdrive_vault
 
 logger = logging.getLogger(__name__)
@@ -503,10 +504,10 @@ def schedule_gdrive_reel_set(account_id: int, count: int = 7, start_date_str: st
 
 def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.online/ig") -> dict:
     """
-    Okamžite vypublikuje naplánovaný post cez Instagram Graph API.
-    1. Skontroluje zdravie a token účtu
-    2. Pripraví verejnú URL pre spoofnuté MP4 video
-    3. Zavolá oficiálny Reel publish container
+    Okamžite vypublikuje naplánovaný post cez Instagram Graph API a Facebook Graph API (Reels).
+    1. Skontroluje zdravie a tokeny účtu
+    2. Pripraví verejnú URL pre video
+    3. Publikuje na povolené platformy (Instagram, Facebook)
     4. Aktualizuje stav v databáze (published / failed)
     """
     post = db.get_planned_post_by_id(post_id)
@@ -518,15 +519,9 @@ def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.
     ig_user_id = post.get("ig_user_id")
     username = post.get("username", "")
 
-    if not token or not ig_user_id:
-        err_msg = "Účet nemá pripojený aktívny Meta Access Token alebo Instagram User ID."
-        db.update_planned_post(post_id, status="failed", error_message=err_msg)
-        return {"status": "error", "message": err_msg}
-
     vault_vid = db.get_vault_video_by_id(post["vault_video_id"]) if post.get("vault_video_id") else None
 
     if vault_vid and vault_vid.get("storage_type") == "gdrive":
-        # Video je uložené na Google Drive (5 TB) – streamujeme priamo z Drive bez zaťaženia VPS disku
         public_video_url = f"{base_public_url.rstrip('/')}/api/vault/stream/{vault_vid['id']}/reel.mp4"
     else:
         spoofed_file = post.get("spoofed_video_path", "")
@@ -542,65 +537,191 @@ def publish_planned_post(post_id: int, base_public_url: str = "https://garcarzp.
         else:
             public_video_url = f"{base_public_url.rstrip('/')}/media/vault/spoofed/{spoofed_file}"
 
-    # Zostavenie caption
     caption_text = (post.get("caption") or "").strip()
     hashtags = (post.get("hashtags") or "").strip()
     full_caption = caption_text
     if hashtags:
         full_caption = f"{caption_text}\n\n{hashtags}" if caption_text else hashtags
 
-    logger.info(f"Odosielam Reel pre @{username} (UID: {ig_user_id}): {public_video_url}")
+    post_to_ig = bool(post.get("post_to_ig", 1))
+    post_to_fb = bool(post.get("post_to_fb", 1))
 
-    try:
-        res = ig_api.publish_reel(
-            token=token,
-            ig_user_id=ig_user_id,
-            video_url=public_video_url,
-            caption=full_caption,
-            share_to_feed=True
-        )
+    ig_success = False
+    fb_success = False
+    errors = []
+    ig_media_id = None
+    fb_media_id = None
 
-        if "error" in res:
-            err_str = res["error"]
-            logger.error(f"Zlyhanie publikovania Reelu pre @{username}: {err_str}")
-            db.update_planned_post(post_id, status="failed", error_message=str(err_str))
+    # 1. Publikovanie na Instagram
+    if post_to_ig:
+        if not token or not ig_user_id:
+            errors.append("IG: Účet nemá pripojený aktívny Meta Access Token")
+        else:
+            logger.info(f"Odosielam IG Reel pre @{username} (UID: {ig_user_id}): {public_video_url}")
+            try:
+                res = ig_api.publish_reel(
+                    token=token,
+                    ig_user_id=ig_user_id,
+                    video_url=public_video_url,
+                    caption=full_caption,
+                    share_to_feed=True
+                )
+                if "error" in res:
+                    err_str = res["error"]
+                    logger.error(f"Zlyhanie publikovania IG Reelu pre @{username}: {err_str}")
+                    errors.append(f"IG: {err_str}")
+                else:
+                    ig_success = True
+                    ig_media_id = res.get("id") or res.get("container_id")
+                    logger.info(f"IG Reel úspešne publikovaný pre @{username}! ID: {ig_media_id}")
+            except Exception as e:
+                logger.exception(f"Výnimka pri IG publikovaní: {e}")
+                errors.append(f"IG Exception: {str(e)}")
 
-            # Trigger kontroly zdravia účtu pri zlyhaní
-            import health_monitor
-            health_monitor.check_account_health(account_id)
+    # 2. Publikovanie na Facebook (Pages / Reels)
+    if post_to_fb:
+        fb_page_id = post.get("fb_page_id")
+        fb_token = post.get("fb_access_token") or token
+        fb_enabled = bool(post.get("fb_enabled", 1))
 
-            return {"status": "error", "message": f"Chyba pri publikovaní: {err_str}"}
+        if fb_page_id and fb_token and fb_enabled:
+            logger.info(f"Odosielam FB Reel pre @{username} na Page {fb_page_id}...")
+            try:
+                fb_res = fb_api.publish_facebook_reel(
+                    page_access_token=fb_token,
+                    page_id=fb_page_id,
+                    video_url=public_video_url,
+                    description=full_caption
+                )
+                if fb_res.get("success"):
+                    fb_success = True
+                    fb_media_id = fb_res.get("id")
+                    db.update_planned_post(post_id, fb_status="published", fb_media_id=str(fb_media_id))
+                    logger.info(f"FB Reel úspešne publikovaný pre @{username}! ID: {fb_media_id}")
+                else:
+                    fb_err = fb_res.get("error", "Chyba FB publikovania")
+                    errors.append(f"FB: {fb_err}")
+                    db.update_planned_post(post_id, fb_status="failed", fb_error=str(fb_err))
+            except Exception as e:
+                logger.exception(f"Výnimka pri FB publikovaní: {e}")
+                errors.append(f"FB Exception: {str(e)}")
+                db.update_planned_post(post_id, fb_status="failed", fb_error=str(e))
+        else:
+            db.update_planned_post(post_id, fb_status="skipped", fb_error="Chýba priradená FB Stránka alebo token")
 
-        # Úspešne publikované!
-        media_id = res.get("id") or res.get("container_id")
-        now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    # Vyhodnotenie celkového stavu
+    if (post_to_ig and ig_success) or (post_to_fb and fb_success) or (not post_to_ig and not post_to_fb):
         db.update_planned_post(
             post_id,
             status="published",
             published_at=now_iso,
-            ig_media_id=str(media_id),
-            error_message=None
+            ig_media_id=str(ig_media_id) if ig_media_id else None,
+            fb_media_id=str(fb_media_id) if fb_media_id else None,
+            error_message=" | ".join(errors) if errors else None
         )
-
-        # Označenie master média vo Vaulte ako použité konkrétnym účtom
         if post.get("vault_video_id"):
             try:
                 db.mark_vault_video_used(post["vault_video_id"], username)
-            except Exception as e:
-                logger.warning(f"Chyba pri označovaní vault média ako použité: {e}")
-
-        logger.info(f"Reel úspešne publikovaný pre @{username}! Media ID: {media_id}")
+            except Exception:
+                pass
         return {
             "status": "ok",
-            "message": f"Reel bol úspešne publikovaný na @{username}!",
-            "media_id": media_id,
+            "message": f"Publikovanie dokončené! (IG: {'OK' if ig_success else 'N/A'}, FB: {'OK' if fb_success else 'N/A'})",
+            "ig_media_id": ig_media_id,
+            "fb_media_id": fb_media_id,
             "published_at": now_iso
         }
+    else:
+        err_msg = " | ".join(errors) if errors else "Žiadna vybraná platforma nebola publikovaná."
+        db.update_planned_post(post_id, status="failed", error_message=err_msg)
+        return {"status": "error", "message": err_msg}
 
-    except Exception as e:
-        logger.exception(f"Výnimka pri publikovaní Reelu: {e}")
-        db.update_planned_post(post_id, status="failed", error_message=str(e))
-        return {"status": "error", "message": f"Výnimka pri publikovaní: {str(e)}"}
+
+def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption: str = "", default_hashtags: str = "") -> dict:
+    """
+    Smart Pool Distribution inšpirovaná GoroTools:
+    Rozdelí nepostnuté klipy z Vaultu naprieč všetkými aktívnymi účtami tak,
+    aby ŽIADNE dva účty nedostali rovnaké video v rovnaký deň.
+    Už uverejnené posty zostanú nedotknuté.
+    """
+    all_accounts = db.get_accounts_with_metrics()
+    active_accounts = [a for a in all_accounts if a.get("has_token") and a.get("health_status") != "error"]
+
+    if not active_accounts:
+        active_accounts = [a for a in all_accounts if a.get("has_token")]
+    if not active_accounts:
+        active_accounts = all_accounts
+
+    if not active_accounts:
+        return {"status": "error", "message": "Žiadne účty nie sú k dispozícii v systéme."}
+
+    vault_videos = db.get_all_vault_videos()
+    if not vault_videos:
+        return {"status": "error", "message": "Zásobník videí (Vault) je prázdny! Nahrajte klipy."}
+
+    n_accs = len(active_accounts)
+    total_slots_needed = n_accs * days * posts_per_day
+    available_videos = len(vault_videos)
+    missing_clips = max(0, total_slots_needed - available_videos)
+
+    today = datetime.now().date()
+    created_posts = []
+
+    # Vymažeme staré nepublikované ready/scheduled posty od dneška, aby sme prerozdelili fond načisto
+    with db.get_db() as conn:
+        conn.execute("DELETE FROM planned_posts WHERE status IN ('ready', 'scheduled') AND DATE(scheduled_time) >= DATE('now')")
+
+    shuffled_vault = list(vault_videos)
+    random.shuffle(shuffled_vault)
+
+    for day_idx in range(days):
+        target_date = today + timedelta(days=day_idx)
+
+        for slot_idx in range(posts_per_day):
+            for acc_idx, acc in enumerate(active_accounts):
+                vid_step = (day_idx * posts_per_day * n_accs) + (slot_idx * n_accs) + acc_idx
+                vid = shuffled_vault[vid_step % len(shuffled_vault)]
+
+                slot_time, window_label = calculate_slot_time(target_date, slot_idx, region="us")
+                caption = default_caption or f"Reel vibes ✨ @{acc['username']}"
+                hashtags = default_hashtags or "#reels #trending #viral #fyp"
+
+                post_id = db.add_planned_post(
+                    account_id=acc["id"],
+                    vault_video_id=vid["id"],
+                    spoofed_video_path=vid["filename"],
+                    thumbnail_path=vid.get("thumbnail_path") or "",
+                    scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    peak_window=window_label,
+                    caption=caption,
+                    hashtags=hashtags,
+                    first_comment=""
+                )
+
+                created_posts.append({
+                    "post_id": post_id,
+                    "account": acc["username"],
+                    "scheduled_time": slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "video_name": vid.get("original_name")
+                })
+
+    warning_msg = ""
+    if missing_clips > 0:
+        warning_msg = f"Nahrajte ešte {missing_clips} klipov. {n_accs} profilov x {posts_per_day}/deň potrebuje aspoň {total_slots_needed} klipov na {days} dní (máte {available_videos})."
+
+    return {
+        "status": "ok",
+        "message": f"Zásobník bol úspešne prerozdelený ({len(created_posts)} slotov pre {n_accs} profilov na {days} dní bez duplikátov v rovnaký deň).",
+        "warning": warning_msg,
+        "created_count": len(created_posts),
+        "accounts_count": n_accs,
+        "days": days,
+        "missing_clips": missing_clips,
+        "total_needed": total_slots_needed,
+        "available_videos": available_videos
+    }
+
 
 
 def check_and_publish_scheduled_posts(base_public_url: str = "https://garcarzp.online/ig"):

@@ -133,6 +133,21 @@
                           <i class="fas fa-arrow-up-right-from-square external-link-icon"></i>
                         </a>
                         <span class="account-fullname">{{ acc.full_name }}</span>
+                        <!-- Multi-Platform Badges -->
+                        <div style="display: flex; gap: 6px; align-items: center; margin-top: 3px; font-size: 0.72rem;">
+                          <span title="Instagram: Pripojené" style="color: #e1306c;"><i class="fab fa-instagram"></i></span>
+                          {% if acc.fb_page_id %}
+                            <span title="Facebook Stránka: {{ acc.fb_page_name or acc.fb_page_id }}" style="color: #1877f2;"><i class="fab fa-facebook"></i> {{ acc.fb_page_name or 'FB' }}</span>
+                          {% else %}
+                            <span title="Facebook: Nie je pripojená stránka" style="color: #475569;"><i class="fab fa-facebook"></i></span>
+                          {% endif %}
+                          <span title="X (Twitter): Pripravené pre Fázu 2" style="color: #475569;"><i class="fab fa-x-twitter"></i></span>
+                          {% if acc.usa_audience_pct %}
+                            <span class="badge-usa" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.68rem;" title="Podiel USA publika z Meta Insights">
+                              🇺🇸 {{ acc.usa_audience_pct }}%
+                            </span>
+                          {% endif %}
+                        </div>
                       </div>
                     </div>
                   </td>

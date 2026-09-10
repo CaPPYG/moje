@@ -45,6 +45,18 @@ def init_db():
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN last_health_check TIMESTAMP DEFAULT NULL")
         if "usa_audience_pct" not in cols:
             conn.execute("ALTER TABLE tracked_accounts ADD COLUMN usa_audience_pct REAL DEFAULT NULL")
+        if "fb_page_id" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN fb_page_id TEXT DEFAULT NULL")
+        if "fb_page_name" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN fb_page_name TEXT DEFAULT NULL")
+        if "fb_access_token" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN fb_access_token TEXT DEFAULT NULL")
+        if "fb_enabled" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN fb_enabled INTEGER DEFAULT 1")
+        if "top_countries_json" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN top_countries_json TEXT DEFAULT NULL")
+        if "x_handle" not in cols:
+            conn.execute("ALTER TABLE tracked_accounts ADD COLUMN x_handle TEXT DEFAULT NULL")
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS snapshots (
@@ -143,6 +155,25 @@ def init_db():
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_planned_acc_time ON planned_posts(account_id, scheduled_time)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_planned_status ON planned_posts(status)")
+
+        # Migration for planned_posts (Multi-Platform crossposting & Jitter)
+        plan_cols = [c["name"] for c in conn.execute("PRAGMA table_info(planned_posts)").fetchall()]
+        if "post_to_ig" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN post_to_ig INTEGER DEFAULT 1")
+        if "post_to_fb" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN post_to_fb INTEGER DEFAULT 1")
+        if "post_to_x" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN post_to_x INTEGER DEFAULT 0")
+        if "fb_media_id" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN fb_media_id TEXT DEFAULT NULL")
+        if "fb_status" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN fb_status TEXT DEFAULT 'pending'")
+        if "fb_error" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN fb_error TEXT DEFAULT NULL")
+        if "x_caption" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN x_caption TEXT DEFAULT NULL")
+        if "jitter_minutes" not in plan_cols:
+            conn.execute("ALTER TABLE planned_posts ADD COLUMN jitter_minutes INTEGER DEFAULT 10")
 
         # ── App Settings (Webhook URLs, intervals, etc.) ─────────────────
         conn.execute("""
@@ -615,7 +646,8 @@ def get_planned_posts(date_str=None, account_id=None, status=None):
 def get_planned_post_by_id(post_id):
     with get_db() as conn:
         row = conn.execute("""
-            SELECT p.*, a.username, a.full_name, a.ig_access_token, a.ig_user_id, a.region, a.health_status
+            SELECT p.*, a.username, a.full_name, a.ig_access_token, a.ig_user_id, a.region, a.health_status,
+                   a.fb_page_id, a.fb_page_name, a.fb_access_token, a.fb_enabled
             FROM planned_posts p
             JOIN tracked_accounts a ON a.id = p.account_id
             WHERE p.id = ?
@@ -625,7 +657,10 @@ def get_planned_post_by_id(post_id):
 
 def update_planned_post(post_id, caption=None, hashtags=None, first_comment=None,
                         scheduled_time=None, status=None, published_at=None,
-                        ig_media_id=None, error_message=None):
+                        ig_media_id=None, error_message=None,
+                        post_to_ig=None, post_to_fb=None, post_to_x=None,
+                        fb_media_id=None, fb_status=None, fb_error=None,
+                        x_caption=None, jitter_minutes=None):
     updates = []
     params = []
 
@@ -653,6 +688,30 @@ def update_planned_post(post_id, caption=None, hashtags=None, first_comment=None
     if error_message is not None:
         updates.append("error_message = ?")
         params.append(error_message)
+    if post_to_ig is not None:
+        updates.append("post_to_ig = ?")
+        params.append(int(post_to_ig))
+    if post_to_fb is not None:
+        updates.append("post_to_fb = ?")
+        params.append(int(post_to_fb))
+    if post_to_x is not None:
+        updates.append("post_to_x = ?")
+        params.append(int(post_to_x))
+    if fb_media_id is not None:
+        updates.append("fb_media_id = ?")
+        params.append(fb_media_id)
+    if fb_status is not None:
+        updates.append("fb_status = ?")
+        params.append(fb_status)
+    if fb_error is not None:
+        updates.append("fb_error = ?")
+        params.append(fb_error)
+    if x_caption is not None:
+        updates.append("x_caption = ?")
+        params.append(x_caption)
+    if jitter_minutes is not None:
+        updates.append("jitter_minutes = ?")
+        params.append(int(jitter_minutes))
 
     if not updates:
         return
@@ -663,8 +722,39 @@ def update_planned_post(post_id, caption=None, hashtags=None, first_comment=None
         conn.execute(sql, params)
 
 
+def update_account_fb_details(account_id, fb_page_id, fb_page_name=None, fb_access_token=None, fb_enabled=1):
+    """Aktualizuje informácie o prepojenej Facebook Stránke pre daný účet."""
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE tracked_accounts
+            SET fb_page_id = ?,
+                fb_page_name = COALESCE(?, fb_page_name),
+                fb_access_token = COALESCE(?, fb_access_token),
+                fb_enabled = ?
+            WHERE id = ?
+        """, (fb_page_id or None, fb_page_name or None, fb_access_token or None, int(fb_enabled), account_id))
+
+
+def update_account_demographics(account_id, top_countries_json, usa_audience_pct=None):
+    """Uloží top krajiny a percento US publika z Meta Insights."""
+    with get_db() as conn:
+        if usa_audience_pct is not None:
+            conn.execute("""
+                UPDATE tracked_accounts
+                SET top_countries_json = ?, usa_audience_pct = ?
+                WHERE id = ?
+            """, (top_countries_json, usa_audience_pct, account_id))
+        else:
+            conn.execute("""
+                UPDATE tracked_accounts
+                SET top_countries_json = ?
+                WHERE id = ?
+            """, (top_countries_json, account_id))
+
+
 def delete_planned_post(post_id):
     with get_db() as conn:
         row = conn.execute("SELECT spoofed_video_path, thumbnail_path FROM planned_posts WHERE id = ?", (post_id,)).fetchone()
         conn.execute("DELETE FROM planned_posts WHERE id = ?", (post_id,))
         return dict(row) if row else None
+

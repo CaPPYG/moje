@@ -16,9 +16,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import json
 import db
 import scraper
 import ig_api
+import fb_api
 import health_monitor
 import spoofer
 import vault_planner
@@ -346,8 +348,15 @@ def oauth_connect(force_region=None):
     app_id = US_META_APP_ID if region == "us" else META_APP_ID
     state = f"{region}:{account_id}" if account_id else region
 
-    # Instagram Login scope pre Creator/Business
-    scope = "instagram_business_basic,instagram_business_content_publish"
+    # Instagram Login, Facebook Pages a Demographics scope
+    scope = (
+        "instagram_business_basic,"
+        "instagram_business_content_publish,"
+        "instagram_business_manage_insights,"
+        "pages_show_list,"
+        "pages_read_engagement,"
+        "pages_manage_posts"
+    )
 
     import urllib.parse
     params = {
@@ -501,8 +510,10 @@ def oauth_callback():
         if not target_account and username:
             target_account = db.get_account_by_username(username)
 
+        active_target_id = None
         if target_account:
             db.set_account_token(target_account["id"], final_token, user_id, region=region)
+            active_target_id = target_account["id"]
             saved_name = target_account["username"]
             try:
                 health_monitor.check_account_health(target_account["id"])
@@ -511,6 +522,7 @@ def oauth_callback():
         elif username:
             matched_id = db.add_account(username, full_name=username, avatar_url="")
             db.set_account_token(matched_id, final_token, user_id, region=region)
+            active_target_id = matched_id
             saved_name = username
             try:
                 health_monitor.check_account_health(matched_id)
@@ -518,6 +530,71 @@ def oauth_callback():
                 pass
         else:
             saved_name = user_id or "Neznámy"
+
+        connected_fb_name = None
+        has_demographics = False
+
+        if active_target_id:
+            # 4b. Automatické načítanie Facebook Stránok
+            try:
+                pages = fb_api.get_connected_pages(final_token)
+                if pages:
+                    first_page = pages[0]
+                    p_id = str(first_page.get("id"))
+                    p_name = first_page.get("name")
+                    p_token = first_page.get("access_token")
+                    db.update_account_fb_details(
+                        account_id=active_target_id,
+                        fb_page_id=p_id,
+                        fb_page_name=p_name,
+                        fb_access_token=p_token,
+                        fb_enabled=1
+                    )
+                    connected_fb_name = p_name
+                    logger.info(f"Auto-connected Facebook Page '{p_name}' ({p_id}) to {saved_name}")
+            except Exception as e:
+                logger.warning(f"Could not auto-fetch Facebook pages: {e}")
+
+            # 4c. Automatické načítanie Demografie (USA %, Top krajiny)
+            try:
+                demo_res = httpx.get(
+                    f"https://graph.facebook.com/v21.0/{user_id}/insights",
+                    params={
+                        "metric": "follower_demographics",
+                        "period": "lifetime",
+                        "metric_type": "total_value",
+                        "breakdown": "country",
+                        "access_token": final_token,
+                    },
+                    timeout=12,
+                )
+                demo_data = demo_res.json()
+                if "data" in demo_data and len(demo_data["data"]) > 0:
+                    country_breakdowns = demo_data["data"][0].get("total_value", {}).get("breakdowns", [])
+                    if country_breakdowns and len(country_breakdowns) > 0:
+                        results = country_breakdowns[0].get("results", [])
+                        total_followers_with_country = sum(int(r.get("value", 0)) for r in results)
+                        sorted_results = sorted(results, key=lambda x: int(x.get("value", 0)), reverse=True)
+                        
+                        country_list = []
+                        usa_pct = None
+                        for item in sorted_results[:6]:
+                            c_code = item.get("dimension_values", [""])[0]
+                            val = int(item.get("value", 0))
+                            pct = round((val / total_followers_with_country * 100), 1) if total_followers_with_country > 0 else 0
+                            country_list.append({"country": c_code, "count": val, "pct": pct})
+                            if c_code == "US":
+                                usa_pct = pct
+
+                        db.update_account_demographics(
+                            account_id=active_target_id,
+                            top_countries_json=json.dumps(country_list),
+                            usa_audience_pct=usa_pct
+                        )
+                        has_demographics = True
+                        logger.info(f"Demographics loaded for {saved_name}: USA={usa_pct}%, top={country_list[:3]}")
+            except Exception as e:
+                logger.warning(f"Demographics fetch notice (needs 100+ followers): {e}")
 
         region_badge = "🇺🇸 US Profil (Oddelená US Appka)" if region == "us" else "🇸🇰 Slovenský profil"
 
@@ -552,9 +629,10 @@ def oauth_callback():
                 }
                 .icon { font-size: 54px; margin-bottom: 12px; }
                 h2 { color: #10b981; margin: 0 0 10px 0; font-size: 22px; }
-                p { color: #94a3b8; font-size: 14px; line-height: 1.5; margin: 0 0 22px 0; }
+                p { color: #94a3b8; font-size: 14px; line-height: 1.5; margin: 0 0 18px 0; }
                 .badge { display: inline-block; background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 16px; margin-bottom: 8px; }
                 .region-tag { display: block; font-size: 12px; color: #10b981; font-weight: 600; margin-bottom: 18px; }
+                .features-list { text-align: left; background: #0f172a; border-radius: 14px; padding: 14px; margin-bottom: 20px; font-size: 13px; line-height: 1.6; }
                 .btn { display: inline-block; background: #3b82f6; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; transition: all 0.2s; }
                 .btn:hover { background: #2563eb; }
               </style>
@@ -565,12 +643,28 @@ def oauth_callback():
                 <h2>Instagram Úspešne Prepojený!</h2>
                 <div class="badge">@{{ saved_name }}</div>
                 <div class="region-tag">{{ region_badge }}</div>
-                <p>Účet bol automaticky autorizovaný a nový 60-dňový token bol bezpečne uložený na serveri. Už môžeš toto okno zavrieť.</p>
+                
+                <div class="features-list">
+                  <div style="color: #10b981;">✓ <b>Instagram:</b> Reels publikovanie aktívne</div>
+                  {% if connected_fb_name %}
+                    <div style="color: #38bdf8;">✓ <b>Facebook:</b> Stránka "{{ connected_fb_name }}" spárovaná</div>
+                  {% else %}
+                    <div style="color: #64748b;">⚪ <b>Facebook:</b> Stránku je možné spárovať v admine</div>
+                  {% endif %}
+                  {% if has_demographics %}
+                    <div style="color: #a855f7;">✓ <b>Štatistiky:</b> USA % a Top krajiny načítané</div>
+                  {% else %}
+                    <div style="color: #64748b;">⚪ <b>Štatistiky:</b> Demografia bude dostupná od 100+ followers</div>
+                  {% endif %}
+                </div>
+
+                <p>Nový 60-dňový token bol bezpečne uložený na serveri. Už môžeš toto okno zavrieť.</p>
                 <a href="/ig/" class="btn">Prejsť do IG Trackera</a>
               </div>
             </body>
             </html>
-        """, saved_name=saved_name, region_badge=region_badge)
+        """, saved_name=saved_name, region_badge=region_badge, connected_fb_name=connected_fb_name, has_demographics=has_demographics)
+
 
     except Exception as e:
         logger.exception("OAuth processing error")
@@ -1665,20 +1759,82 @@ def api_planner_post_detail(post_id):
         hashtags=data.get("hashtags"),
         first_comment=data.get("first_comment"),
         scheduled_time=data.get("scheduled_time"),
-        status=data.get("status")
+        status=data.get("status"),
+        post_to_ig=data.get("post_to_ig"),
+        post_to_fb=data.get("post_to_fb"),
+        post_to_x=data.get("post_to_x"),
+        x_caption=data.get("x_caption"),
+        jitter_minutes=data.get("jitter_minutes")
     )
     post = db.get_planned_post_by_id(post_id)
     return jsonify({"status": "ok", "message": "Slot bol aktualizovaný.", "post": post}), 200
 
 
+@app.route("/api/planner/apply-caption-all", methods=["POST"])
+@auth_required
+def api_planner_apply_caption_all():
+    """Aplikuje rovnaký popisok na všetky nadchádzajúce sloty daného účtu."""
+    data = request.get_json(silent=True) or {}
+    account_id = data.get("account_id")
+    caption = data.get("caption", "")
+    hashtags = data.get("hashtags", "")
+
+    if not account_id:
+        return jsonify({"status": "error", "message": "Chýba account_id"}), 400
+
+    with db.get_db() as conn:
+        conn.execute("""
+            UPDATE planned_posts
+            SET caption = ?, hashtags = ?
+            WHERE account_id = ? AND status IN ('ready', 'scheduled')
+        """, (caption, hashtags, account_id))
+
+    return jsonify({"status": "ok", "message": "Popisok bol úspešne aplikovaný na všetky nadchádzajúce sloty."}), 200
+
+
+@app.route("/api/planner/re-spread-pool", methods=["POST"])
+@auth_required
+def api_planner_re_spread_pool():
+    """Smart Pool Distribution inšpirovaná GoroTools (žiadne duplikáty v rovnaký deň)."""
+    data = request.get_json(silent=True) or {}
+    days = int(data.get("days", 7))
+    posts_per_day = int(data.get("posts_per_day", 1))
+
+    res = vault_planner.re_spread_vault_pool(days=days, posts_per_day=posts_per_day)
+    code = 200 if res.get("status") == "ok" else 400
+    return jsonify(res), code
+
+
+@app.route("/api/ig-tracker/<int:account_id>/facebook", methods=["POST"])
+@auth_required
+def api_account_facebook_settings(account_id):
+    """Manuálne nastavenie alebo zmena Facebook Stránky pre daný účet."""
+    data = request.get_json(silent=True) or {}
+    fb_page_id = data.get("fb_page_id")
+    fb_page_name = data.get("fb_page_name")
+    fb_access_token = data.get("fb_access_token")
+    fb_enabled = data.get("fb_enabled", 1)
+
+    db.update_account_fb_details(
+        account_id=account_id,
+        fb_page_id=fb_page_id,
+        fb_page_name=fb_page_name,
+        fb_access_token=fb_access_token,
+        fb_enabled=fb_enabled
+    )
+    acc = db.get_account_by_id(account_id)
+    return jsonify({"status": "ok", "message": "Facebook nastavenia boli uložené.", "account": acc}), 200
+
+
 @app.route("/api/planner/posts/<int:post_id>/publish", methods=["POST"])
 @auth_required
 def api_planner_publish_now(post_id):
-    """Okamžité manuálne publikovanie naplánovaného slotu na Instagram."""
+    """Okamžité manuálne publikovanie naplánovaného slotu na Instagram a Facebook."""
     base_url = os.environ.get("BASE_PUBLIC_URL", "https://garcarzp.online/ig")
     res = vault_planner.publish_planned_post(post_id, base_public_url=base_url)
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code
+
 
 
 # ─── Periodický Background Worker ──────────────────────────────────────────────

@@ -1537,6 +1537,18 @@
                   <span style="font-size:0.75rem; margin-left:2px;" title="Slovenský profil">🇸🇰</span>
                 {% endif %}
               </span>
+              <div style="display: flex; gap: 5px; align-items: center; margin-top: 2px;">
+                <span title="Instagram: Ready" style="color: #e1306c; font-size: 0.72rem;"><i class="fab fa-instagram"></i></span>
+                {% if acc.get('fb_page_id') %}
+                  <span title="Facebook Stránka: {{ acc.get('fb_page_name') or acc.get('fb_page_id') }}" style="color: #1877f2; font-size: 0.72rem;"><i class="fab fa-facebook"></i></span>
+                {% else %}
+                  <span title="Facebook: Nie je pripojená stránka" style="color: #475569; font-size: 0.72rem;"><i class="fab fa-facebook"></i></span>
+                {% endif %}
+                <span title="X (Twitter): Pripravené pre Fázu 2" style="color: #475569; font-size: 0.72rem;"><i class="fab fa-x-twitter"></i></span>
+                {% if acc.get('usa_audience_pct') %}
+                  <span style="font-size: 0.65rem; color: #38bdf8; font-weight: 700; background: rgba(56,189,248,0.15); padding: 1px 4px; border-radius: 4px;">🇺🇸 {{ acc.get('usa_audience_pct') }}%</span>
+                {% endif %}
+              </div>
               {% if acc.get('health_status') == 'healthy' %}
                 <span class="chip-status" style="color: #10b981;"><span class="health-dot healthy"></span> Ready</span>
               {% elif acc.get('health_status') == 'action_required' %}
@@ -1908,6 +1920,29 @@
         </button>
         <button type="button" class="btn-cancel" onclick="openPlanGeneratorModal()" style="font-size: 0.82rem; padding: 9px 13px; color: #94a3b8;" title="Manuálny jednodňový generátor">
           <i class="fas fa-wand-magic-sparkles"></i> Denný Auto-Plan
+        </button>
+      </div>
+    </div>
+
+    <!-- Smart Pool Distribution Banner (Inspired by GoroTools) -->
+    <div id="smartPoolBanner" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(168, 85, 247, 0.08)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 14px; padding: 14px 18px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(168, 85, 247, 0.15); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #c084fc;">
+          <i class="fas fa-network-wired"></i>
+        </div>
+        <div>
+          <div style="font-weight: 700; font-size: 0.92rem; color: #fff; display: flex; align-items: center; gap: 8px;">
+            <span>Smart Pool Distribution</span>
+            <span style="font-size: 0.7rem; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 7px; border-radius: 6px; font-weight: 600;">Anti-Duplicate Pool</span>
+          </div>
+          <div id="smartPoolNoticeText" style="font-size: 0.78rem; color: #94a3b8; margin-top: 2px;">
+            Rozdelí videá z Vaultu tak, aby žiadne 2 profily nepostovali rovnaký master v ten istý deň (s náhodným časovým rozptylom ±10m).
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button" class="btn-save" id="btnReSpreadPool" onclick="triggerReSpreadPool()" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); font-size: 0.82rem; padding: 8px 14px; font-weight: 600;">
+          <i class="fas fa-shuffle"></i> ↻ Prerozdeliť fond (Re-spread Pool)
         </button>
       </div>
     </div>
@@ -4186,15 +4221,36 @@
                 <input type="text" id="planHashtags-${p.id}" class="form-input" style="margin-top: 6px; font-size: 0.82rem;" value="${escapeHtml(p.hashtags || '')}" placeholder="#hashtagy">
               </div>
 
+              <!-- Multi-Platform Crosspost Checkboxes -->
+              <div style="display: flex; gap: 14px; align-items: center; margin-top: 8px; background: rgba(0,0,0,0.25); padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); font-size: 0.8rem;">
+                <span style="color: #94a3b8; font-weight: 600; font-size: 0.74rem;">Cieľové siete:</span>
+                <label style="display: flex; align-items: center; gap: 5px; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="planIg-${p.id}" ${p.post_to_ig !== 0 ? 'checked' : ''} onchange="savePlannedPostPlatforms(${p.id})">
+                  <i class="fab fa-instagram" style="color: #e1306c;"></i> IG Reels
+                </label>
+                <label style="display: flex; align-items: center; gap: 5px; color: #fff; cursor: pointer;">
+                  <input type="checkbox" id="planFb-${p.id}" ${p.post_to_fb !== 0 ? 'checked' : ''} onchange="savePlannedPostPlatforms(${p.id})">
+                  <i class="fab fa-facebook" style="color: #1877f2;"></i> FB Reels
+                </label>
+                <label style="display: flex; align-items: center; gap: 5px; color: #64748b; cursor: not-allowed;" title="Podpora pre X (Twitter) vo Fáze 2">
+                  <input type="checkbox" id="planX-${p.id}" ${p.post_to_x === 1 ? 'checked' : ''} disabled>
+                  <i class="fab fa-x-twitter"></i> X (Fáza 2)
+                </label>
+              </div>
+
               <!-- Action Buttons -->
               <div class="planner-actions" style="margin-top: 8px;">
                 <button type="button" class="btn-cancel" onclick="savePlannedPostCaption(${p.id})" style="padding: 7px 12px; font-size: 0.8rem;">
                   <i class="fas fa-floppy-disk"></i> Uložiť text
                 </button>
 
+                <button type="button" class="btn-cancel" onclick="applyCaptionToAllDays(${p.id}, ${p.account_id})" style="padding: 7px 12px; font-size: 0.8rem; color: #38bdf8;" title="Aplikovať tento popisok na všetky nadchádzajúce dni tohto profilu">
+                  <i class="fas fa-angles-down"></i> ↓ Popisok pre všetky dni
+                </button>
+
                 ${canPublish ? `
                   <button type="button" class="btn-publish-reel-now" id="btnPubNow-${p.id}" onclick="publishPlannedPost(${p.id})" style="padding: 7px 15px; font-size: 0.82rem;">
-                    <i class="fas fa-paper-plane"></i> Publikovať Reel teraz na @${escapeHtml(p.username)}
+                    <i class="fas fa-paper-plane"></i> Publikovať teraz na @${escapeHtml(p.username)}
                   </button>
                 ` : ''}
 
@@ -4208,6 +4264,7 @@
         `;
       }).join('');
     }
+
 
     async function loadPlannerPosts() {
       const container = document.getElementById('plannerTimelineContainer');
@@ -4465,6 +4522,82 @@
         showToast('Chyba komunikácie.', 'error');
       }
     }
+
+    async function savePlannedPostPlatforms(postId) {
+      const igCb = document.getElementById(`planIg-${postId}`);
+      const fbCb = document.getElementById(`planFb-${postId}`);
+      const post_to_ig = igCb && igCb.checked ? 1 : 0;
+      const post_to_fb = fbCb && fbCb.checked ? 1 : 0;
+
+      try {
+        await fetch(`${PREFIX}/api/planner/posts/${postId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ post_to_ig, post_to_fb })
+        });
+        showToast('Cieľové platformy aktualizované.', 'info');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function applyCaptionToAllDays(postId, accountId) {
+      const capEl = document.getElementById(`planCaption-${postId}`);
+      const tagEl = document.getElementById(`planHashtags-${postId}`);
+      const caption = capEl ? capEl.value.trim() : '';
+      const hashtags = tagEl ? tagEl.value.trim() : '';
+
+      if (!confirm('Naozaj chcete použiť tento popisok a hashtagy pre VŠETKY nadchádzajúce dni tohto profilu?')) return;
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/apply-caption-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ account_id: accountId, caption, hashtags })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast('Popisok bol úspešne aplikovaný na všetky nadchádzajúce dni! ✨', 'success');
+          loadPlannerPosts();
+        } else {
+          showToast(data.message || 'Chyba pri aplikovaní popisu.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba spojenia.', 'error');
+      }
+    }
+
+    async function triggerReSpreadPool() {
+      if (!confirm('Naozaj chcete prerozdeliť fond nepostnutých klipov naprieč všetkými profilmi? Systém zabezpečí, že žiadne 2 profily nebudú mať rovnaké video v ten istý deň.')) return;
+
+      const btn = document.getElementById('btnReSpreadPool');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Prerozdeľujem fond...'; }
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/re-spread-pool`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ days: 7, posts_per_day: 1 })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message || 'Fond úspešne prerozdelený!', 'success');
+          if (data.warning) {
+            alert(data.warning);
+          }
+          loadPlannerPosts();
+        } else {
+          showToast(data.message || 'Chyba pri prerozdeľovaní fondu.', 'error');
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('Chyba komunikácie so serverom.', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shuffle"></i> ↻ Prerozdeliť fond (Re-spread Pool)'; }
+      }
+    }
+
 
     // ── Account Reel Set Uploader & Scheduler ──────────────────────────
     // ── Account Reel Set Uploader & Scheduler ──────────────────────────
