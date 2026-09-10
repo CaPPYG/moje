@@ -277,6 +277,10 @@ def api_set_account_token(account_id):
     detected_username = verified.get("username", "")
 
     db.set_account_token(account_id, token, final_user_id)
+    try:
+        health_monitor.check_account_health(account_id)
+    except Exception as e:
+        logger.warning(f"Immediate health check error for account {account_id}: {e}")
     account = db.get_account_by_id(account_id)
 
     return jsonify({
@@ -500,10 +504,18 @@ def oauth_callback():
         if target_account:
             db.set_account_token(target_account["id"], final_token, user_id, region=region)
             saved_name = target_account["username"]
+            try:
+                health_monitor.check_account_health(target_account["id"])
+            except Exception:
+                pass
         elif username:
             matched_id = db.add_account(username, full_name=username, avatar_url="")
             db.set_account_token(matched_id, final_token, user_id, region=region)
             saved_name = username
+            try:
+                health_monitor.check_account_health(matched_id)
+            except Exception:
+                pass
         else:
             saved_name = user_id or "Neznámy"
 
