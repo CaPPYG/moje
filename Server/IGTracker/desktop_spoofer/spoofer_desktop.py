@@ -10,6 +10,7 @@
 """
 
 import os
+import re
 import sys
 import glob
 import time
@@ -233,9 +234,9 @@ def apply_exif(path, region="us"):
 # ─── Pipeline functions ───────────────────────────────────────────────────────
 
 def download_reel(url, out_dir, cookies_path=None, log=None):
-    """Stahuje Reel pomocou yt-dlp. Vracia cestu k suboru alebo None."""
+    """Stahuje Reel pomocou yt-dlp v plnej kvalite bez úprav. Vracia cestu k súboru alebo None."""
     if not has_tool("yt-dlp"):
-        if log: log("  ERROR: yt-dlp nie je nainstalovany! (winget install yt-dlp.yt-dlp)")
+        if log: log("  ERROR: yt-dlp nie je nainštalovaný! (winget install yt-dlp.yt-dlp)")
         return None
     os.makedirs(out_dir, exist_ok=True)
     before = set(os.listdir(out_dir))
@@ -248,6 +249,10 @@ def download_reel(url, out_dir, cookies_path=None, log=None):
         "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
         "--merge-output-format", "mp4",
     ]
+    if not cookies_path or not os.path.isfile(cookies_path):
+        env_c = os.environ.get("CAPPY_REELS_COOKIES")
+        if env_c and os.path.isfile(env_c):
+            cookies_path = env_c
     if cookies_path and os.path.isfile(cookies_path):
         cmd += ["--cookies", cookies_path]
     if has_tool("deno"):
@@ -257,7 +262,7 @@ def download_reel(url, out_dir, cookies_path=None, log=None):
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except subprocess.TimeoutExpired:
-        if log: log("  CHYBA: Casovy limit (10 min) prekroceny.")
+        if log: log("  CHYBA: Časový limit (10 min) prekročený.")
         return None
     except Exception as e:
         if log: log(f"  CHYBA: {e}")
@@ -268,10 +273,27 @@ def download_reel(url, out_dir, cookies_path=None, log=None):
     pick = media or new
     if pick:
         path = os.path.join(out_dir, pick[0])
-        if log: log(f"  OK: Stiahnuty subor: {pick[0]}")
+        if log: log(f"  OK: Stiahnutý súbor: {pick[0]}")
         return path
+
+    # Fallback pre prípad, že video už v zložke bolo stiahnuté predtým
+    if r.returncode == 0:
+        combined = (r.stdout or "") + "\n" + (r.stderr or "")
+        m = re.search(r"\[download\]\s+(.*?)\s+has already been downloaded", combined)
+        if m:
+            fp = m.group(1).strip().strip('"').strip("'")
+            if os.path.isfile(fp):
+                if log: log(f"  OK (už existuje): {os.path.basename(fp)}")
+                return fp
+        m2 = re.search(r"(?:Destination:|Merging formats into)\s*\"?([^\"\r\n]+)", combined)
+        if m2:
+            fp = m2.group(1).strip().strip('"').strip("'")
+            if os.path.isfile(fp):
+                if log: log(f"  OK: {os.path.basename(fp)}")
+                return fp
+
     tail = [ln for ln in (r.stderr or "").splitlines() if ln.strip()]
-    if log: log("  CHYBA: " + (tail[-1] if tail else "neznama chyba"))
+    if log: log("  CHYBA: " + (tail[-1] if tail else "neznáma chyba"))
     return None
 
 
@@ -821,10 +843,14 @@ class ReelsStudio(tk.Tk):
         self.is_running = val
         s1 = "disabled" if val else "normal"
         s2 = "normal" if val else "disabled"
-        self.after(0, lambda: [
-            self._start_btn.configure(state=s1),
-            self._stop_btn.configure(state=s2)
-        ])
+        def _update():
+            if hasattr(self, "_start_btn"):
+                self._start_btn.configure(state=s1)
+            if hasattr(self, "_stop_btn"):
+                self._stop_btn.configure(state=s2)
+            if hasattr(self, "_dl_start_btn"):
+                self._dl_start_btn.configure(state=s1)
+        self.after(0, _update)
 
     def _build_ui(self):
         # 1. Header (Hore)
@@ -969,30 +995,82 @@ class ReelsStudio(tk.Tk):
                        activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w")
 
     def _build_download(self, parent):
-        uc = self._card(parent, "🔗  URL odkaz na Reel")
-        ur = tk.Frame(uc, bg=BG_CARD); ur.pack(fill="x", pady=2)
-        self._entry(ur, self.v_url).pack(side="left", fill="x", expand=True)
+        # 1. Zoznam Reels odkazov (viacriadkový vstup)
+        uc = self._card(parent, "🔗  Zoznam Reels na stiahnutie (vlož odkazy pod seba)")
 
-        dc = self._card(parent, "📁  Vystupna zlozka")
-        dr = tk.Frame(dc, bg=BG_CARD); dr.pack(fill="x", pady=2)
+        info_lbl = tk.Label(
+            uc,
+            text="Vlož odkazy na Reels (každý odkaz na nový riadok).\n"
+                 "Videá sa stiahnu postupne v plnej kvalite bez dodatočných úprav (bez spoofingu).\n"
+                 "Každý úspešne stiahnutý odkaz sa automaticky vymaže zo zoznamu; zlyhané odkazy zostanú.",
+            fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9), justify="left"
+        )
+        info_lbl.pack(anchor="w", pady=(0, 6))
+
+        txt_frame = tk.Frame(uc, bg=BORDER, padx=1, pady=1)
+        txt_frame.pack(fill="x", pady=2)
+
+        self._dl_urls_txt = scrolledtext.ScrolledText(
+            txt_frame, height=8, bg=BG_CARD2, fg=TEXT,
+            font=("Consolas", 10), relief="flat", borderwidth=0,
+            insertbackground=ACCENT, wrap="none"
+        )
+        self._dl_urls_txt.pack(fill="both", expand=True)
+        self._dl_urls_txt.bind("<KeyRelease>", self._update_url_count)
+        self._dl_urls_txt.bind("<FocusIn>", self._update_url_count)
+
+        ctrl_bar = tk.Frame(uc, bg=BG_CARD)
+        ctrl_bar.pack(fill="x", pady=(6, 0))
+
+        self._dl_count_lbl = tk.Label(
+            ctrl_bar, text="Počet odkazov: 0", fg=ACCENT3, bg=BG_CARD,
+            font=("Segoe UI", 9, "bold")
+        )
+        self._dl_count_lbl.pack(side="left")
+
+        self._btn(ctrl_bar, "🗑️ Vyčistiť zoznam", self._clear_urls,
+                  color="#26293d", fg=MUTED).pack(side="right", padx=(4, 0))
+        self._btn(ctrl_bar, "📋 Vložiť zo schránky", self._paste_urls_from_clipboard,
+                  color="#26293d", fg=TEXT).pack(side="right")
+
+        # 2. Výstupná zložka
+        dc = self._card(parent, "📁  Výstupná zložka pre stiahnuté videá")
+        dr = tk.Frame(dc, bg=BG_CARD)
+        dr.pack(fill="x", pady=2)
+        if not self.v_dl_dir.get():
+            self.v_dl_dir.set(os.path.join(os.path.expanduser("~"), "Desktop", "ig_downloads"))
         self._entry(dr, self.v_dl_dir).pack(side="left", fill="x", expand=True)
-        self._btn(dr, "Vybrat...", lambda: self._pick_dir(self.v_dl_dir)).pack(side="left", padx=(6, 0))
+        self._btn(dr, "Vybrať...", lambda: self._pick_dir(self.v_dl_dir)).pack(side="left", padx=(6, 0))
+        self._btn(dr, "📂 Otvoriť", lambda: self._open_dir(self.v_dl_dir),
+                  color="#26293d", fg=TEXT).pack(side="left", padx=(4, 0))
 
-        oc = self._card(parent, "⚙  Moznosti")
-        tk.Checkbutton(oc, text="Po stiahnutí aplikovat Color Grading + Spoof",
-                       variable=self.v_dl_grade, bg=BG_CARD, fg=TEXT,
-                       selectcolor=ACCENT, activebackground=BG_CARD,
-                       activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w", pady=2)
-        tk.Checkbutton(oc, text="Nahrat na Google Drive IG_VAULT po spracovani",
-                       variable=self.v_dl_drive, bg=BG_CARD, fg=TEXT,
-                       selectcolor=ACCENT, activebackground=BG_CARD,
-                       activeforeground=TEXT, font=("Segoe UI", 10)).pack(anchor="w", pady=2)
-        tk.Label(oc, text="Podporovane: Instagram, TikTok, YouTube, Facebook Reels a 1000+ platforiem",
-                 fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 0))
+        # 3. Možnosti
+        oc = self._card(parent, "⚙  Nastavenia sťahovania")
+        tk.Checkbutton(
+            oc, text="Po úspešnom stiahnutí nahrať na Google Drive (IG_VAULT)",
+            variable=self.v_dl_drive, bg=BG_CARD, fg=TEXT,
+            selectcolor=ACCENT, activebackground=BG_CARD,
+            activeforeground=TEXT, font=("Segoe UI", 10)
+        ).pack(anchor="w", pady=2)
+        tk.Label(
+            oc,
+            text="Podporované: Instagram Reels, TikTok, YouTube Shorts, Facebook Reels a 1000+ ďalších.\n"
+                 "Všetky videá sa sťahujú v originálnej kvalite (.mp4) bez spoofovania a bez kódovania.",
+            fg=MUTED, bg=BG_CARD, font=("Segoe UI", 8), justify="left"
+        ).pack(anchor="w", pady=(4, 0))
 
-        self._btn(parent, "⬇  STAHNUT + SPOOFOVAT", self._on_download,
-                  color=ACCENT2, fg="white").pack(pady=14,
-                  ipadx=20, ipady=6)
+        # 4. Spúšťacie tlačidlo v záložke
+        btn_wrap = tk.Frame(parent, bg=BG_DARK)
+        btn_wrap.pack(fill="x", pady=16)
+
+        self._dl_start_btn = tk.Button(
+            btn_wrap, text="⬇  STIAHNUŤ VŠETKY REELS",
+            font=("Segoe UI", 12, "bold"),
+            bg=GREEN, fg="white", activebackground="#25b374",
+            activeforeground="white", relief="flat",
+            padx=28, pady=10, cursor="hand2", command=self._on_download
+        )
+        self._dl_start_btn.pack(anchor="center")
 
     # ── Actions ───────────────────────────────────────────────────────────────
 
@@ -1031,6 +1109,15 @@ class ReelsStudio(tk.Tk):
             self.log(f"CHYBA  Drive: {err or 'Neznama chyba'}")
 
     def _on_start(self):
+        try:
+            active_tab = self._nb.index("current")
+        except Exception:
+            active_tab = 0
+
+        if active_tab == 1:
+            self._on_download()
+            return
+
         in_dir = self.v_input_dir.get().strip()
         if not in_dir or not os.path.isdir(in_dir):
             messagebox.showerror("Chyba", "Vyberte platny vstupny priecinok.")
@@ -1175,10 +1262,90 @@ class ReelsStudio(tk.Tk):
         self.is_running = False
         self.log("Zastavujem po aktualnom video...")
 
+    def _get_urls_list(self):
+        """Vráti zoznam platných URL adries zo vstupného textového poľa."""
+        if not hasattr(self, "_dl_urls_txt"):
+            return []
+        raw = self._dl_urls_txt.get("1.0", "end-1c")
+        urls = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.startswith("http://") or line.startswith("https://"):
+                urls.append(line)
+        return urls
+
+    def _update_url_count(self, event=None):
+        """Aktualizuje počítadlo zadaných URL adries."""
+        try:
+            urls = self._get_urls_list()
+            count = len(urls)
+            if hasattr(self, "_dl_count_lbl"):
+                self._dl_count_lbl.configure(text=f"Počet odkazov: {count}")
+        except Exception:
+            pass
+
+    def _paste_urls_from_clipboard(self):
+        """Vloží odkazy zo schránky do textového poľa."""
+        try:
+            clip = self.clipboard_get()
+            if clip:
+                current = self._dl_urls_txt.get("1.0", "end-1c").strip()
+                if current:
+                    self._dl_urls_txt.insert("end", "\n" + clip.strip() + "\n")
+                else:
+                    self._dl_urls_txt.insert("1.0", clip.strip() + "\n")
+                self._update_url_count()
+        except Exception:
+            messagebox.showwarning("Schránka", "Nepodarilo sa načítať text zo schránky.")
+
+    def _clear_urls(self):
+        """Vymaže textové pole so zoznamom odkazov."""
+        if hasattr(self, "_dl_urls_txt"):
+            self._dl_urls_txt.delete("1.0", "end")
+            self._update_url_count()
+
+    def _open_dir(self, var):
+        """Otvorí zvolenú zložku v prieskumníkovi súborov (Windows Explorer)."""
+        d = var.get().strip() if hasattr(var, "get") else str(var)
+        if not d:
+            d = os.path.join(os.path.expanduser("~"), "Desktop", "ig_downloads")
+        os.makedirs(d, exist_ok=True)
+        try:
+            if sys.platform == "win32":
+                os.startfile(d)
+            else:
+                subprocess.Popen(["xdg-open", d])
+        except Exception as e:
+            self.log(f"CHYBA pri otváraní zložky: {e}")
+
+    def _remove_url_from_text(self, target_url):
+        """Odstráni stiahnutý odkaz z textového poľa priamo za behu."""
+        def _do():
+            try:
+                raw = self._dl_urls_txt.get("1.0", "end-1c")
+                lines = raw.splitlines()
+                target_clean = target_url.strip()
+                new_lines = []
+                removed = False
+                for line in lines:
+                    if not removed and line.strip() == target_clean:
+                        removed = True
+                        continue
+                    new_lines.append(line)
+                self._dl_urls_txt.delete("1.0", "end")
+                if new_lines:
+                    self._dl_urls_txt.insert("1.0", "\n".join(new_lines) + "\n")
+                self._update_url_count()
+            except Exception:
+                pass
+        self.after(0, _do)
+
     def _on_download(self):
-        url = self.v_url.get().strip()
-        if not url or not url.startswith("http"):
-            messagebox.showerror("Chyba", "Zadajte platny URL odkaz.")
+        if self.is_running:
+            return
+        urls = self._get_urls_list()
+        if not urls:
+            messagebox.showerror("Chyba", "Vložte aspoň jeden platný URL odkaz (napr. https://www.instagram.com/reel/...).")
             return
         out_dir = self.v_dl_dir.get().strip()
         if not out_dir:
@@ -1188,45 +1355,73 @@ class ReelsStudio(tk.Tk):
 
         base = os.path.dirname(os.path.abspath(__file__))
         cookies = next((c for c in [
+            os.environ.get("CAPPY_REELS_COOKIES"),
             os.path.join(base, "cookies.txt"),
             os.path.join(base, "..", "data", "cookies.txt"),
-        ] if os.path.isfile(c)), None)
+            os.path.join(base, "..", "cookies.txt"),
+        ] if c and os.path.isfile(c)), None)
 
-        do_grade = self.v_dl_grade.get()
         do_drive = self.v_dl_drive.get() and self.gdrive_svc is not None
         self._set_running(True)
         self.log(f"\n{'='*58}")
-        self.log(f"STIAHNUTIE: {url[:70]}")
+        self.log(f"SŤAHOVANIE REELS: {len(urls)} videí postupne do {out_dir}")
+        self.log(f"Režim: Čisté sťahovanie (bez spoofingu a kódovania)")
         self.log(f"{'='*58}")
 
-        def _worker():
-            dl = download_reel(url, out_dir, cookies_path=cookies, log=self.log)
-            if not dl:
-                self.log("CHYBA: Stiahnutie zlyhalo.")
-                self._set_running(False)
-                return
-            final = dl
-            if do_grade:
-                tok = uuid.uuid4().hex[:6]
-                spoofed = os.path.join(out_dir, f"spoofed_{tok}.mp4")
-                cfg = {"region": "us", "upscale_method": "none",
-                       "color_grade": True, "grain": self.v_grain.get(),
-                       "lut_path": self.v_lut.get().strip() or None}
-                self.log(f"Spracovavam: spoofed_{tok}.mp4")
-                ok = full_pipeline(dl, spoofed, cfg, self.enc_args, log=self.log)
-                if ok:
-                    final = spoofed
-            if do_drive and self.gdrive_svc:
-                self.log("Nahravanie na Drive...")
-                try:
-                    upload_to_drive(self.gdrive_svc, final, os.path.basename(final))
-                    self.log("Drive OK! -> Media Vault -> Synchronizovat")
-                except Exception as e:
-                    self.log(f"Drive CHYBA: {e}")
-            self.log(f"\nHOTOVO: {final}")
-            self._set_running(False)
+        threading.Thread(
+            target=self._download_worker,
+            args=(urls, out_dir, cookies, do_drive),
+            daemon=True
+        ).start()
 
-        threading.Thread(target=_worker, daemon=True).start()
+    def _download_worker(self, urls, out_dir, cookies, do_drive):
+        total = len(urls)
+        success_count = 0
+        failed_count = 0
+        t0 = time.time()
+
+        for idx, url in enumerate(urls):
+            if not self.is_running:
+                self.log("\nSTOP — sťahovanie prerušené používateľom.")
+                break
+
+            self.log(f"\n[{idx + 1}/{total}] Sťahujem: {url}")
+            self._set_progress(idx, total)
+
+            dl = download_reel(url, out_dir, cookies_path=cookies, log=self.log)
+
+            if dl and os.path.exists(dl):
+                success_count += 1
+                fname = os.path.basename(dl)
+                fsize = round(os.path.getsize(dl) / 1048576, 1)
+                self.log(f"  ✓ OK: {fname} ({fsize} MB)")
+
+                # Vymazať úspešný odkaz zo zoznamu v GUI
+                self._remove_url_from_text(url)
+
+                if do_drive and self.gdrive_svc:
+                    self.log(f"  ☁ Uploadujem na Drive: {fname}...")
+                    try:
+                        upload_to_drive(self.gdrive_svc, dl, fname)
+                        self.log("  ☁ Drive upload OK!")
+                    except Exception as e:
+                        self.log(f"  ☁ Drive CHYBA: {e}")
+            else:
+                failed_count += 1
+                self.log(f"  ✗ CHYBA pri sťahovaní: {url} (ponechané v zozname)")
+
+            self._set_progress(idx + 1, total)
+
+        elapsed = round(time.time() - t0, 1)
+        self.log(f"\n{'='*58}")
+        self.log(f"SŤAHOVANIE DOKONČENÉ za {elapsed}s | Úspešné: {success_count}/{total} | Zlyhalo: {failed_count}")
+        if failed_count > 0:
+            self.log(f"⚠ V zozname zostalo {failed_count} odkazov, ktoré zlyhali a môžeš ich skúsiť znova.")
+        self.log(f"Výstupná zložka: {out_dir}")
+        self.log(f"{'='*58}")
+
+        self._set_progress(total, total)
+        self._set_running(False)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
