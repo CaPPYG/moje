@@ -886,6 +886,7 @@ class ReelsStudio(tk.Tk):
         self.v_farm_save_local = tk.BooleanVar(value=True)
         self.farm_accounts     = []
         self.farm_account_vars = {}
+        self.farm_summary      = {}
 
         self._build_ui()
         self.after(300, self._check_tools)
@@ -1548,6 +1549,7 @@ class ReelsStudio(tk.Tk):
         e_pwd.pack(side="left", padx=(6, 12))
         self._farm_load_btn = self._btn(r1, "📥 Načítať profily zo Servera", self._load_farm_profiles, color=ACCENT)
         self._farm_load_btn.pack(side="left")
+        self._btn(r1, "🌐 Otvoriť Web Plánovač", self._open_web_planner, color=BG_CARD2, fg=ACCENT3).pack(side="left", padx=(8, 0))
 
         self._farm_status_lbl = tk.Label(c1, text="Pripájanie k serveru...", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9))
         self._farm_status_lbl.pack(anchor="w", pady=(6, 0))
@@ -1645,8 +1647,14 @@ class ReelsStudio(tk.Tk):
 
         threading.Thread(target=_fetch, daemon=True).start()
 
+    def _open_web_planner(self):
+        import webbrowser
+        url = self.v_farm_url.get().strip().rstrip("/") + "/publisher?tab=planner"
+        webbrowser.open(url)
+
     def _on_farm_profiles_loaded(self, accounts, summary):
         self.farm_accounts = accounts
+        self.farm_summary = summary or {}
         count = len(accounts)
         self.log(f"  ✓ Načítaných {count} profilov zo servera:")
         for acc in accounts:
@@ -1671,6 +1679,9 @@ class ReelsStudio(tk.Tk):
             tk.Label(self._farm_accounts_frame, text="Zatiaľ žiadne profily. Kliknite hore na 'Načítať profily zo Servera'.",
                      fg=MUTED, bg=BG_CARD).pack(anchor="w", pady=4)
             return
+
+        sum_accounts = self.farm_summary.get("accounts", []) if hasattr(self, "farm_summary") and isinstance(self.farm_summary, dict) else []
+        sum_map = {s.get("username"): s for s in sum_accounts if isinstance(s, dict)}
 
         for acc in self.farm_accounts:
             u = acc.get("username")
@@ -1700,6 +1711,14 @@ class ReelsStudio(tk.Tk):
             timing = acc.get("post_times") or "18:00 - 21:00 US"
             tk.Label(row, text=f"⏰ {timing}", fg=MUTED, bg=BG_CARD2,
                      font=("Segoe UI", 8)).pack(side="right")
+
+            acc_s = sum_map.get(u)
+            if acc_s:
+                unp = acc_s.get("unposted_count", 0)
+                dl = acc_s.get("days_left", 0)
+                badge_fg = GREEN if dl >= 7 else "#fbbf24"
+                tk.Label(row, text=f"📦 {unp} klipov ({dl}d zásoba)", fg=badge_fg, bg=BG_CARD2,
+                         font=("Segoe UI", 8, "bold")).pack(side="right", padx=(0, 12))
 
         self._update_farm_calc()
 
