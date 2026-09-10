@@ -2186,8 +2186,17 @@
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 0.75rem; color: #94a3b8;"><i class="fas fa-mobile-screen"></i> Model:</span>
-          <input type="text" id="modalPhoneDeviceInput" class="form-input" style="width: 180px; height: 32px; font-size: 0.8rem; padding: 3px 8px;" placeholder="Samsung Galaxy S24" onchange="savePhoneDeviceModel()">
+          <span style="font-size: 0.75rem; color: #94a3b8;"><i class="fas fa-mobile-screen"></i> Odtlačok:</span>
+          <select id="modalPhoneDeviceSelect" class="form-input" style="height: 32px; font-size: 0.78rem; padding: 2px 8px; width: 190px;" onchange="onPhoneDeviceSelectChange(this.value)">
+            <option value="Nothing Phone (2a)">Nothing Phone (2a) [Main]</option>
+            <option value="Samsung Galaxy S24 Ultra">Samsung Galaxy S24 Ultra</option>
+            <option value="Samsung Galaxy S24">Samsung Galaxy S24</option>
+            <option value="Samsung Galaxy S23">Samsung Galaxy S23</option>
+            <option value="Google Pixel 9 Pro">Google Pixel 9 Pro</option>
+            <option value="Apple iPhone 16 Pro">Apple iPhone 16 Pro</option>
+            <option value="custom">Iný / Vlastný model...</option>
+          </select>
+          <input type="text" id="modalPhoneDeviceInput" class="form-input" style="width: 140px; height: 32px; font-size: 0.8rem; padding: 3px 8px; display: none;" placeholder="Názov modelu" onchange="savePhoneDeviceModel()">
         </div>
       </div>
 
@@ -4690,18 +4699,21 @@
         const capBadge = document.getElementById('capacityBadgePill');
 
         if (capBanner && capDetail) {
+          const accCount = data.total_accounts || 1;
+          const perProfile = Math.floor(data.available_videos / accCount);
           if (data.missing_clips > 0) {
             capBanner.style.background = 'rgba(245, 158, 11, 0.1)';
             capBanner.style.borderColor = 'rgba(245, 158, 11, 0.35)';
             if (capTitle) capTitle.textContent = `⚠️ Nahrajte ešte ${data.missing_clips} klipov do Vaultu`;
             if (capBadge) { capBadge.textContent = 'Kapacita nedosiahnutá'; capBadge.style.color = '#fbbf24'; capBadge.style.background = 'rgba(245, 158, 11, 0.2)'; }
-            capDetail.innerHTML = `${data.regular_count || data.total_accounts} profilov x 1/deň potrebuje aspoň <b>${data.needed_for_7_days} klipov</b> na 7 dní bez duplikátov v rovnaký deň — v zásobníku máte <b>${data.available_videos}</b>.`;
+            const neededPerProfile = Math.ceil(data.needed_for_7_days / accCount);
+            capDetail.innerHTML = `${data.regular_count || data.total_accounts} profilov x 1/deň potrebuje aspoň <b>${data.needed_for_7_days} klipov</b> na 7 dní (cca ${neededPerProfile} na profil) bez duplikátov v rovnaký deň — v zásobníku máte <b>${data.available_videos}</b> (cca <b>${perProfile} videí na profil</b>).`;
           } else {
             capBanner.style.background = 'rgba(16, 185, 129, 0.08)';
             capBanner.style.borderColor = 'rgba(16, 185, 129, 0.3)';
             if (capTitle) capTitle.textContent = '✅ Zásobník videí má dostatočnú kapacitu';
             if (capBadge) { capBadge.textContent = 'Fond pripravený'; capBadge.style.color = '#10b981'; capBadge.style.background = 'rgba(16, 185, 129, 0.2)'; }
-            capDetail.innerHTML = `Máte <b>${data.available_videos} master videí</b> pre ${data.total_accounts} profilov. Každý profil má unikátny obsah bez duplicity.`;
+            capDetail.innerHTML = `Máte <b>${data.available_videos} master videí</b> pre ${data.total_accounts} profilov (cca <b>${perProfile} videí na profil</b> = ${perProfile} dní bez opakovania). Každý profil má unikátny obsah bez duplicity.`;
           }
         }
 
@@ -4804,8 +4816,20 @@
           statusEl.className = 'health-pill warning';
           statusEl.textContent = '📱 MANUÁLNE POSTOVANIE';
         }
+      const dev = acc.device_model || (acc.username.toLowerCase() === 'clarigarzi' ? 'Nothing Phone (2a)' : 'Samsung Galaxy S24');
+      const devSelect = document.getElementById('modalPhoneDeviceSelect');
+      if (devSelect) {
+        const hasOpt = Array.from(devSelect.options).some(o => o.value === dev);
+        if (hasOpt) {
+          devSelect.value = dev;
+          if (devInput) { devInput.style.display = 'none'; devInput.value = dev; }
+        } else {
+          devSelect.value = 'custom';
+          if (devInput) { devInput.style.display = 'inline-block'; devInput.value = dev; }
+        }
+      } else if (devInput) {
+        devInput.value = dev;
       }
-      if (devInput) devInput.value = acc.device_model || 'Samsung Galaxy S24';
 
       // Networks
       const igDesc = document.getElementById('modalPhoneIgDesc');
@@ -5013,10 +5037,35 @@
       }
     }
 
-    async function savePhoneDeviceModel() {
-      if (!currentModalAccount) return;
+    function onPhoneDeviceSelectChange(val) {
       const devInput = document.getElementById('modalPhoneDeviceInput');
-      const device_model = devInput ? devInput.value.trim() : 'Samsung Galaxy S24';
+      if (val === 'custom') {
+        if (devInput) {
+          devInput.style.display = 'inline-block';
+          devInput.focus();
+        }
+      } else {
+        if (devInput) {
+          devInput.style.display = 'none';
+          devInput.value = val;
+        }
+        savePhoneDeviceModel(val);
+      }
+    }
+
+    async function savePhoneDeviceModel(overrideVal) {
+      if (!currentModalAccount) return;
+      const devSelect = document.getElementById('modalPhoneDeviceSelect');
+      const devInput = document.getElementById('modalPhoneDeviceInput');
+      let device_model = overrideVal;
+      if (!device_model) {
+        if (devSelect && devSelect.value !== 'custom') {
+          device_model = devSelect.value;
+        } else if (devInput) {
+          device_model = devInput.value.trim();
+        }
+      }
+      device_model = device_model || 'Samsung Galaxy S24';
 
       try {
         await fetch(`${PREFIX}/api/planner/account/${currentModalAccount.id}/settings`, {
@@ -5024,7 +5073,7 @@
           headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
           body: JSON.stringify({ device_model })
         });
-        showToast('Model zariadenia uložený.', 'info');
+        showToast(`Odtlačok mobilu (${device_model}) uložený.`, 'info');
         loadPlannerSummary();
       } catch (err) {
         console.error(err);

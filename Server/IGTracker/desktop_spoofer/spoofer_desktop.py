@@ -24,6 +24,10 @@ import threading
 import queue
 import concurrent.futures
 import tempfile
+import json
+import ssl
+import urllib.request
+import urllib.parse
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
@@ -49,17 +53,47 @@ BTN_HOVER = "#6a48e8"
 
 # ─── Devices ──────────────────────────────────────────────────────────────────
 DEVICES = [
+    ("Nothing", "Phone (2a)"),  # A065 (MediaTek Dimensity 7200 Pro)
+    ("Samsung", "SM-S928B"),    # Galaxy S24 Ultra
+    ("Samsung", "SM-S921B"),    # Galaxy S24
+    ("Samsung", "SM-S911B"),    # Galaxy S23
+    ("Google", "Pixel 9 Pro"),
+    ("Google", "Pixel 8 Pro"),
     ("Apple", "iPhone 16 Pro"),
     ("Apple", "iPhone 15 Pro Max"),
     ("Apple", "iPhone 15"),
-    ("Apple", "iPhone 14 Pro"),
-    ("Samsung", "SM-S928B"),
-    ("Samsung", "SM-S921B"),
-    ("Samsung", "SM-S911B"),
-    ("Google", "Pixel 9 Pro"),
-    ("Google", "Pixel 8 Pro"),
     ("OnePlus", "CPH2573"),
 ]
+
+
+def resolve_device(device_str=None):
+    """Vráti (make, model, software) pre zadaný reťazec alebo náhodné zariadenie."""
+    if not device_str:
+        make, model = random.choice(DEVICES)
+        if make == "Nothing":
+            return "Nothing", "A065", "Nothing OS 2.6 (Android 14)"
+        return make, model, "Android 14"
+
+    d = device_str.lower()
+    if "nothing" in d or "2a" in d:
+        return "Nothing", "A065", "Nothing OS 2.6 (Android 14)"
+    elif "ultra" in d or "s928" in d:
+        return "Samsung", "SM-S928B", "One UI 6.1 (Android 14)"
+    elif "s24" in d or "s921" in d:
+        return "Samsung", "SM-S921B", "One UI 6.1 (Android 14)"
+    elif "s23" in d or "s911" in d:
+        return "Samsung", "SM-S911B", "One UI 6.1 (Android 14)"
+    elif "pixel" in d or "google" in d:
+        return "Google", "Pixel 9 Pro", "Android 15"
+    elif "iphone" in d or "apple" in d:
+        return "Apple", "iPhone 16 Pro", "iOS 18.2"
+    elif "oneplus" in d:
+        return "OnePlus", "CPH2573", "OxygenOS 14"
+    else:
+        parts = device_str.strip().split(" ", 1)
+        if len(parts) == 2:
+            return parts[0], parts[1], "Android 14"
+        return "Android", device_str.strip(), "Android 14"
 
 CITIES_US = [
     ("Los Angeles (Downtown / DTLA), CA", 34.0407, -118.2468),
@@ -199,10 +233,10 @@ def has_audio_stream(path):
         return False
 
 
-def apply_exif(path, region="us"):
+def apply_exif(path, region="us", target_device=None):
     if not has_tool("exiftool"):
         return None
-    make, model = random.choice(DEVICES)
+    make, model, software = resolve_device(target_device)
     dt = datetime.datetime.now() - datetime.timedelta(days=random.randint(1, 14))
     dt = dt.replace(hour=random.randint(9, 21), minute=random.randint(0, 59),
                     second=random.randint(0, 59))
@@ -216,6 +250,7 @@ def apply_exif(path, region="us"):
         "exiftool", "-overwrite_original",
         f"-Make={make}", f"-Model={model}",
         f"-DeviceMake={make}", f"-DeviceModel={model}",
+        f"-Software={software}",
         f"-CreateDate={dt_str}", f"-ModifyDate={dt_str}", f"-DateTimeOriginal={dt_str}",
         f"-MediaCreateDate={dt_str}", f"-TrackCreateDate={dt_str}",
         f"-ImageUniqueID={uid}",
@@ -226,7 +261,7 @@ def apply_exif(path, region="us"):
     ]
     try:
         subprocess.run(cmd, capture_output=True, text=True, timeout=20)
-        return {"device": f"{make} {model}", "city": city_name}
+        return {"device": f"{make} {model}", "software": software, "city": city_name}
     except Exception:
         return None
 
@@ -497,7 +532,7 @@ def color_grade_and_encode(src, out, is_copy=False, enc_args=None, log=None, **k
     return True
 
 
-def create_copy_with_jitter(main_src, out_copy, region="us", enc_args=None, log=None):
+def create_copy_with_jitter(main_src, out_copy, region="us", target_device=None, enc_args=None, log=None):
     """
     Rýchle vytvorenie kópie z už spracovaného hlavného videa:
     - Aplikuje rýchly náhodný jitter hodnôt (kontrast, jas, gamma, saturácia, hue, colorbalance).
@@ -544,7 +579,7 @@ def create_copy_with_jitter(main_src, out_copy, region="us", enc_args=None, log=
         ok = r2.returncode == 0 and os.path.exists(out_copy)
 
     if ok:
-        meta = apply_exif(out_copy, region=region)
+        meta = apply_exif(out_copy, region=region, target_device=target_device)
         if meta and log:
             log(f"  EXIF: {meta['device']} | GPS: {meta['city']}")
     return ok
@@ -555,6 +590,7 @@ def full_pipeline(src, out, config, enc_args, log=None):
     upscale_method = config.get("upscale_method", "none")
     do_grade = config.get("color_grade", True)
     region = config.get("region", "us")
+    target_device = config.get("device")
 
     current = src
     temps = []
@@ -593,7 +629,7 @@ def full_pipeline(src, out, config, enc_args, log=None):
             return False
 
         # 3. EXIF & GPS
-        meta = apply_exif(out, region=region)
+        meta = apply_exif(out, region=region, target_device=target_device)
         if meta and log:
             log(f"  EXIF: {meta['device']} | GPS: {meta['city']}")
         return True
@@ -733,6 +769,58 @@ class DriveUploadManager:
         self.queue.join()
 
 
+# ─── Server API Client (Pure urllib) ──────────────────────────────────────────
+
+def _urlopen_safe(req, timeout=30):
+    """Bezpečné otvorenie URL s automatickým fallbackom pre Windows PC s chýbajúcim CA zväzkom."""
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except Exception as e:
+        try:
+            ctx = ssl._create_unverified_context()
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+        except Exception:
+            raise e
+
+
+def http_multipart_post(url, fields, files, headers=None, timeout=300):
+    """
+    Vykoná HTTP multipart/form-data POST bez nutnosti inštalácie 'requests' (čistý urllib).
+    fields: dict {field_name: string_value}
+    files: dict {field_name: (filename, bytes_data, content_type)}
+    """
+    boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+    body = bytearray()
+
+    for k, v in fields.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{k}"\r\n\r\n'.encode("utf-8"))
+        body.extend(f"{v}\r\n".encode("utf-8"))
+
+    for k, (fname, fbytes, ctype) in files.items():
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{k}"; filename="{fname}"\r\n'.encode("utf-8"))
+        body.extend(f'Content-Type: {ctype}\r\n\r\n'.encode("utf-8"))
+        body.extend(fbytes)
+        body.extend(b"\r\n")
+
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    req = urllib.request.Request(url, data=bytes(body), method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("User-Agent", "IGDesktopSpoofer/2.0")
+    if headers:
+        for hk, hv in headers.items():
+            req.add_header(hk, hv)
+
+    with _urlopen_safe(req, timeout=timeout) as resp:
+        res_data = resp.read().decode("utf-8")
+        try:
+            return json.loads(res_data)
+        except Exception:
+            return {"status": "ok", "raw": res_data}
+
+
 # ─── GUI ──────────────────────────────────────────────────────────────────────
 
 class ScrollableFrame(tk.Frame):
@@ -789,9 +877,20 @@ class ReelsStudio(tk.Tk):
         self.v_dl_grade   = tk.BooleanVar(value=True)
         self.v_dl_drive   = tk.BooleanVar(value=False)
 
+        # Premenné pre Farmu profilov (Sync)
+        self.v_farm_url        = tk.StringVar(value="https://garcarzp.online/ig")
+        self.v_farm_pwd        = tk.StringVar(value="patrik3924")
+        self.v_farm_dir        = tk.StringVar()
+        self.v_farm_region     = tk.StringVar(value="us")
+        self.v_farm_grade      = tk.BooleanVar(value=True)
+        self.v_farm_save_local = tk.BooleanVar(value=True)
+        self.farm_accounts     = []
+        self.farm_account_vars = {}
+
         self._build_ui()
         self.after(300, self._check_tools)
         self.after(500, self._connect_drive)
+        self.after(800, self._load_farm_profiles)
 
     def _card(self, parent, title=""):
         wrap = tk.Frame(parent, bg=BG_DARK, highlightbackground=BORDER, highlightthickness=1)
@@ -850,6 +949,10 @@ class ReelsStudio(tk.Tk):
                 self._stop_btn.configure(state=s2)
             if hasattr(self, "_dl_start_btn"):
                 self._dl_start_btn.configure(state=s1)
+            if hasattr(self, "_farm_start_btn"):
+                self._farm_start_btn.configure(state=s1)
+            if hasattr(self, "_farm_load_btn"):
+                self._farm_load_btn.configure(state=s1)
         self.after(0, _update)
 
     def _build_ui(self):
@@ -920,8 +1023,10 @@ class ReelsStudio(tk.Tk):
 
         t1 = tk.Frame(self._nb, bg=BG_DARK)
         t2 = tk.Frame(self._nb, bg=BG_DARK)
+        t3 = tk.Frame(self._nb, bg=BG_DARK)
         self._nb.add(t1, text="📦  Batch Spoofing")
         self._nb.add(t2, text="⬇  Stiahnut Reels")
+        self._nb.add(t3, text="📱  Farma profilov (Sync)")
 
         self._t1_scroll = ScrollableFrame(t1, bg=BG_DARK)
         self._t1_scroll.pack(fill="both", expand=True)
@@ -930,6 +1035,10 @@ class ReelsStudio(tk.Tk):
         self._t2_scroll = ScrollableFrame(t2, bg=BG_DARK)
         self._t2_scroll.pack(fill="both", expand=True)
         self._build_download(self._t2_scroll.content)
+
+        self._t3_scroll = ScrollableFrame(t3, bg=BG_DARK)
+        self._t3_scroll.pack(fill="both", expand=True)
+        self._build_farm_sync(self._t3_scroll.content)
 
         # Globálny mousewheel listener – scroluje aktuálne otvorenú záložku
         self.bind_all("<MouseWheel>", self._on_global_mousewheel)
@@ -943,6 +1052,8 @@ class ReelsStudio(tk.Tk):
                 self._t1_scroll.on_mousewheel(event)
             elif active_tab == 1 and hasattr(self, "_t2_scroll"):
                 self._t2_scroll.on_mousewheel(event)
+            elif active_tab == 2 and hasattr(self, "_t3_scroll"):
+                self._t3_scroll.on_mousewheel(event)
         except Exception:
             pass
 
@@ -1421,6 +1532,353 @@ class ReelsStudio(tk.Tk):
         self.log(f"{'='*58}")
 
         self._set_progress(total, total)
+        self._set_running(False)
+
+    # ─── Farm Sync (Tab 3) ───────────────────────────────────────────────────
+
+    def _build_farm_sync(self, parent):
+        # Card 1: Server & Autentifikácia
+        c1 = self._card(parent, "🌐  Server & Autentifikácia (Farma)")
+        r1 = tk.Frame(c1, bg=BG_CARD); r1.pack(fill="x", pady=2)
+        tk.Label(r1, text="Server URL:", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
+        self._entry(r1, self.v_farm_url, width=30).pack(side="left", padx=(6, 12))
+        tk.Label(r1, text="Master heslo:", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9)).pack(side="left")
+        e_pwd = tk.Entry(r1, textvariable=self.v_farm_pwd, bg=BG_CARD2, fg=TEXT, relief="flat",
+                         font=("Segoe UI", 10), insertbackground=ACCENT, show="*", width=14)
+        e_pwd.pack(side="left", padx=(6, 12))
+        self._farm_load_btn = self._btn(r1, "📥 Načítať profily zo Servera", self._load_farm_profiles, color=ACCENT)
+        self._farm_load_btn.pack(side="left")
+
+        self._farm_status_lbl = tk.Label(c1, text="Pripájanie k serveru...", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9))
+        self._farm_status_lbl.pack(anchor="w", pady=(6, 0))
+
+        # Card 2: Vstupné fresh videá
+        c2 = self._card(parent, "📁  Vstupné fresh Reels (Zložka na PC)")
+        r2 = tk.Frame(c2, bg=BG_CARD); r2.pack(fill="x", pady=2)
+        self._entry(r2, self.v_farm_dir).pack(side="left", fill="x", expand=True)
+        self._btn(r2, "Vybrať zložku...", self._pick_farm_dir).pack(side="left", padx=(6, 0))
+        self._btn(r2, "Otvoriť", lambda: self._open_dir(self.v_farm_dir)).pack(side="left", padx=(6, 0))
+
+        self._farm_stats_lbl = tk.Label(c2, text="Zvoľte zložku s fresh videami na PC, ktoré chcete rozdeliť do farmy.",
+                                        fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9))
+        self._farm_stats_lbl.pack(anchor="w", pady=(6, 0))
+
+        # Card 3: Profily farmy a Odtlačky zariadení
+        c3 = self._card(parent, "📱  Profily farmy a Odtlačky zariadení (Server Sync)")
+        info_sub = tk.Label(c3, text="Každý profil má unikátny model mobilu (Nothing Phone 2a pre main, Samsung S24 / Pixel pre ostatné). Videá sa rozdelia rovnomerne.",
+                            fg=MUTED, bg=BG_CARD, font=("Segoe UI", 8))
+        info_sub.pack(anchor="w", pady=(0, 6))
+
+        sel_bar = tk.Frame(c3, bg=BG_CARD); sel_bar.pack(fill="x", pady=(0, 4))
+        self._btn(sel_bar, "✓ Označiť všetky", lambda: self._farm_select_all(True), color=BG_CARD2).pack(side="left", padx=(0, 6))
+        self._btn(sel_bar, "✗ Odznačiť všetky", lambda: self._farm_select_all(False), color=BG_CARD2).pack(side="left")
+
+        self._farm_accounts_frame = tk.Frame(c3, bg=BG_CARD)
+        self._farm_accounts_frame.pack(fill="x", pady=4)
+        tk.Label(self._farm_accounts_frame, text="Zatiaľ žiadne profily. Kliknite hore na 'Načítať profily zo Servera'.",
+                 fg=MUTED, bg=BG_CARD).pack(anchor="w", pady=4)
+
+        # Card 4: Možnosti & Štart
+        c4 = self._card(parent, "⚙  Nastavenia spoofingu a distribúcie")
+        r_opt = tk.Frame(c4, bg=BG_CARD); r_opt.pack(fill="x", pady=2)
+
+        rc = tk.Frame(r_opt, bg=BG_CARD); rc.pack(side="left", fill="both", expand=True)
+        tk.Label(rc, text="Región GPS súradníc:", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self._radio_row(rc, self.v_farm_region, [("us", "🇺🇸  USA (LA + Vegas mestá)"), ("sk", "🇸🇰  Slovensko")])
+
+        rc2 = tk.Frame(r_opt, bg=BG_CARD); rc2.pack(side="left", fill="both", expand=True, padx=(20, 0))
+        tk.Label(rc2, text="Kvalita a Anti-AI Ochrana:", fg=MUTED, bg=BG_CARD, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        tk.Checkbutton(rc2, text="Anti-AI Filmic Color Grading + Noise", variable=self.v_farm_grade,
+                       bg=BG_CARD, fg=TEXT, selectcolor=BG_CARD, activebackground=BG_CARD,
+                       font=("Segoe UI", 9)).pack(anchor="w", pady=1)
+        tk.Checkbutton(rc2, text="Uložiť zálohu na disk (spoofed_farm_export/@user/)", variable=self.v_farm_save_local,
+                       bg=BG_CARD, fg=TEXT, selectcolor=BG_CARD, activebackground=BG_CARD,
+                       font=("Segoe UI", 9)).pack(anchor="w", pady=1)
+
+        # Veľké akčné tlačidlo
+        act_row = tk.Frame(parent, bg=BG_DARK); act_row.pack(fill="x", padx=6, pady=(10, 16))
+        self._farm_start_btn = tk.Button(
+            act_row,
+            text="🚀  SPOOFNÚŤ A ROZDELIŤ NA PROFILY (UPLOAD NA GOOGLE DRIVE)",
+            font=("Segoe UI", 12, "bold"),
+            bg="#059669", fg="white", activebackground="#10b981", activeforeground="white",
+            relief="flat", padx=24, pady=12, cursor="hand2", command=self._on_start_farm_sync
+        )
+        self._farm_start_btn.pack(fill="x")
+
+    def _pick_farm_dir(self):
+        d = filedialog.askdirectory(title="Vybrať priečinok s fresh Reels")
+        if d:
+            self.v_farm_dir.set(d)
+            self._update_farm_calc()
+
+    def _farm_select_all(self, state=True):
+        for var in self.farm_account_vars.values():
+            var.set(state)
+        self._update_farm_calc()
+
+    def _load_farm_profiles(self):
+        url = self.v_farm_url.get().strip().rstrip("/")
+        pwd = self.v_farm_pwd.get().strip()
+        if not url:
+            if hasattr(self, "_farm_status_lbl"):
+                self._farm_status_lbl.configure(text="Zadajte URL servera.", fg=ACCENT2)
+            return
+        api_url = f"{url}/api/planner/desktop-jobs"
+        if hasattr(self, "_farm_status_lbl"):
+            self._farm_status_lbl.configure(text=f"Načítavam profily zo servera: {api_url} ...", fg=MUTED)
+
+        def _fetch():
+            try:
+                req = urllib.request.Request(api_url, headers={"X-Master-Password": pwd, "User-Agent": "IGDesktopSpoofer/2.0"})
+                with _urlopen_safe(req, timeout=15) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                if data.get("status") == "ok":
+                    accounts = data.get("accounts", [])
+                    summary = data.get("summary", {})
+                    self.after(0, lambda: self._on_farm_profiles_loaded(accounts, summary))
+                else:
+                    msg = data.get("message", "Neznáma chyba servera")
+                    self.after(0, lambda: self._farm_status_lbl.configure(text=f"CHYBA: {msg}", fg=ACCENT2))
+            except Exception as e:
+                self.after(0, lambda: self._farm_status_lbl.configure(text=f"CHYBA spojenia: {e}", fg=ACCENT2))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_farm_profiles_loaded(self, accounts, summary):
+        self.farm_accounts = accounts
+        count = len(accounts)
+        self.log(f"  ✓ Načítaných {count} profilov zo servera:")
+        for acc in accounts:
+            u = acc.get("username")
+            dev = acc.get("device_model") or ("Nothing Phone (2a)" if u.lower() == "clarigarzi" else "Samsung Galaxy S24")
+            self.log(f"    • @{u} -> {dev}")
+        if hasattr(self, "_farm_status_lbl"):
+            self._farm_status_lbl.configure(
+                text=f"✅ Načítaných {count} profilov farmy zo servera. (Pripravené na synchronizáciu)",
+                fg=GREEN
+            )
+        self._render_farm_accounts_ui()
+
+    def _render_farm_accounts_ui(self):
+        if not hasattr(self, "_farm_accounts_frame"):
+            return
+        for w in self._farm_accounts_frame.winfo_children():
+            w.destroy()
+
+        self.farm_account_vars = {}
+        if not self.farm_accounts:
+            tk.Label(self._farm_accounts_frame, text="Zatiaľ žiadne profily. Kliknite hore na 'Načítať profily zo Servera'.",
+                     fg=MUTED, bg=BG_CARD).pack(anchor="w", pady=4)
+            return
+
+        for acc in self.farm_accounts:
+            u = acc.get("username")
+            dev = acc.get("device_model") or ("Nothing Phone (2a)" if u.lower() == "clarigarzi" else "Samsung Galaxy S24")
+            var = tk.BooleanVar(value=True)
+            self.farm_account_vars[u] = var
+
+            row = tk.Frame(self._farm_accounts_frame, bg=BG_CARD2, padx=10, pady=6)
+            row.pack(fill="x", pady=2)
+
+            cb = tk.Checkbutton(row, variable=var, bg=BG_CARD2, selectcolor=BG_CARD,
+                                activebackground=BG_CARD2, command=self._update_farm_calc)
+            cb.pack(side="left")
+
+            is_main = (u.lower() == "clarigarzi")
+            badge_text = "★ MAIN" if is_main else "FARM"
+            badge_color = ACCENT if is_main else "#2563eb"
+            tk.Label(row, text=badge_text, fg="white", bg=badge_color,
+                     font=("Segoe UI", 8, "bold"), padx=6, pady=2).pack(side="left", padx=(4, 10))
+
+            tk.Label(row, text=f"@{u}", fg=TEXT, bg=BG_CARD2,
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 10))
+
+            tk.Label(row, text=f"📱 {dev}", fg=ACCENT3, bg=BG_CARD2,
+                     font=("Segoe UI", 9)).pack(side="left", padx=6)
+
+            timing = acc.get("post_times") or "18:00 - 21:00 US"
+            tk.Label(row, text=f"⏰ {timing}", fg=MUTED, bg=BG_CARD2,
+                     font=("Segoe UI", 8)).pack(side="right")
+
+        self._update_farm_calc()
+
+    def _update_farm_calc(self):
+        d = self.v_farm_dir.get().strip()
+        selected_accounts = [acc for acc in self.farm_accounts if self.farm_account_vars.get(acc["username"], tk.BooleanVar(value=True)).get()]
+        acc_count = len(selected_accounts)
+
+        if not d or not os.path.isdir(d):
+            if hasattr(self, "_farm_stats_lbl"):
+                self._farm_stats_lbl.configure(text=f"Vybraných {acc_count} profilov. Zvoľte zložku s fresh videami.", fg=MUTED)
+            return
+
+        videos = [f for f in os.listdir(d) if os.path.splitext(f)[1].lower() in VIDEO_EXTENSIONS]
+        vid_count = len(videos)
+        if acc_count == 0:
+            msg = f"Nájdených {vid_count} videí. (Upozornenie: Žiadny profil nie je vybraný!)"
+            color = ACCENT2
+        else:
+            per_profile = vid_count // acc_count
+            remainder = vid_count % acc_count
+            rem_str = f" (+{remainder} profilov dostane o 1 navyše)" if remainder else ""
+            msg = f"Nájdených {vid_count} fresh videí pre {acc_count} profilov -> cca {per_profile} videí na profil{rem_str}."
+            color = GREEN
+
+        if hasattr(self, "_farm_stats_lbl"):
+            self._farm_stats_lbl.configure(text=msg, fg=color)
+
+    def _on_start_farm_sync(self):
+        if self.is_running:
+            return
+        input_dir = self.v_farm_dir.get().strip()
+        if not input_dir or not os.path.isdir(input_dir):
+            messagebox.showerror("Chyba", "Vyberte platný priečinok s fresh videami.")
+            return
+
+        active_accounts = [acc for acc in self.farm_accounts if self.farm_account_vars.get(acc["username"], tk.BooleanVar(value=False)).get()]
+        if not active_accounts:
+            messagebox.showerror("Chyba", "Vyberte aspoň jeden profil zo zoznamu.")
+            return
+
+        server_url = self.v_farm_url.get().strip().rstrip("/")
+        pwd = self.v_farm_pwd.get().strip()
+        if not server_url:
+            messagebox.showerror("Chyba", "Zadajte URL servera.")
+            return
+
+        region = self.v_farm_region.get().strip()
+        do_grade = self.v_farm_grade.get()
+        save_local = self.v_farm_save_local.get()
+
+        self._set_running(True)
+        threading.Thread(
+            target=self._farm_sync_worker,
+            args=(input_dir, active_accounts, region, do_grade, save_local, server_url, pwd),
+            daemon=True
+        ).start()
+
+    def _farm_sync_worker(self, input_dir, accounts, region, do_grade, save_local, server_url, pwd):
+        files = [os.path.join(input_dir, f) for f in os.listdir(input_dir)
+                 if os.path.splitext(f)[1].lower() in VIDEO_EXTENSIONS]
+        files.sort()
+        tot = len(files)
+        if tot == 0:
+            self.log("CHYBA: V zvolenom priečinku sa nenašli žiadne video súbory.")
+            self._set_running(False)
+            return
+
+        acc_count = len(accounts)
+        self.log(f"\n{'='*62}")
+        self.log(f"🚀 ŠTART FARMA SPOOFING & DRIVE SYNC")
+        self.log(f"Videí: {tot} | Aktívnych profilov: {acc_count} | Región: {region.upper()}")
+        self.log(f"Server: {server_url} (Priečinky Google Drive: @username)")
+        self.log(f"{'='*62}")
+
+        export_base = os.path.join(input_dir, "spoofed_farm_export") if save_local else None
+        if export_base:
+            os.makedirs(export_base, exist_ok=True)
+
+        success_count = 0
+        failed_count = 0
+        t0 = time.time()
+
+        for idx, src_path in enumerate(files):
+            if not self.is_running:
+                self.log("\nSTOP — spracovanie farmy prerušené používateľom.")
+                break
+
+            target_acc = accounts[idx % acc_count]
+            username = target_acc["username"]
+            device_model = target_acc.get("device_model") or ("Nothing Phone (2a)" if username.lower() == "clarigarzi" else "Samsung Galaxy S24")
+
+            base_name = os.path.splitext(os.path.basename(src_path))[0]
+            tok = uuid.uuid4().hex[:6]
+            safe_name = f"spoofed_{username}_{base_name}_{tok}.mp4"
+
+            temp_dir = tempfile.mkdtemp(prefix="farm_spoof_")
+            temp_out = os.path.join(temp_dir, safe_name)
+
+            self.log(f"\n[{idx + 1}/{tot}] Video: {os.path.basename(src_path)}")
+            self.log(f"  👤 Priradené profilu: @{username}")
+            self.log(f"  📱 Odtlačok: {device_model} | 📍 GPS: {region.upper()} mestá")
+            self._set_progress(idx, tot)
+
+            cfg = {
+                "upscale_method": "none",
+                "color_grade": do_grade,
+                "region": region,
+                "device": device_model
+            }
+
+            t_spoof = time.time()
+            ok = full_pipeline(src_path, temp_out, cfg, self.enc_args, log=self.log)
+            dur_spoof = round(time.time() - t_spoof, 1)
+
+            if not ok or not os.path.isfile(temp_out):
+                failed_count += 1
+                self.log(f"  ✗ CHYBA pri lokálnom spoofovaní po {dur_spoof}s")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                continue
+
+            fsize_mb = round(os.path.getsize(temp_out) / 1048576, 1)
+            self.log(f"  ✓ Spoofing hotový za {dur_spoof}s ({fsize_mb} MB)")
+
+            # Lokálna kópia ak je povolená
+            if export_base:
+                prof_dir = os.path.join(export_base, f"@{username}")
+                os.makedirs(prof_dir, exist_ok=True)
+                local_saved = os.path.join(prof_dir, safe_name)
+                try:
+                    shutil.copy2(temp_out, local_saved)
+                    self.log(f"  💾 Lokálna záloha: @{username}/{safe_name}")
+                except Exception as ex:
+                    self.log(f"  ⚠ Záloha na disk zlyhala: {ex}")
+
+            # Upload na server API -> Google Drive @username
+            self.log(f"  ☁ Odosielam na Server API -> Google Drive (@{username})...")
+            try:
+                with open(temp_out, "rb") as vf:
+                    video_bytes = vf.read()
+
+                fields = {
+                    "username": username,
+                    "device_model": device_model,
+                    "caption": f"Reel vibes ✨ @{username}"
+                }
+                files_payload = {
+                    "video": (safe_name, video_bytes, "video/mp4")
+                }
+                headers = {
+                    "X-Master-Password": pwd
+                }
+                api_endpoint = f"{server_url}/api/vault/upload-profile-clip"
+                res = http_multipart_post(api_endpoint, fields, files_payload, headers=headers, timeout=600)
+
+                if res.get("status") == "ok":
+                    success_count += 1
+                    self.log(f"  🎉 DRIVE OK: {res.get('message')}")
+                else:
+                    failed_count += 1
+                    self.log(f"  ✗ SERVER CHYBA: {res.get('message', 'Neznáma chyba')}")
+            except Exception as e:
+                failed_count += 1
+                self.log(f"  ✗ CHYBA UPLOADU na server: {e}")
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+            self._set_progress(idx + 1, tot)
+
+        elapsed = round(time.time() - t0, 1)
+        self.log(f"\n{'='*62}")
+        self.log(f"🏁 FARMA SYNC DOKONČENÝ za {elapsed}s")
+        self.log(f"Úspešne: {success_count}/{tot} | Zlyhalo: {failed_count}")
+        if export_base:
+            self.log(f"Lokálne zálohy: {export_base}")
+        self.log(f"Plánovač: {server_url}/publisher?tab=planner")
+        self.log(f"{'='*62}")
+
+        self._set_progress(tot, tot)
         self._set_running(False)
 
 

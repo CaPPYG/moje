@@ -25,15 +25,24 @@ AKO SPUSTIŤ NA AKOMKOĽVEK POČÍTAČI (WINDOWS):
      * Zvoľte metódu Upscalingu (None / Lanczos / Real-ESRGAN).
      * Kliknite na [ ▶ Spustiť dávkové spracovanie ].
 
-   - ZÁLOŽKA 2: [ 🔗 Stiahnuť Reel z URL ]
+   - ZÁLOŽKA 2: [ ⬇ Stiahnuť Reels ]
      * Vložte odkaz na Reel (Instagram, TikTok, YouTube).
-     * Nastavte Color Grading & Grain.
-     * Kliknite na [ ⬇ Stiahnuť & Spracovať Reel ].
+     * Kliknite na [ ⬇ Stiahnuť Reels ] pre čisté stiahnutie.
+
+   - ZÁLOŽKA 3: [ 📱 Farma profilov (Sync) ]
+     * Kliknite na [ 📥 Načítať profily zo Servera ] (server URL: https://garcarzp.online/ig).
+     * Okamžite sa načítajú všetky farmárske profily spolu s ich presnými odtlačkami mobilov
+       (@clarigarzi: Nothing Phone 2a [Main], ostatné profily: Samsung Galaxy S24, Pixel 9, atď.).
+     * Zvoľte zložku na PC s balíkom nových fresh Reels.
+     * Nástroj automaticky rovnomerne rozdelí videá medzi profily (napr. 14 videí = 2 na profil).
+     * Kliknite na [ 🚀 SPOOFNÚŤ A ROZDELIŤ NA PROFILY (UPLOAD NA GOOGLE DRIVE) ].
+     * Každé video dostane hardvérový odtlačok konkrétneho mobilu, Anti-AI filmový grading a unikátne US GPS.
+     * Nástroj klipy automaticky cez Server API odošle priamo na Google Drive do priečinkov
+       IG_VAULT/@username a zaradí ich do Plánovača na najbližšie dni.
 
 3. SYNCHRONIZÁCIA DO WEBOVÉHO ŠTÚDIA:
-   - Ak je zaškrtnuté "Nahrať na Google Drive (IG_VAULT)", videá sa nahrajú na váš Drive.
-   - Na webe https://garcarzp.online/ig/publisher v záložke "Media Vault"
-     kliknite na [ 🔄 Synchronizovať z Google Drive ] a videá sú okamžite pripravené!
+   - Klipy z Farma profilov (Záložka 3) sa do Plánovača a na Drive zaradia úplne automaticky!
+   - Kedykoľvek si ich môžete pozrieť na webe https://garcarzp.online/ig/publisher?tab=planner
 
 --------------------------------------------------------------------------------
 POŽIADAVKY (AK CHÝBAJÚ NA NOVOM PC):

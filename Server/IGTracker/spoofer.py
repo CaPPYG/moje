@@ -25,17 +25,46 @@ ALL_MEDIA_EXT = VIDEO_EXT | IMAGE_EXT
 
 # Databáza zariadení pre realistický device fingerprinting
 DEVICES = [
-    ("Apple", "iPhone 16 Pro"),
-    ("Apple", "iPhone 15 Pro"),
-    ("Apple", "iPhone 15"),
-    ("Apple", "iPhone 14 Pro"),
-    ("Samsung", "SM-S928B"),  # Galaxy S24 Ultra
-    ("Samsung", "SM-S921B"),  # Galaxy S24
-    ("Samsung", "SM-S911B"),  # Galaxy S23
+    ("Nothing", "Phone (2a)"),  # A065 (MediaTek Dimensity 7200 Pro)
+    ("Samsung", "SM-S928B"),    # Galaxy S24 Ultra
+    ("Samsung", "SM-S921B"),    # Galaxy S24
+    ("Samsung", "SM-S911B"),    # Galaxy S23
     ("Google", "Pixel 9 Pro"),
     ("Google", "Pixel 8 Pro"),
+    ("Apple", "iPhone 16 Pro"),
+    ("Apple", "iPhone 15 Pro"),
     ("OnePlus", "CPH2573"),
 ]
+
+
+def resolve_device(device_str=None):
+    """Vráti (make, model, software) pre zadaný reťazec alebo náhodné zariadenie."""
+    if not device_str:
+        make, model = random.choice(DEVICES)
+        if make == "Nothing":
+            return "Nothing", "A065", "Nothing OS 2.6 (Android 14)"
+        return make, model, "Android 14"
+
+    d = device_str.lower()
+    if "nothing" in d or "2a" in d:
+        return "Nothing", "A065", "Nothing OS 2.6 (Android 14)"
+    elif "ultra" in d or "s928" in d:
+        return "Samsung", "SM-S928B", "One UI 6.1 (Android 14)"
+    elif "s24" in d or "s921" in d:
+        return "Samsung", "SM-S921B", "One UI 6.1 (Android 14)"
+    elif "s23" in d or "s911" in d:
+        return "Samsung", "SM-S911B", "One UI 6.1 (Android 14)"
+    elif "pixel" in d or "google" in d:
+        return "Google", "Pixel 9 Pro", "Android 15"
+    elif "iphone" in d or "apple" in d:
+        return "Apple", "iPhone 16 Pro", "iOS 18.2"
+    elif "oneplus" in d:
+        return "OnePlus", "CPH2573", "OxygenOS 14"
+    else:
+        parts = device_str.strip().split(" ", 1)
+        if len(parts) == 2:
+            return parts[0], parts[1], "Android 14"
+        return "Android", device_str.strip(), "Android 14"
 
 # GPS lokácie pre US profily (výhradne náhodné hotspoty v Los Angeles, CA a Las Vegas, NV)
 CITIES_US = [
@@ -211,14 +240,14 @@ def build_copy_jitter_filter() -> str:
     )
 
 
-def apply_exif_metadata(file_path: str, region: str = "us"):
+def apply_exif_metadata(file_path: str, region: str = "us", device: str = None):
     """Zapíše čisté EXIF metadáta a device fingerprint pomocou exiftool."""
     if not check_tool("exiftool"):
         logger.warning("exiftool nie je dostupný, preskakujem zápis metadát.")
         return
 
-    # 1. Výber náhodného smartfónu
-    make, model = random.choice(DEVICES)
+    # 1. Výber konkrétneho alebo náhodného smartfónu
+    make, model, software = resolve_device(device)
 
     # 2. Náhodný čas vytvorenia (v rozmedzí posledných 1 až 14 dní)
     days_ago = random.randint(1, 14)
@@ -244,6 +273,7 @@ def apply_exif_metadata(file_path: str, region: str = "us"):
         "exiftool", "-overwrite_original",
         f"-Make={make}", f"-Model={model}",
         f"-DeviceMake={make}", f"-DeviceModel={model}",
+        f"-Software={software}",
         f"-CreateDate={dt_str}", f"-ModifyDate={dt_str}", f"-DateTimeOriginal={dt_str}",
         f"-MediaCreateDate={dt_str}", f"-TrackCreateDate={dt_str}",
         f"-ImageUniqueID={uid}",
@@ -259,13 +289,14 @@ def apply_exif_metadata(file_path: str, region: str = "us"):
 
     meta = {
         "device": f"{make} {model}",
+        "software": software,
         "city": city_name,
         "lat": j_lat,
         "lon": j_lon,
         "created_at": dt_str,
         "unique_id": uid
     }
-    logger.info(f"Aplikované EXIF metadáta pre {os.path.basename(file_path)}: {make} {model}, GPS: {city_name} ({j_lat}, {j_lon})")
+    logger.info(f"Aplikované EXIF metadáta pre {os.path.basename(file_path)}: {make} {model} ({software}), GPS: {city_name} ({j_lat}, {j_lon})")
     return meta
 
 
@@ -275,6 +306,7 @@ def spoof_video_for_account(
     region: str = "us",
     color_grade: bool = True,
     is_copy: bool = False,
+    device: str = None,
     **kwargs,
 ) -> dict:
     """
@@ -284,7 +316,7 @@ def spoof_video_for_account(
     - CAS 0.4 adaptivne doostrenie
     - Cinematic EQ (contrast=1.06, brightness=-0.01, gamma=0.97, saturation=1.03)
     - CPU libx264 -crf 18 -preset fast
-    - -map_metadata -1 + nove EXIF a GPS pre dany profil.
+    - -map_metadata -1 + nove EXIF a GPS pre dany profil a dany model zariadenia.
     """
     if not os.path.isfile(src_video_path):
         raise FileNotFoundError(f"Master video neexistuje: {src_video_path}")
@@ -322,10 +354,10 @@ def spoof_video_for_account(
         if r.returncode != 0 or not os.path.exists(out_spoofed_path):
             raise RuntimeError(f"ffmpeg zlyhal: {r.stderr[-400:]}")
 
-    meta = apply_exif_metadata(out_spoofed_path, region=region)
+    meta = apply_exif_metadata(out_spoofed_path, region=region, device=device)
     logger.info(
         f"Video spoofnute ({os.path.getsize(out_spoofed_path)} B, "
-        f"region={region.upper()}, GPS={meta.get('city') if meta else 'N/A'})"
+        f"region={region.upper()}, device={meta.get('device') if meta else device}, GPS={meta.get('city') if meta else 'N/A'})"
     )
     return meta or {}
 

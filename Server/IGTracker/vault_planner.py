@@ -80,8 +80,8 @@ def calculate_slot_time(target_date: date, slot_index: int = 0, region: str = "u
     return slot_dt, window_label
 
 
-def create_spoofed_copy_for_slot(master_video: dict, username: str, target_date: date, slot_idx: int) -> tuple[str, str]:
-    """Vygeneruje unikátne spoofnuté video a thumbnail pre konkrétny slot a účet."""
+def create_spoofed_copy_for_slot(master_video: dict, username: str, target_date: date, slot_idx: int, device_model: str = None) -> tuple[str, str]:
+    """Vygeneruje unikátne spoofnuté video a thumbnail pre konkrétny slot a účet s odtlačkom daného mobilu."""
     storage_type = master_video.get("storage_type", "local")
     gdrive_id = master_video.get("gdrive_file_id")
     rand_token = random.randint(1000, 9999)
@@ -93,18 +93,18 @@ def create_spoofed_copy_for_slot(master_video: dict, username: str, target_date:
     try:
         if storage_type == "gdrive" and gdrive_id:
             with gdrive_vault.temporary_master(gdrive_id) as temp_master_path:
-                spoofer.spoof_video_for_account(temp_master_path, spoofed_out_path, region="us")
+                spoofer.spoof_video_for_account(temp_master_path, spoofed_out_path, region="us", device=device_model)
                 spoofer.generate_thumbnail(spoofed_out_path, thumb_out_path)
         else:
             master_path = os.path.join(VAULT_DIR, master_video["filename"])
             if os.path.isfile(master_path):
-                spoofer.spoof_video_for_account(master_path, spoofed_out_path, region="us")
+                spoofer.spoof_video_for_account(master_path, spoofed_out_path, region="us", device=device_model)
                 spoofer.generate_thumbnail(spoofed_out_path, thumb_out_path)
             else:
                 return master_video["filename"], master_video.get("thumbnail_path") or ""
         return spoofed_filename, thumb_filename
     except Exception as e:
-        logger.error(f"Chyba pri vytváraní spoof kópie pre @{username}: {e}")
+        logger.error(f"Chyba pri vytváraní spoof kópie pre @{username} ({device_model}): {e}")
         return master_video["filename"], master_video.get("thumbnail_path") or ""
 
 
@@ -716,7 +716,8 @@ def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption:
 
                 # Generovanie unikátneho spoof súboru a náhľadu
                 spoofed_name, thumb_name = create_spoofed_copy_for_slot(
-                    master_video, acc["username"], target_date, slot_idx
+                    master_video, acc["username"], target_date, slot_idx,
+                    device_model=acc.get("device_model")
                 )
 
                 caption = acc.get("default_caption") or default_caption or f"Reel vibes ✨ @{acc['username']}"
@@ -772,7 +773,8 @@ def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption:
                 )
 
                 spoofed_name, thumb_name = create_spoofed_copy_for_slot(
-                    master_video, b_acc["username"], target_date, slot_idx
+                    master_video, b_acc["username"], target_date, slot_idx,
+                    device_model=b_acc.get("device_model")
                 )
 
                 caption = b_acc.get("default_caption") or default_caption or f"Viral vibes ✨ @{b_acc['username']}"

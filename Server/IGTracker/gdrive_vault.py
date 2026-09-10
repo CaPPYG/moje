@@ -210,9 +210,42 @@ def get_storage_status():
         }
 
 
-def upload_file_to_drive(local_path, filename, mime_type="video/mp4", delete_local=True):
+def get_or_create_profile_folder(username, svc=None):
     """
-    Nahrá lokálny video súbor do priečinka IG_VAULT na Google Drive.
+    Nájde alebo vytvorí priečinok pre profil vo vnútri IG_VAULT (napr. '@clarigarzi').
+    Vracia folder_id.
+    """
+    if svc is None:
+        svc = get_drive_service()
+    if not svc:
+        return None
+    parent_id, _ = get_vault_folder_id(svc)
+    if not parent_id:
+        return None
+
+    clean_name = f"@{username.lstrip('@')}"
+    try:
+        q = f"mimeType='application/vnd.google-apps.folder' and trashed=false and name='{clean_name}' and '{parent_id}' in parents"
+        res = svc.files().list(q=q, fields="files(id, name)").execute()
+        files = res.get("files", [])
+        if files:
+            return files[0]["id"]
+
+        meta = {
+            "name": clean_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id]
+        }
+        folder = svc.files().create(body=meta, fields="id").execute()
+        return folder.get("id")
+    except Exception as e:
+        logger.error(f"Chyba pri hľadaní/vytváraní priečinka {clean_name} na Google Drive: {e}")
+        return parent_id
+
+
+def upload_file_to_drive(local_path, filename, mime_type="video/mp4", delete_local=True, folder_id=None):
+    """
+    Nahrá lokálny video súbor do priečinka IG_VAULT (alebo špecifického profilového priečinka) na Google Drive.
     Ak delete_local=True, po úspešnom nahratí IHNEĎ zmaže lokálny súbor z disku,
     aby na VPS neostalo žiadne zabraté miesto!
     """
@@ -220,13 +253,15 @@ def upload_file_to_drive(local_path, filename, mime_type="video/mp4", delete_loc
     if not svc:
         raise RuntimeError("Google Drive služba nie je dostupná.")
 
-    folder_id, _ = get_vault_folder_id(svc)
-    if not folder_id:
+    target_folder_id = folder_id
+    if not target_folder_id:
+        target_folder_id, _ = get_vault_folder_id(svc)
+    if not target_folder_id:
         raise RuntimeError("Priečinok IG_VAULT na Google Drive nebol nájdený.")
 
     file_metadata = {
         "name": filename,
-        "parents": [folder_id]
+        "parents": [target_folder_id]
     }
 
     media = MediaFileUpload(local_path, mimetype=mime_type, resumable=True)

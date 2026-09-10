@@ -3,9 +3,9 @@ import sys
 import time
 import threading
 from functools import wraps
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
-
+import shutil
 import io
 import tempfile
 from flask import Flask, render_template, render_template_string, request, jsonify, redirect, url_for, session, flash, send_from_directory, Response, stream_with_context, send_file
@@ -1914,6 +1914,134 @@ def api_planner_publish_now(post_id):
     res = vault_planner.publish_planned_post(post_id, base_public_url=base_url)
     code = 200 if res.get("status") == "ok" else 400
     return jsonify(res), code
+
+
+@app.route("/api/planner/desktop-jobs", methods=["GET"])
+@auth_required
+def api_planner_desktop_jobs():
+    """Vráti zoznam profilov, ich modely zariadení a stav plánovača pre Desktop Spoofer."""
+    accounts = db.get_accounts_with_metrics()
+    summary = vault_planner.get_planner_summary()
+    return jsonify({
+        "status": "ok",
+        "accounts": accounts,
+        "summary": summary
+    }), 200
+
+
+@app.route("/api/vault/upload-profile-clip", methods=["POST"])
+@auth_required
+def api_vault_upload_profile_clip():
+    """
+    Prijíma naspoofované video priamo z Desktop Spoofera a streamuje ho na Google Drive
+    do dedikovaného priečinka daného profilu (@username).
+    """
+    if "video" not in request.files and "file" not in request.files:
+        return jsonify({"status": "error", "message": "Nebol priložený súbor videa."}), 400
+
+    file = request.files.get("video") or request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"status": "error", "message": "Neplatný súbor."}), 400
+
+    username = (request.form.get("username") or "").strip().lstrip("@")
+    account_id = request.form.get("account_id")
+    device_model = request.form.get("device_model") or "Samsung Galaxy S24"
+    caption = request.form.get("caption") or ""
+    scheduled_time_str = request.form.get("scheduled_time")
+
+    if not username and account_id:
+        acc = db.get_account_by_id(int(account_id))
+        if acc:
+            username = acc["username"]
+
+    if not username:
+        return jsonify({"status": "error", "message": "Chýba identifikátor profilu (username)."}), 400
+
+    account = db.get_account_by_username(username)
+    if not account:
+        return jsonify({"status": "error", "message": f"Profil @{username} nebol nájdený v systéme."}), 404
+
+    temp_dir = tempfile.mkdtemp(prefix="spoofer_upload_")
+    orig_filename = os.path.basename(file.filename)
+    safe_filename = f"{username}_{int(time.time())}_{orig_filename}"
+    temp_path = os.path.join(temp_dir, safe_filename)
+    file.save(temp_path)
+
+    try:
+        # 1. Získanie alebo vytvorenie profilového priečinka na Google Drive
+        profile_folder_id = gdrive_vault.get_or_create_profile_folder(username)
+
+        # 2. Generovanie náhľadu
+        thumb_filename = f"thumb_{os.path.splitext(safe_filename)[0]}.jpg"
+        thumb_out_path = os.path.join(THUMBS_DIR, thumb_filename)
+        spoofer.generate_thumbnail(temp_path, thumb_out_path)
+
+        # 3. Upload na Google Drive (s automatickým zmazaním temp súboru na VPS)
+        drive_res = gdrive_vault.upload_file_to_drive(
+            temp_path, safe_filename, folder_id=profile_folder_id, delete_local=True
+        )
+        gdrive_file_id = drive_res.get("id")
+
+        # 4. Zaregistrovanie do vault_videos
+        vault_id = db.add_vault_video(
+            filename=safe_filename,
+            original_name=orig_filename,
+            file_size=drive_res.get("size") or 0,
+            storage_type="gdrive",
+            gdrive_file_id=gdrive_file_id,
+            folder_name=f"@{username}",
+            thumbnail_path=thumb_filename
+        )
+
+        # 5. Zaradenie do plánovača
+        if scheduled_time_str:
+            try:
+                slot_time = datetime.strptime(scheduled_time_str, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                slot_time = datetime.now() + timedelta(days=1)
+        else:
+            unposted = db.get_unposted_posts_by_account(account["id"])
+            if unposted:
+                last_time_str = unposted[-1].get("scheduled_time")
+                try:
+                    last_dt = datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
+                    slot_time = last_dt + timedelta(days=1)
+                except Exception:
+                    slot_time = datetime.now() + timedelta(days=1)
+            else:
+                slot_time = datetime.now() + timedelta(days=1)
+
+        post_caption = caption or account.get("default_caption") or f"Reel vibes ✨ @{username}"
+        is_manual = 0 if account.get("has_token") else 1
+
+        post_id = db.add_planned_post(
+            account_id=account["id"],
+            vault_video_id=vault_id,
+            spoofed_video_path=safe_filename,
+            thumbnail_path=thumb_filename,
+            scheduled_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+            peak_window="US Peak",
+            caption=post_caption,
+            hashtags="#reels #viral #trending #fyp",
+            first_comment=""
+        )
+        if is_manual:
+            with db.get_db() as conn:
+                conn.execute("UPDATE planned_posts SET is_manual_post = 1 WHERE id = ?", (post_id,))
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        return jsonify({
+            "status": "ok",
+            "message": f"Klip pre @{username} bol úspešne uložený na Google Drive a naplánovaný na {slot_time.strftime('%Y-%m-%d %H:%M')}.",
+            "gdrive_file_id": gdrive_file_id,
+            "post_id": post_id,
+            "vault_id": vault_id
+        }), 200
+
+    except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        logger.error(f"Chyba pri spracovaní uploadu pre @{username}: {e}")
+        return jsonify({"status": "error", "message": f"Zlyhanie pri spracovaní videa: {e}"}), 500
 
 
 
