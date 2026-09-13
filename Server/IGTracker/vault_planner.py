@@ -20,6 +20,32 @@ import gdrive_vault
 
 logger = logging.getLogger(__name__)
 
+import threading
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo("Europe/Bratislava")
+except Exception:
+    LOCAL_TZ = None
+
+
+def get_local_now() -> datetime:
+    """Vráti aktuálny lokálny čas (Europe/Bratislava) bez tzinfo pre porovnanie v DB."""
+    if LOCAL_TZ:
+        return datetime.now(LOCAL_TZ).replace(tzinfo=None)
+    return datetime.now()
+
+
+def get_local_date() -> date:
+    """Vráti aktuálny lokálny dátum (Europe/Bratislava)."""
+    if LOCAL_TZ:
+        return datetime.now(LOCAL_TZ).date()
+    return datetime.now().date()
+
+
+# Zámok a evidencia postov, ktoré sa práve odosielajú na Meta API (ochrana pred duplicitným odoslaním)
+_publishing_post_ids = set()
+_publishing_lock = threading.Lock()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VAULT_DIR = os.path.join(BASE_DIR, "data", "vault")
 SPOOFED_DIR = os.path.join(VAULT_DIR, "spoofed")
@@ -123,9 +149,9 @@ def generate_auto_plan(target_date_str: str = None, posts_per_account: int = 1,
         try:
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
         except ValueError:
-            target_date = datetime.now().date()
+            target_date = get_local_date()
     else:
-        target_date = datetime.now().date()
+        target_date = get_local_date()
 
     posts_per_account = max(1, min(2, int(posts_per_account)))
 
@@ -294,9 +320,9 @@ def schedule_account_reel_set(account_id: int, saved_video_files: list,
         try:
             curr_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         except ValueError:
-            curr_date = datetime.now().date()
+            curr_date = get_local_date()
     else:
-        curr_date = datetime.now().date()
+        curr_date = get_local_date()
 
     created_posts = []
     current_seq_idx = 0
@@ -456,9 +482,9 @@ def schedule_gdrive_reel_set(account_id: int, count: int = 7, start_date_str: st
         try:
             curr_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
         except ValueError:
-            curr_date = datetime.now().date()
+            curr_date = get_local_date()
     else:
-        curr_date = datetime.now().date()
+        curr_date = get_local_date()
 
     created_posts = []
     current_seq_idx = 0
@@ -681,12 +707,11 @@ def re_spread_vault_pool(days: int = 7, posts_per_day: int = 1, default_caption:
     available_videos = len(vault_videos)
     missing_clips = max(0, total_reg_slots_needed - available_videos)
 
-    today = datetime.now().date()
+    today = get_local_date()
     created_posts = []
 
-    # Vymažeme staré nepublikované ready/scheduled posty od dneška
-    with db.get_db() as conn:
-        conn.execute("DELETE FROM planned_posts WHERE status IN ('ready', 'scheduled') AND DATE(scheduled_time) >= DATE('now')")
+    # Vymažeme staré nepublikované ready/scheduled posty a uvoľníme videá späť do Vaultu
+    db.clear_scheduled_posts(include_failed=False)
 
     # 1. Naplánovanie pre bežné účty (striktná alokácia bez duplikátov v rovnaký deň)
     vid_cursor = 0
@@ -928,9 +953,9 @@ def check_and_publish_scheduled_posts(base_public_url: str = "https://garcarzp.o
     """
     Periodická kontrola naplánovaných postov.
     Ak nastal čas scheduled_time a status je 'ready' alebo 'scheduled',
-    automaticky odošle Reel na Meta Graph API.
+    automaticky odošle Reel na Meta Graph API v samostatnom vlákne bez blokovania.
     """
-    now_dt = datetime.now()
+    now_dt = get_local_now()
     with db.get_db() as conn:
         rows = conn.execute("""
             SELECT id, scheduled_time, status 
@@ -939,6 +964,7 @@ def check_and_publish_scheduled_posts(base_public_url: str = "https://garcarzp.o
         """).fetchall()
 
     for r in rows:
+        post_id = r["id"]
         try:
             sched_str = r["scheduled_time"]
             if not sched_str:
@@ -949,10 +975,26 @@ def check_and_publish_scheduled_posts(base_public_url: str = "https://garcarzp.o
                 sched_dt = datetime.strptime(sched_str[:19], "%Y-%m-%d %H:%M:%S")
 
             if sched_dt <= now_dt:
-                logger.info(f"Auto-Planner: Nastal naplánovaný čas pre post #{r['id']} ({sched_str}). Publikujem...")
-                publish_planned_post(r["id"], base_public_url=base_public_url)
+                with _publishing_lock:
+                    if post_id in _publishing_post_ids:
+                        logger.debug(f"Post #{post_id} sa už odosiela v inom vlákne, preskakujem.")
+                        continue
+                    _publishing_post_ids.add(post_id)
+
+                def _do_publish(pid=post_id, s_str=sched_str):
+                    try:
+                        logger.info(f"Auto-Planner: Nastal naplánovaný čas pre post #{pid} ({s_str}). Publikujem...")
+                        publish_planned_post(pid, base_public_url=base_public_url)
+                    except Exception as pe:
+                        logger.error(f"Auto-Planner scheduler chyba pri publikovaní postu #{pid}: {pe}")
+                    finally:
+                        with _publishing_lock:
+                            _publishing_post_ids.discard(pid)
+
+                t = threading.Thread(target=_do_publish, daemon=True, name=f"PublishPost-{post_id}")
+                t.start()
         except Exception as e:
-            logger.error(f"Auto-Planner scheduler chyba pri poste #{r['id']}: {e}")
+            logger.error(f"Auto-Planner scheduler chyba pri poste #{post_id}: {e}")
 
 
 def start_background_planner_worker(interval_seconds: int = 60, base_public_url: str = "https://garcarzp.online/ig"):

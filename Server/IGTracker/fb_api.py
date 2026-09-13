@@ -98,24 +98,44 @@ def publish_facebook_reel(page_access_token: str, page_id: str, video_url: str, 
             logger.error(f"Facebook Reel transfer error: {err_msg}")
             return _publish_fallback_video(page_access_token, page_id, video_url, description)
 
-        # Fáza 3: Dokončenie publikovania
+        # Fáza 3: Dokončenie publikovania (s adaptívnym čakaním na spracovanie videa)
         logger.info(f"Facebook Reels: Dokončujem publikovanie pre video_id={video_id}...")
-        r_finish = httpx.post(
-            f"{FB_API_BASE}/{page_id}/video_reels",
-            params={
-                "upload_phase": "finish",
-                "video_id": video_id,
-                "video_state": "PUBLISHED",
-                "description": description,
-                "access_token": page_access_token,
-            },
-            timeout=30,
-        )
-        finish_data = r_finish.json()
-        if "error" in finish_data:
-            err_msg = finish_data["error"].get("message", "Facebook Reel finish failed")
-            logger.error(f"Facebook Reel finish error: {err_msg}")
-            return {"error": err_msg}
+        finish_data = {}
+        max_finish_attempts = 6
+        import time
+
+        for attempt in range(1, max_finish_attempts + 1):
+            try:
+                r_finish = httpx.post(
+                    f"{FB_API_BASE}/{page_id}/video_reels",
+                    params={
+                        "upload_phase": "finish",
+                        "video_id": video_id,
+                        "video_state": "PUBLISHED",
+                        "description": description,
+                        "access_token": page_access_token,
+                    },
+                    timeout=30,
+                )
+                finish_data = r_finish.json()
+            except Exception as fe:
+                logger.warning(f"Chyba siete pri Facebook finish pokuse {attempt}: {fe}")
+                time.sleep(4)
+                continue
+
+            if "error" not in finish_data and (finish_data.get("success") or finish_data.get("id")):
+                break
+
+            err_obj = finish_data.get("error", {})
+            err_msg = err_obj.get("message", "Facebook Reel finish failed")
+            err_subcode = err_obj.get("error_subcode")
+            logger.warning(f"Facebook Reel finish pokus {attempt}/{max_finish_attempts}: {err_msg} (subcode={err_subcode})")
+
+            if attempt < max_finish_attempts:
+                time.sleep(5)
+            else:
+                logger.error(f"Facebook Reel finish definitívne zlyhal: {err_msg}")
+                return {"error": err_msg}
 
         logger.info(f"Facebook Reel úspešne publikovaný! ID: {video_id}")
         return {

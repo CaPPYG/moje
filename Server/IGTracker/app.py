@@ -1127,10 +1127,15 @@ def stream_vault_video(video_id, filename=None):
             if request.method == "HEAD":
                 resp = Response("", status=drive_res.status_code, mimetype=content_type)
                 resp.headers["Accept-Ranges"] = "bytes"
+                resp.headers["Cache-Control"] = "public, max-age=86400"
                 if "Content-Length" in drive_res.headers:
                     resp.headers["Content-Length"] = drive_res.headers["Content-Length"]
                 if "Content-Range" in drive_res.headers:
                     resp.headers["Content-Range"] = drive_res.headers["Content-Range"]
+                if "ETag" in drive_res.headers:
+                    resp.headers["ETag"] = drive_res.headers["ETag"]
+                if "Last-Modified" in drive_res.headers:
+                    resp.headers["Last-Modified"] = drive_res.headers["Last-Modified"]
                 return resp
 
             def generate_stream():
@@ -1140,10 +1145,15 @@ def stream_vault_video(video_id, filename=None):
 
             resp = Response(stream_with_context(generate_stream()), status=drive_res.status_code, mimetype=content_type)
             resp.headers["Accept-Ranges"] = "bytes"
+            resp.headers["Cache-Control"] = "public, max-age=86400"
             if "Content-Length" in drive_res.headers:
                 resp.headers["Content-Length"] = drive_res.headers["Content-Length"]
             if "Content-Range" in drive_res.headers:
                 resp.headers["Content-Range"] = drive_res.headers["Content-Range"]
+            if "ETag" in drive_res.headers:
+                resp.headers["ETag"] = drive_res.headers["ETag"]
+            if "Last-Modified" in drive_res.headers:
+                resp.headers["Last-Modified"] = drive_res.headers["Last-Modified"]
             return resp
 
         except Exception as e:
