@@ -1098,6 +1098,13 @@ def stream_vault_video(video_id, filename=None):
         import requests
         from google.auth.transport.requests import Request as GRequest
 
+        # Proaktívna kontrola a obnova platnosti tokenu pred začatím streamovania
+        if (not creds.valid or creds.expired) and creds.refresh_token:
+            try:
+                creds.refresh(GRequest())
+            except Exception as e:
+                logger.warning(f"Chyba pri proaktívnom refreshnutí drive tokenu: {e}")
+
         drive_url = f"https://www.googleapis.com/drive/v3/files/{video['gdrive_file_id']}?alt=media"
         req_headers = {"Authorization": f"Bearer {creds.token}"}
 
@@ -1108,7 +1115,7 @@ def stream_vault_video(video_id, filename=None):
 
         try:
             drive_res = requests.get(drive_url, headers=req_headers, stream=True, timeout=30)
-            if drive_res.status_code == 401:
+            if drive_res.status_code == 401 and creds.refresh_token:
                 # Obnovenie tokenu v prípade expirácie
                 creds.refresh(GRequest())
                 req_headers["Authorization"] = f"Bearer {creds.token}"
@@ -1127,7 +1134,7 @@ def stream_vault_video(video_id, filename=None):
                 return resp
 
             def generate_stream():
-                for chunk in drive_res.iter_content(chunk_size=1024 * 256):
+                for chunk in drive_res.iter_content(chunk_size=1024 * 1024):
                     if chunk:
                         yield chunk
 
@@ -1797,6 +1804,29 @@ def api_planner_apply_caption_all():
         """, (caption, hashtags, account_id))
 
     return jsonify({"status": "ok", "message": "Popisok bol úspešne aplikovaný na všetky nadchádzajúce sloty."}), 200
+
+
+@app.route("/api/planner/clear-scheduled", methods=["POST"])
+@auth_required
+def api_planner_clear_scheduled():
+    """Zmaže všetky naplánované/pripravené posty (alebo pre konkrétny účet) a uvoľní videá vo Vaulte."""
+    data = request.get_json(silent=True) or request.form or {}
+    account_id = data.get("account_id")
+    if account_id:
+        try:
+            account_id = int(account_id)
+        except (ValueError, TypeError):
+            account_id = None
+
+    include_failed = str(data.get("include_failed", "true")).lower() in ("true", "1", "yes")
+    result = db.clear_scheduled_posts(account_id=account_id, include_failed=include_failed)
+    del_count = result.get("deleted_count", 0)
+    rel_count = result.get("released_videos", 0)
+    return jsonify({
+        "status": "ok",
+        "message": f"Vymazaných {del_count} naplánovaných postov. Uvoľnených {rel_count} videí do Vaultu.",
+        "details": result
+    }), 200
 
 
 @app.route("/api/planner/re-spread-pool", methods=["POST"])

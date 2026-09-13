@@ -2030,6 +2030,9 @@
         <button type="button" class="btn-cancel" onclick="loadPlannerPosts()" title="Obnoviť rozvrh" style="padding: 10px 14px; font-size: 0.85rem;">
           <i class="fas fa-rotate"></i> Obnoviť
         </button>
+        <button type="button" class="btn-cancel" onclick="clearAllScheduledPosts()" style="font-size: 0.82rem; padding: 9px 13px; color: #f87171; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08);" title="Vymaže všetky naplánované posty a uvoľní videá späť do Vaultu">
+          <i class="fas fa-trash-can"></i> Vymazať naplánované
+        </button>
         <button type="button" class="btn-cancel" onclick="openPlanGeneratorModal()" style="font-size: 0.82rem; padding: 9px 13px; color: #94a3b8;" title="Manuálny jednodňový generátor">
           <i class="fas fa-wand-magic-sparkles"></i> Denný Auto-Plan
         </button>
@@ -5155,6 +5158,32 @@
       showToast('Plán profilu bol vyčistený.', 'info');
       loadPlannerPosts();
       setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+    }
+
+    async function clearAllScheduledPosts() {
+      if (!confirm('Naozaj chcete vymazať VŠETKY naplánované a zlyhané Reels pre všetky profily?\n\nPriradené videá sa automaticky uvoľnia a vrátia späť do Vaultu ako voľné.')) return;
+
+      try {
+        const res = await fetch(`${PREFIX}/api/planner/clear-scheduled`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Master-Password': PWD },
+          body: JSON.stringify({ include_failed: true })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'ok') {
+          showToast(data.message || 'Naplánované príspevky boli úspešne vymazané.', 'success');
+          loadPlannerPosts();
+          if (typeof loadPlannerSummary === 'function') loadPlannerSummary();
+          if (typeof loadVaultVideos === 'function') loadVaultVideos();
+          if (currentModalAccount) {
+            setTimeout(() => renderModalPhoneDays(currentModalAccount.id), 600);
+          }
+        } else {
+          showToast(data.message || 'Chyba pri mazaní naplánovaných príspevkov.', 'error');
+        }
+      } catch (err) {
+        showToast('Chyba komunikácie so serverom.', 'error');
+      }
     }
 
     async function skipPlannerPost(postId) {

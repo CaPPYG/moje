@@ -975,9 +975,70 @@ def update_account_demographics(account_id, top_countries_json, usa_audience_pct
 
 def delete_planned_post(post_id):
     with get_db() as conn:
-        row = conn.execute("SELECT spoofed_video_path, thumbnail_path FROM planned_posts WHERE id = ?", (post_id,)).fetchone()
+        row = conn.execute("SELECT vault_video_id, spoofed_video_path, thumbnail_path, status FROM planned_posts WHERE id = ?", (post_id,)).fetchone()
         conn.execute("DELETE FROM planned_posts WHERE id = ?", (post_id,))
+        if row and row["vault_video_id"]:
+            vid = row["vault_video_id"]
+            # Ak už nie je v inom published post, skontroluj
+            other = conn.execute("SELECT count(*) FROM planned_posts WHERE vault_video_id = ? AND status = 'published'", (vid,)).fetchone()[0]
+            if other == 0:
+                conn.execute("UPDATE vault_videos SET status = 'available', tag = 'Voľné', used_count = 0, used_by_accounts = '' WHERE id = ?", (vid,))
         return dict(row) if row else None
+
+
+def clear_scheduled_posts(account_id=None, include_failed=True):
+    """
+    Vymaže všetky naplánované (ready) a voliteľne zlyhané (failed) sloty.
+    Uvoľní priradené videá z Vaultu späť na 'available', pokiaľ neboli publikované v inom slote.
+    Vráti počet zmazaných slotov a počet uvoľnených videí.
+    """
+    with get_db() as conn:
+        statuses = "('ready', 'failed')" if include_failed else "('ready')"
+        acc_filter = " AND account_id = ?" if account_id else ""
+        params = [account_id] if account_id else []
+
+        posts = conn.execute(f"""
+            SELECT id, vault_video_id, spoofed_video_path
+            FROM planned_posts
+            WHERE status IN {statuses} {acc_filter}
+        """, params).fetchall()
+
+        if not posts:
+            return {"deleted_count": 0, "released_videos": 0}
+
+        post_ids = [p["id"] for p in posts]
+        vault_ids = [p["vault_video_id"] for p in posts if p["vault_video_id"]]
+
+        # 1. Zmazať posty z planned_posts
+        placeholders = ",".join("?" * len(post_ids))
+        conn.execute(f"DELETE FROM planned_posts WHERE id IN ({placeholders})", post_ids)
+
+        # 2. Uvoľniť vault_videos, ktoré už nemajú žiadny published post
+        released_count = 0
+        if vault_ids:
+            unique_vault_ids = list(set(vault_ids))
+            v_placeholders = ",".join("?" * len(unique_vault_ids))
+            pub_rows = conn.execute(f"""
+                SELECT DISTINCT vault_video_id
+                FROM planned_posts
+                WHERE status = 'published' AND vault_video_id IN ({v_placeholders})
+            """, unique_vault_ids).fetchall()
+            published_ids = {r[0] for r in pub_rows}
+
+            to_release = [vid for vid in unique_vault_ids if vid not in published_ids]
+            if to_release:
+                rel_placeholders = ",".join("?" * len(to_release))
+                conn.execute(f"""
+                    UPDATE vault_videos
+                    SET status = 'available', tag = 'Voľné', used_count = 0, used_by_accounts = ''
+                    WHERE id IN ({rel_placeholders})
+                """, to_release)
+                released_count = len(to_release)
+
+        return {
+            "deleted_count": len(post_ids),
+            "released_videos": released_count
+        }
 
 
 def update_account_planner_settings(account_id, is_burner=None, burner_vault_ids=None,

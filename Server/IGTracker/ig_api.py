@@ -207,10 +207,12 @@ def publish_photo(token: str, ig_user_id: str, image_url: str, caption: str = ""
 
 def publish_reel(token: str, ig_user_id: str, video_url: str, caption: str = "", cover_url: str = "", share_to_feed: bool = True) -> dict:
     """
-    Publish a Reel to Instagram.
+    Publish a Reel to Instagram via Meta Graph API.
     video_url must be a publicly accessible MP4 URL (HTTPS).
-    Returns status dict with upload_id or error.
+    Returns status dict with id (post_id) and container_id, or error.
     """
+    import time
+
     params = {
         "media_type": "REELS",
         "video_url": video_url,
@@ -221,47 +223,112 @@ def publish_reel(token: str, ig_user_id: str, video_url: str, caption: str = "",
     if cover_url:
         params["cover_url"] = cover_url
 
+    logger.info(f"Vytváram IG Reel kontajner pre UID {ig_user_id} s videom: {video_url}")
+
     # Step 1: Create container
-    r1 = httpx.post(
-        f"{IG_API_BASE}/{ig_user_id}/media",
-        params=params,
-        timeout=60,
-    )
-    data1 = r1.json()
+    try:
+        r1 = httpx.post(
+            f"{IG_API_BASE}/{ig_user_id}/media",
+            params=params,
+            timeout=60,
+        )
+        data1 = r1.json()
+    except Exception as e:
+        logger.exception(f"Chyba pri vytváraní IG kontajnera: {e}")
+        return {"error": f"Chyba siete pri vytváraní IG kontajnera: {e}"}
+
     if "error" in data1:
-        return {"error": data1["error"].get("message", "Container creation failed")}
+        err_msg = data1["error"].get("message", "Container creation failed")
+        logger.error(f"Zlyhanie vytvorenia kontajnera: {data1['error']}")
+        return {"error": f"Container creation failed: {err_msg}"}
 
     container_id = data1.get("id")
     if not container_id:
-        return {"error": "Failed to create reel container"}
+        return {"error": "Failed to create reel container (no ID returned)"}
+
+    logger.info(f"Kontajner {container_id} vytvorený, čakám na stiahnutie a transkódovanie videa na serveroch Meta...")
 
     # Step 2: Check upload status (reels need processing time)
-    import time
-    for _ in range(10):
+    # Meta servery sťahujú video a transkódujú ho. Pre Reels je odporúčaný timeout 3-4 minúty.
+    max_attempts = 45  # 45 pokusov * 5 sekúnd = 225 sekúnd (~3.75 min)
+    is_finished = False
+    last_status_code = "IN_PROGRESS"
+
+    for attempt in range(1, max_attempts + 1):
         time.sleep(5)
-        status_r = httpx.get(
-            f"{IG_API_BASE}/{container_id}",
-            params={"fields": "status_code,status", "access_token": token},
-            timeout=15,
-        )
-        status_data = status_r.json()
+        try:
+            status_r = httpx.get(
+                f"{IG_API_BASE}/{container_id}",
+                params={"fields": "status_code,status", "access_token": token},
+                timeout=20,
+            )
+            status_data = status_r.json()
+        except Exception as se:
+            logger.warning(f"Chyba pri dopytovaní stavu kontajnera {container_id} (pokus {attempt}): {se}")
+            continue
+
         status_code = status_data.get("status_code", "")
+        last_status_code = status_code or last_status_code
+
         if status_code == "FINISHED":
+            is_finished = True
+            logger.info(f"Kontajner {container_id} bol úspešne spracovaný po {attempt * 5}s (status: FINISHED)")
             break
-        if status_code == "ERROR":
-            return {"error": f"Video processing failed: {status_data.get('status')}"}
+        elif status_code == "ERROR":
+            err_detail = status_data.get("status") or (status_data.get("error") or {}).get("message") or "Neznáma chyba spracovania"
+            logger.error(f"Spracovanie videa na serveroch Meta zlyhalo pre kontajner {container_id}: {status_data}")
+            return {"error": f"Video processing failed on Instagram: {err_detail}"}
+        elif status_code == "EXPIRED":
+            logger.error(f"Platnosť kontajnera {container_id} vypršala (EXPIRED)")
+            return {"error": "Platnosť video kontajnera na Instagrame vypršala (EXPIRED)"}
+        else:
+            if attempt % 4 == 0 or attempt == 1:
+                logger.info(f"Čakám na spracovanie videa {container_id} ({attempt}/{max_attempts})... Stav: {status_code or 'IN_PROGRESS'}")
 
-    # Step 3: Publish
-    r2 = httpx.post(
-        f"{IG_API_BASE}/{ig_user_id}/media_publish",
-        params={"creation_id": container_id, "access_token": token},
-        timeout=30,
-    )
-    data2 = r2.json()
-    if "error" in data2:
-        return {"error": data2["error"].get("message", "Publish failed")}
+    if not is_finished:
+        logger.error(f"Kontajner {container_id} nestihol dokončiť spracovanie v limite 225s. Posledný stav: {last_status_code}")
+        # KRITICKÉ: Ak video nie je FINISHED, NESMIEME volať media_publish! Inak Meta vyhodí 'Media ID is not available'.
+        return {
+            "error": f"Instagram nestihol dokončiť spracovanie videa (posledný stav: {last_status_code}, čakalo sa 3.5 min). Kontajner bol vytvorený (ID: {container_id}), publikovanie bolo pozastavené."
+        }
 
-    return {"id": data2.get("id"), "container_id": container_id}
+    # Step 3: Publish (s replication lag ochranou)
+    # Krátka pauza 3s, aby sa stav FINISHED zreplikoval naprieč Meta edge clustermi
+    time.sleep(3)
+
+    for pub_attempt in range(1, 4):
+        try:
+            r2 = httpx.post(
+                f"{IG_API_BASE}/{ig_user_id}/media_publish",
+                params={"creation_id": container_id, "access_token": token},
+                timeout=45,
+            )
+            publish_data = r2.json()
+        except Exception as pe:
+            logger.exception(f"Chyba pri volaní media_publish pre kontajner {container_id} (pokus {pub_attempt}): {pe}")
+            if pub_attempt < 3:
+                time.sleep(5)
+                continue
+            return {"error": f"Chyba spojenia pri media_publish: {pe}"}
+
+        if "error" in publish_data:
+            err_msg = publish_data["error"].get("message", "Publish failed")
+            err_code = publish_data["error"].get("code")
+            err_subcode = publish_data["error"].get("error_subcode")
+            logger.warning(f"Chyba media_publish pre kontajner {container_id} (pokus {pub_attempt}/3): {err_msg} (code={err_code}, subcode={err_subcode})")
+            
+            # Ak Meta hlási že Media ID ešte nie je dostupné (edge replication lag), počkáme 6s a zopakujeme
+            if ("Media ID is not available" in err_msg or err_code == 9007 or err_subcode == 2207027) and pub_attempt < 3:
+                logger.info(f"Čakám 6s na replikáciu Meta Media ID pre kontajner {container_id}...")
+                time.sleep(6)
+                continue
+            return {"error": f"{err_msg}"}
+        else:
+            published_id = publish_data.get("id")
+            logger.info(f"Reel úspešne publikovaný! ID média: {published_id}")
+            return {"id": published_id, "container_id": container_id}
+
+    return {"error": "Publikovanie zlyhalo po 3 pokusoch"}
 
 
 def check_container_status(token: str, container_id: str) -> dict:
