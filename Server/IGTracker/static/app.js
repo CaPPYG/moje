@@ -176,6 +176,29 @@ document.addEventListener('DOMContentLoaded', () => {
           if (countEl) countEl.textContent = data.count;
           if (followersEl) followersEl.textContent = data.total_followers_fmt;
           if (viewsEl) viewsEl.textContent = data.total_views_fmt;
+
+          const topViewsEl = document.getElementById('statTopReelViews');
+          const topMetaEl = document.getElementById('statTopReelMeta');
+          if (topViewsEl && data.top_farm_reel) {
+            topViewsEl.textContent = data.top_farm_reel.views_fmt || '--';
+            if (topMetaEl) {
+              topMetaEl.href = data.top_farm_reel.url;
+              topMetaEl.innerHTML = `<span>@${data.top_farm_reel.username}</span><span style="color: #f43f5e; margin-left: 4px;"><i class="fas fa-heart"></i> ${data.top_farm_reel.likes_fmt}</span> <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.72em; margin-left: 3px;"></i>`;
+            }
+          }
+
+          const latestViewsEl = document.getElementById('statLatestReelViews');
+          const latestMetaEl = document.getElementById('statLatestReelMeta');
+          if (latestViewsEl && data.latest_farm_reel) {
+            latestViewsEl.textContent = data.latest_farm_reel.views_fmt || '--';
+            if (latestMetaEl) {
+              latestMetaEl.href = data.latest_farm_reel.url;
+              const perfBadge = data.latest_farm_reel.perf && data.latest_farm_reel.perf.status !== 'none'
+                ? `<span class="perf-badge-mini ${data.latest_farm_reel.perf.badge_class}" style="margin-left: 4px;"><i class="${data.latest_farm_reel.perf.icon}"></i> ${data.latest_farm_reel.perf.label}</span>`
+                : '';
+              latestMetaEl.innerHTML = `<span>@${data.latest_farm_reel.username}</span><span class="post-sep">·</span><span style="color: #94a3b8;">${data.latest_farm_reel.date}</span>${perfBadge} <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.72em; margin-left: 3px;"></i>`;
+            }
+          }
         }
       })
       .catch(err => console.error('Chyba načítania sumárov:', err));

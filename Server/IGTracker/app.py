@@ -81,11 +81,14 @@ def index():
     accounts = db.get_accounts_with_metrics()
     total_followers = sum(a["followers"] for a in accounts if a["has_data"])
     total_views = sum(a["total_views"] for a in accounts if a["has_data"])
+    top_farm_reel, latest_farm_reel = db.get_farm_reels_summary(accounts)
     return render_template(
         "index.html",
         accounts=accounts,
         total_followers_fmt=db.format_number(total_followers),
-        total_views_fmt=db.format_number(total_views)
+        total_views_fmt=db.format_number(total_views),
+        top_farm_reel=top_farm_reel,
+        latest_farm_reel=latest_farm_reel
     )
 
 
@@ -115,6 +118,7 @@ def api_get_tracker():
     accounts = db.get_accounts_with_metrics()
     total_followers = sum(a["followers"] for a in accounts if a["has_data"])
     total_views = sum(a["total_views"] for a in accounts if a["has_data"])
+    top_farm_reel, latest_farm_reel = db.get_farm_reels_summary(accounts)
 
     return jsonify({
         "status": "ok",
@@ -123,6 +127,8 @@ def api_get_tracker():
         "total_followers_fmt": db.format_number(total_followers),
         "total_views": total_views,
         "total_views_fmt": db.format_number(total_views),
+        "top_farm_reel": top_farm_reel,
+        "latest_farm_reel": latest_farm_reel,
         "accounts": accounts
     }), 200
 

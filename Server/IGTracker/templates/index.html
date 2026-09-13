@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=1.0.3">
 </head>
 <body>
 
@@ -95,6 +95,46 @@
           <span class="stat-badge-value" id="statTotalViews">{{ total_views_fmt or '--' }}</span>
         </div>
       </div>
+
+      <div class="stat-badge-card">
+        <div class="stat-badge-icon" style="color: #fbbf24;"><i class="fas fa-trophy"></i></div>
+        <div class="stat-badge-info">
+          <span class="stat-badge-label">Top Reel (Farmy)</span>
+          <span class="stat-badge-value" id="statTopReelViews">{{ top_farm_reel.views_fmt if top_farm_reel else '--' }}</span>
+          {% if top_farm_reel and top_farm_reel.url %}
+            <a href="{{ top_farm_reel.url }}" target="_blank" rel="noopener noreferrer" class="stat-badge-sublink" id="statTopReelMeta" title="Otvoriť Top Reel na Instagrame (@{{ top_farm_reel.username }})">
+              <span>@{{ top_farm_reel.username }}</span>
+              <span style="color: #f43f5e; margin-left: 4px;"><i class="fas fa-heart"></i> {{ top_farm_reel.likes_fmt }}</span>
+              <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.72em; margin-left: 3px;"></i>
+            </a>
+          {% else %}
+            <span class="stat-badge-subtext" id="statTopReelMeta">Žiadne video</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="stat-badge-card">
+        <div class="stat-badge-icon" style="color: #ec4899;"><i class="fas fa-rocket"></i></div>
+        <div class="stat-badge-info">
+          <span class="stat-badge-label">Posledné Reelsko (Výkon)</span>
+          <span class="stat-badge-value" id="statLatestReelViews">{{ latest_farm_reel.views_fmt if latest_farm_reel else '--' }}</span>
+          {% if latest_farm_reel and latest_farm_reel.url %}
+            <a href="{{ latest_farm_reel.url }}" target="_blank" rel="noopener noreferrer" class="stat-badge-sublink" id="statLatestReelMeta" title="Otvoriť najnovšie reelsko na Instagrame ({{ latest_farm_reel.perf.hint }})">
+              <span>@{{ latest_farm_reel.username }}</span>
+              <span class="post-sep">·</span>
+              <span style="color: #94a3b8;">{{ latest_farm_reel.date }}</span>
+              {% if latest_farm_reel.perf and latest_farm_reel.perf.status != 'none' %}
+                <span class="perf-badge-mini {{ latest_farm_reel.perf.badge_class }}" style="margin-left: 4px;">
+                  <i class="{{ latest_farm_reel.perf.icon }}"></i> {{ latest_farm_reel.perf.label }}
+                </span>
+              {% endif %}
+              <i class="fas fa-arrow-up-right-from-square" style="font-size: 0.72em; margin-left: 3px;"></i>
+            </a>
+          {% else %}
+            <span class="stat-badge-subtext" id="statLatestReelMeta">Žiadne video</span>
+          {% endif %}
+        </div>
+      </div>
     </section>
 
     <!-- Main Table Card -->
@@ -110,7 +150,7 @@
               <th>Priemer Views</th>
               <th>Top Reel (Views / Likes)</th>
               <th>Engagement</th>
-              <th>Posledný post</th>
+              <th>Posledné Reel (Ako sa darí)</th>
               <th style="text-align: center;">Akcie</th>
             </tr>
           </thead>
@@ -241,15 +281,26 @@
                     </div>
                   </td>
 
-                  <!-- Posledný post -->
+                  <!-- Posledné Reel (Ako sa darí) -->
                   <td>
                     <div class="latest-post-cell">
                       {% if acc.last_post_url %}
-                        <a href="{{ acc.last_post_url }}" target="_blank" rel="noopener noreferrer" class="latest-post-pill" title="Otvoriť posledný post na Instagrame">
-                          <span class="post-views"><i class="fas fa-eye"></i> {{ acc.last_post_views_fmt }}</span>
-                          <span class="post-sep">/</span>
-                          <span class="post-time"><i class="fas fa-clock"></i> {{ acc.last_post_date }}</span>
-                        </a>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                          <a href="{{ acc.last_post_url }}" target="_blank" rel="noopener noreferrer" class="latest-post-pill" title="Otvoriť posledné reelsko na Instagrame ({{ acc.last_post_views_fmt }} views, {{ acc.last_post_likes_fmt }} likes, {{ acc.last_post_date }})">
+                            <span class="post-views"><i class="fas fa-eye"></i> {{ acc.last_post_views_fmt }}</span>
+                            <span class="post-sep">/</span>
+                            <span class="post-likes"><i class="fas fa-heart"></i> {{ acc.last_post_likes_fmt }}</span>
+                            <span class="post-sep">·</span>
+                            <span class="post-time"><i class="fas fa-clock"></i> {{ acc.last_post_date }}</span>
+                          </a>
+                          {% if acc.last_reel_perf and acc.last_reel_perf.status != 'none' %}
+                            <div class="perf-badge-wrap">
+                              <span class="perf-badge {{ acc.last_reel_perf.badge_class }}" title="{{ acc.last_reel_perf.hint }}">
+                                <i class="{{ acc.last_reel_perf.icon }}"></i> {{ acc.last_reel_perf.label }}
+                              </span>
+                            </div>
+                          {% endif %}
+                        </div>
                       {% else %}
                         <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
                       {% endif %}
@@ -403,6 +454,6 @@
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=1.0.2"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=1.0.3"></script>
 </body>
 </html>

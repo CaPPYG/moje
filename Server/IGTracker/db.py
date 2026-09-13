@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 
@@ -327,6 +328,177 @@ def get_previous_snapshot(account_id):
         return dict(row) if row else None
 
 
+def parse_relative_time_weight(date_str):
+    """Vráti odhadovaný počet hodín od publikovania pre porovnanie čerstvosti."""
+    if not date_str or date_str == "--" or date_str == "Aktuálne":
+        return 99999.0
+    s = str(date_str).lower().strip()
+    m = re.search(r"(\d+)", s)
+    val = int(m.group(1)) if m else 1
+    if "sek" in s:
+        return val / 3600.0
+    if "min" in s:
+        return val / 60.0
+    if "h" in s or "hod" in s:
+        return float(val)
+    if "dň" in s or "dni" in s or "deň" in s:
+        return val * 24.0
+    if "týž" in s:
+        return val * 24.0 * 7.0
+    if "mes" in s:
+        return val * 24.0 * 30.0
+    return 99999.0
+
+
+def calculate_reel_perf(last_views, avg_views, date_str, likes=0):
+    """
+    Vypočíta analytický status a badge 'Ako sa darí' pre posledné reelsko:
+    - porovnáva views voči historickému priemeru účtu (avg_views)
+    - berie do úvahy čas zverejnenia (čerstvé < 24-36h naberá tempo vs staršie)
+    """
+    last_views = last_views or 0
+    avg_views = avg_views or 0
+    date_str = date_str or ""
+
+    if last_views == 0 and avg_views == 0:
+        return {
+            "status": "none",
+            "label": "Bez videí",
+            "badge_class": "perf-neutral",
+            "icon": "fas fa-minus",
+            "ratio_pct": 0,
+            "hint": "Profil zatiaľ nemá publikované videá."
+        }
+
+    if avg_views > 0:
+        ratio = last_views / avg_views
+        pct_diff = round((ratio - 1.0) * 100)
+    else:
+        ratio = 1.0 if last_views > 0 else 0
+        pct_diff = 0
+
+    s_date = str(date_str).lower().strip()
+    is_fresh = any(u in s_date for u in ["h", "hod", "min", "sek", "dnes", "včera", "1 dň"])
+
+    # 1. Výnimočne vysoký výkon (virál)
+    if ratio >= 1.5:
+        return {
+            "status": "viral",
+            "label": f"🔥 Viral +{pct_diff}%" if pct_diff > 0 else "🔥 Viral",
+            "badge_class": "perf-viral",
+            "icon": "fas fa-fire-flame-curved",
+            "ratio_pct": pct_diff,
+            "hint": f"Reelsko vystrelilo! Má {format_number(last_views)} videní (+{pct_diff}% nad priemerom profilu {format_number(avg_views)})."
+        }
+    # 2. Solídny nadpriemer
+    if ratio >= 1.1:
+        return {
+            "status": "above",
+            "label": f"🚀 Nadpriemer +{pct_diff}%",
+            "badge_class": "perf-above",
+            "icon": "fas fa-rocket",
+            "ratio_pct": pct_diff,
+            "hint": f"Darí sa skvele! Má {format_number(last_views)} videní (+{pct_diff}% nad priemerom účtu {format_number(avg_views)})."
+        }
+    # 3. Čerstvé video (< 24-36h)
+    if is_fresh:
+        if ratio >= 0.7:
+            return {
+                "status": "fresh_strong",
+                "label": "⚡ Naberá tempo",
+                "badge_class": "perf-fresh",
+                "icon": "fas fa-bolt",
+                "ratio_pct": pct_diff,
+                "hint": f"Čerstvé video ({date_str}), dosiahlo už {round(ratio*100)}% priemeru účtu ({format_number(last_views)} views)."
+            }
+        elif ratio >= 0.25:
+            return {
+                "status": "fresh",
+                "label": "⏳ Zbiera views",
+                "badge_class": "perf-fresh",
+                "icon": "fas fa-clock-rotate-left",
+                "ratio_pct": pct_diff,
+                "hint": f"Čerstvé video ({date_str}), algoritmus ho ešte len distribuuje ({format_number(last_views)} views)."
+            }
+        else:
+            return {
+                "status": "fresh_start",
+                "label": "🌱 Nové / Štart",
+                "badge_class": "perf-fresh",
+                "icon": "fas fa-seedling",
+                "ratio_pct": pct_diff,
+                "hint": f"Publikované {date_str}, zatiaľ {format_number(last_views)} views (zbiera prvé publikum)."
+            }
+    # 4. Staršie video (> 1-2 dni)
+    if ratio >= 0.75:
+        return {
+            "status": "normal",
+            "label": "🟢 V norme",
+            "badge_class": "perf-normal",
+            "icon": "fas fa-check",
+            "ratio_pct": pct_diff,
+            "hint": f"Stabilný výkon na úrovni priemeru účtu ({format_number(last_views)} vs {format_number(avg_views)})."
+        }
+    else:
+        diff_down = abs(pct_diff)
+        return {
+            "status": "low",
+            "label": f"📉 Podpriemer -{diff_down}%" if diff_down > 0 else "📉 Podpriemer",
+            "badge_class": "perf-low",
+            "icon": "fas fa-arrow-trend-down",
+            "ratio_pct": pct_diff,
+            "hint": f"Zostalo pod priemerom profilu ({format_number(last_views)} vs {format_number(avg_views)} priemer)."
+        }
+
+
+def get_farm_reels_summary(accounts):
+    """
+    Nájde najlepšie reelsko (Top Reel) celej farmy a najnovšie publikované reelsko s informáciou ako sa mu darí.
+    """
+    top_farm_reel = None
+    latest_farm_reel = None
+    max_top_views = -1
+    min_time_weight = 999999.0
+
+    for a in accounts:
+        if not a.get("has_data"):
+            continue
+
+        # 1. Top Reel farmy
+        t_views = a.get("top_reel_views") or 0
+        t_url = a.get("top_reel_url")
+        if t_url and t_views > max_top_views:
+            max_top_views = t_views
+            top_farm_reel = {
+                "username": a["username"],
+                "views": t_views,
+                "views_fmt": a.get("top_reel_views_fmt") or format_number(t_views),
+                "likes": a.get("top_reel_likes") or 0,
+                "likes_fmt": a.get("top_reel_likes_fmt") or format_number(a.get("top_reel_likes") or 0),
+                "url": t_url
+            }
+
+        # 2. Posledné reelsko farmy
+        l_url = a.get("last_post_url")
+        l_date = a.get("last_post_date")
+        if l_url and l_date:
+            w = parse_relative_time_weight(l_date)
+            if w < min_time_weight or (abs(w - min_time_weight) < 0.1 and (a.get("last_post_views") or 0) > (latest_farm_reel["views"] if latest_farm_reel else 0)):
+                min_time_weight = w
+                latest_farm_reel = {
+                    "username": a["username"],
+                    "views": a.get("last_post_views") or 0,
+                    "views_fmt": a.get("last_post_views_fmt") or format_number(a.get("last_post_views") or 0),
+                    "likes": a.get("last_post_likes") or 0,
+                    "likes_fmt": a.get("last_post_likes_fmt") or format_number(a.get("last_post_likes") or 0),
+                    "date": l_date,
+                    "url": l_url,
+                    "perf": a.get("last_reel_perf")
+                }
+
+    return top_farm_reel, latest_farm_reel
+
+
 def get_accounts_with_metrics():
     """Vráti zoznam všetkých účtov s najnovšími metrikami, deltou a formátovanými textami."""
     accounts = get_all_accounts()
@@ -413,6 +585,7 @@ def get_accounts_with_metrics():
                 "last_post_url": last_post_url,
                 "last_post_likes": last_post_likes,
                 "last_post_likes_fmt": format_number(last_post_likes) if last_post_likes > 0 else str(last_post_likes),
+                "last_reel_perf": calculate_reel_perf(last_post_views, latest.get("avg_views", 0), latest["last_post_date"], last_post_likes),
                 "usa_audience_pct": round(usa_audience_pct, 1) if usa_audience_pct is not None else None,
                 "fb_page_id": fb_page_id,
                 "fb_page_name": fb_page_name,
@@ -464,6 +637,7 @@ def get_accounts_with_metrics():
                 "last_post_url": None,
                 "last_post_likes": 0,
                 "last_post_likes_fmt": "-",
+                "last_reel_perf": calculate_reel_perf(0, 0, "--", 0),
                 "usa_audience_pct": round(acc_usa, 1) if acc_usa is not None else None,
                 "fb_page_id": fb_page_id,
                 "fb_page_name": fb_page_name,
