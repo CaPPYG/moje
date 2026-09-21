@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 Drive Drop – Google Drive integrácia pre priečinok UPLOADED.
-Spravuje nahrávanie, výpis, sťahovanie a mazanie súborov.
-Podporuje aj bezproblémový lokálny fallback (ak Drive nie je pripojený).
+Spravuje nahrávanie, výpis, sťahovanie, synchronizáciu a mazanie súborov.
+Podporuje bezproblémový lokálny fallback (ak Drive nie je pripojený) a spätnú synchronizáciu.
 """
 import os
 import json
 import datetime
 import mimetypes
+import time
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -22,15 +23,30 @@ os.makedirs(DATA_DIR, exist_ok=True)
 CRED_FILE = os.path.join(DATA_DIR, "credentials.json")
 TOKEN_FILE = os.path.join(DATA_DIR, "drive_token.json")
 
-# Zdieľaný token z CaPPyTools ak existuje
+# Zdieľané súbory z CaPPyTools ak existujú
+SHARED_CRED_FILE = os.path.abspath(os.path.join(BASE_DIR, "..", "CaPPyTools", "data", "credentials.json"))
 SHARED_TOKEN_FILE = os.path.abspath(os.path.join(BASE_DIR, "..", "CaPPyTools", "data", "drive_token.json"))
 
 LOCAL_UPLOADED_DIR = os.path.join(DATA_DIR, "UPLOADED")
 os.makedirs(LOCAL_UPLOADED_DIR, exist_ok=True)
 
+# Cache pre Google Drive service (zabráni zbytočným refresh volaniam na každý request)
+_service_cache = None
+_service_cache_time = 0
+
+
+def get_cred_path():
+    """Vráti cestu k existujúcemu credentials.json (lokálny alebo zdieľaný z CaPPyTools)."""
+    if os.path.exists(CRED_FILE):
+        return CRED_FILE
+    if os.path.exists(SHARED_CRED_FILE):
+        return SHARED_CRED_FILE
+    return CRED_FILE
+
 
 def has_credentials():
-    return os.path.exists(CRED_FILE)
+    """Overí, či je k dispozícii súbor credentials.json."""
+    return os.path.exists(get_cred_path())
 
 
 def get_token_path():
@@ -42,39 +58,77 @@ def get_token_path():
     return TOKEN_FILE
 
 
-def is_connected():
-    return os.path.exists(get_token_path())
+def get_service(force_refresh=False):
+    """
+    Vráti inicializovanú Google Drive service.
+    Skutočne overuje platnosť tokenu a pri expirácii ho obnoví.
+    Ak je token neplatný/vypršaný a nejde obnoviť, vráti None.
+    """
+    global _service_cache, _service_cache_time
+    now = time.time()
+    if not force_refresh and _service_cache is not None and (now - _service_cache_time < 60):
+        return _service_cache
 
-
-def get_service():
-    """Vráti inicializovanú Google Drive service alebo None ak chýba token."""
     token_path = get_token_path()
     if not os.path.exists(token_path):
+        _service_cache = None
         return None
+
     try:
         creds = Credentials.from_authorized_user_file(token_path, SCOPES)
         if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-            # Vždy uložíme obnovený token lokálne
-            with open(TOKEN_FILE, "w", encoding="utf-8") as f:
-                f.write(creds.to_json())
+            try:
+                creds.refresh(Request())
+                # Vždy uložíme obnovený token lokálne
+                with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+                    f.write(creds.to_json())
+            except Exception as refr_err:
+                print(f"[Drive] Chyba pri obnove Google Drive tokenu (vypršaný): {refr_err}")
+                _service_cache = None
+                return None
+
         if not creds.valid:
+            _service_cache = None
             return None
-        return build("drive", "v3", credentials=creds)
+
+        svc = build("drive", "v3", credentials=creds, cache_discovery=False)
+        _service_cache = svc
+        _service_cache_time = now
+        return svc
     except Exception as e:
-        print(f"Chyba pri inicializácii Google Drive service: {e}")
+        print(f"[Drive] Chyba pri inicializácii Google Drive service: {e}")
+        _service_cache = None
         return None
 
 
-def get_redirect_uri():
-    """Registrovaný redirect URI z credentials.json."""
-    try:
-        with open(CRED_FILE, "r", encoding="utf-8") as f:
-            uris = json.load(f).get("web", {}).get("redirect_uris", [])
-        if uris:
-            return uris[0]
-    except Exception:
-        pass
+def is_connected():
+    """Skutočne overí, či je Google Drive pripojený a token je funkčný."""
+    return get_service() is not None
+
+
+def get_redirect_uri(req=None):
+    """
+    Vráti korektný redirect URI pre OAuth.
+    Zohľadňuje credentials.json aj prefix a protokol (https / reverse proxy).
+    """
+    cred_path = get_cred_path()
+    if os.path.exists(cred_path):
+        try:
+            with open(cred_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            uris = data.get("web", {}).get("redirect_uris", [])
+            if uris:
+                if req:
+                    # Ak požiadavka beží na doméne s prefixom /drive/callback
+                    host_url = f"{req.scheme}://{req.host}/drive/callback"
+                    if host_url in uris:
+                        return host_url
+                return uris[0]
+        except Exception:
+            pass
+
+    if req:
+        return f"{req.scheme}://{req.host}/drive/callback"
     return "http://localhost:5050/drive/callback"
 
 
@@ -103,7 +157,7 @@ def _find_folder(svc, name, parent_id=None):
         files = r.get("files", [])
         return files[0]["id"] if files else None
     except Exception as e:
-        print(f"Chyba pri hľadaní priečinka '{name}': {e}")
+        print(f"[Drive] Chyba pri hľadaní priečinka '{name}': {e}")
         return None
 
 
@@ -115,7 +169,7 @@ def _create_folder(svc, name, parent_id=None):
         f = svc.files().create(body=body, fields="id").execute()
         return f["id"]
     except Exception as e:
-        print(f"Chyba pri vytváraní priečinka '{name}': {e}")
+        print(f"[Drive] Chyba pri vytváraní priečinka '{name}': {e}")
         return None
 
 
@@ -131,7 +185,10 @@ def ensure_uploaded_folder(folder_name="UPLOADED"):
 
 
 def list_files(folder_name="UPLOADED"):
-    """Vráti zoznam súborov v priečinku UPLOADED (Google Drive + lokálny fallback)."""
+    """
+    Vráti zoznam súborov v priečinku UPLOADED (Google Drive + lokálny fallback).
+    Odkazy na stiahnutie sú relatívne bez vedúceho lomítka, aby rešpektovali Nginx prefix.
+    """
     items = []
     seen_names = set()
     svc = get_service()
@@ -152,8 +209,6 @@ def list_files(folder_name="UPLOADED"):
                     fid_val = f.get("id")
                     name = f.get("name", "nepomenovany")
                     sz = int(f.get("size", 0)) if f.get("size") else 0
-                    direct_url = (f.get("webContentLink") or
-                                  f"https://drive.usercontent.google.com/download?id={fid_val}&export=download&confirm=t")
                     items.append({
                         "id": fid_val,
                         "name": name,
@@ -161,8 +216,8 @@ def list_files(folder_name="UPLOADED"):
                         "size_str": format_size(sz),
                         "mimeType": f.get("mimeType", "application/octet-stream"),
                         "modifiedTime": f.get("modifiedTime") or f.get("createdTime") or "",
-                        "downloadUrl": direct_url,
-                        "serverDownloadUrl": f"/download/{fid_val}",
+                        "downloadUrl": f"download/{fid_val}",
+                        "serverDownloadUrl": f"download/{fid_val}",
                         "webViewLink": f.get("webViewLink", ""),
                         "iconLink": f.get("iconLink", ""),
                         "thumbnailLink": f.get("thumbnailLink", ""),
@@ -170,7 +225,7 @@ def list_files(folder_name="UPLOADED"):
                     })
                     seen_names.add(name)
         except Exception as e:
-            print(f"Chyba pri načítaní súborov z Drive: {e}")
+            print(f"[Drive] Chyba pri načítaní súborov z Drive: {e}")
 
     # 2. Lokálny fallback priečinok
     if os.path.isdir(LOCAL_UPLOADED_DIR):
@@ -187,8 +242,8 @@ def list_files(folder_name="UPLOADED"):
                     "size_str": format_size(sz),
                     "mimeType": mime,
                     "modifiedTime": mtime,
-                    "downloadUrl": f"/download/local_{fname}",
-                    "serverDownloadUrl": f"/download/local_{fname}",
+                    "downloadUrl": f"download/local_{fname}",
+                    "serverDownloadUrl": f"download/local_{fname}",
                     "webViewLink": "",
                     "iconLink": "",
                     "thumbnailLink": "",
@@ -199,7 +254,7 @@ def list_files(folder_name="UPLOADED"):
 
 
 def upload_file(local_path, filename=None, folder_name="UPLOADED", log=None):
-    """Nahrá súbor do priečinka UPLOADED na Google Drive (alebo lokálny fallback)."""
+    """Nahrá súbor do priečinka UPLOADED na Google Drive (alebo bezpečný lokálny fallback)."""
     name = filename or os.path.basename(local_path)
     svc = get_service()
 
@@ -216,9 +271,10 @@ def upload_file(local_path, filename=None, folder_name="UPLOADED", log=None):
             "name": name,
             "size": sz,
             "size_str": format_size(sz),
-            "downloadUrl": f"/download/local_{name}",
-            "serverDownloadUrl": f"/download/local_{name}",
-            "is_local": True
+            "downloadUrl": f"download/local_{name}",
+            "serverDownloadUrl": f"download/local_{name}",
+            "is_local": True,
+            "drive_status": "disconnected"
         }
 
     try:
@@ -232,14 +288,12 @@ def upload_file(local_path, filename=None, folder_name="UPLOADED", log=None):
         f = svc.files().create(body=body, media_body=media, fields="id,name,size,webContentLink,webViewLink").execute()
         file_id = f["id"]
 
-        # Verejné práva na čítanie pre priame stiahnutie odkiaľkoľvek
+        # Verejné práva na čítanie
         try:
             svc.permissions().create(fileId=file_id, body={"type": "anyone", "role": "reader"}).execute()
         except Exception:
             pass
 
-        direct_url = (f.get("webContentLink") or
-                      f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t")
         sz = int(f.get("size", os.path.getsize(local_path)))
 
         return {
@@ -247,12 +301,14 @@ def upload_file(local_path, filename=None, folder_name="UPLOADED", log=None):
             "name": name,
             "size": sz,
             "size_str": format_size(sz),
-            "downloadUrl": direct_url,
-            "serverDownloadUrl": f"/download/{file_id}",
+            "downloadUrl": f"download/{file_id}",
+            "serverDownloadUrl": f"download/{file_id}",
             "webViewLink": f.get("webViewLink", ""),
-            "is_local": False
+            "is_local": False,
+            "drive_status": "uploaded"
         }
     except Exception as e:
+        print(f"[Drive] Drive upload zlyhal: {e}, ukladám do lokálneho fallbacku.")
         if log:
             log(f"⚠ Drive upload zlyhal: {e}, ukladám do lokálneho fallbacku.")
         dst = os.path.join(LOCAL_UPLOADED_DIR, name)
@@ -264,10 +320,63 @@ def upload_file(local_path, filename=None, folder_name="UPLOADED", log=None):
             "name": name,
             "size": sz,
             "size_str": format_size(sz),
-            "downloadUrl": f"/download/local_{name}",
-            "serverDownloadUrl": f"/download/local_{name}",
-            "is_local": True
+            "downloadUrl": f"download/local_{name}",
+            "serverDownloadUrl": f"download/local_{name}",
+            "is_local": True,
+            "drive_status": "fallback_error",
+            "drive_error": str(e)
         }
+
+
+def sync_local_file(fname, folder_name="UPLOADED"):
+    """Prenesie lokálne uložený súbor do Google Drive priečinka UPLOADED."""
+    p = os.path.join(LOCAL_UPLOADED_DIR, fname)
+    if not os.path.isfile(p):
+        return False, "Lokálny súbor neexistuje."
+    svc = get_service()
+    if not svc:
+        return False, "Google Drive nie je pripojený."
+    try:
+        fid = ensure_uploaded_folder(folder_name)
+        if not fid:
+            return False, "Nepodarilo sa vytvoriť priečinok UPLOADED na Drive."
+        mime = mimetypes.guess_type(fname)[0] or "application/octet-stream"
+        media = MediaFileUpload(p, mimetype=mime, resumable=True)
+        body = {"name": fname, "parents": [fid]}
+        f = svc.files().create(body=body, media_body=media, fields="id,name,size,webViewLink").execute()
+        file_id = f["id"]
+        try:
+            svc.permissions().create(fileId=file_id, body={"type": "anyone", "role": "reader"}).execute()
+        except Exception:
+            pass
+        # Po úspešnom nahraní na Drive zmažeme lokálnu kópiu
+        try:
+            os.remove(p)
+        except Exception:
+            pass
+        return True, file_id
+    except Exception as e:
+        return False, str(e)
+
+
+def sync_all_local_files(folder_name="UPLOADED"):
+    """Prenesie všetky lokálne fallback súbory na Google Drive."""
+    svc = get_service()
+    if not svc:
+        return 0, ["Google Drive nie je pripojený."]
+    if not os.path.isdir(LOCAL_UPLOADED_DIR):
+        return 0, []
+    synced = 0
+    errors = []
+    for fname in os.listdir(LOCAL_UPLOADED_DIR):
+        p = os.path.join(LOCAL_UPLOADED_DIR, fname)
+        if os.path.isfile(p):
+            ok, res = sync_local_file(fname, folder_name=folder_name)
+            if ok:
+                synced += 1
+            else:
+                errors.append(f"{fname}: {res}")
+    return synced, errors
 
 
 def delete_file(file_id, folder_name="UPLOADED"):
@@ -296,7 +405,10 @@ def delete_file(file_id, folder_name="UPLOADED"):
 
 
 def download_stream(file_id):
-    """Vráti (stream_alebo_path, filename, mimeType, is_local)."""
+    """
+    Vráti (stream_alebo_path, filename, mimeType, is_local).
+    Zabezpečuje spoľahlivé sťahovanie cez server (bez 403 Google chýb).
+    """
     if str(file_id).startswith("local_"):
         fname = str(file_id)[6:]
         p = os.path.join(LOCAL_UPLOADED_DIR, fname)
@@ -323,5 +435,5 @@ def download_stream(file_id):
         fh.seek(0)
         return fh, fname, mime, False
     except Exception as e:
-        print(f"Chyba pri sťahovaní streamu: {e}")
+        print(f"[Drive] Chyba pri sťahovaní streamu: {e}")
         return None, None, None, False

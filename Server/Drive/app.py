@@ -207,48 +207,77 @@ def api_delete(file_id):
     return jsonify({"status": "error", "message": msg}), 400
 
 
+@app.route("/api/sync-local", methods=["POST"])
+@auth_required
+def api_sync_local():
+    """Presunie všetky lokálne fallback súbory na Google Drive."""
+    try:
+        synced, errors = drive.sync_all_local_files("UPLOADED")
+        if synced > 0:
+            msg = f"Úspešne presunutých {synced} súborov na Google Drive."
+            if errors:
+                msg += f" (Chyby: {len(errors)})"
+            return jsonify({"status": "ok", "synced": synced, "message": msg, "errors": errors})
+        elif errors:
+            return jsonify({"status": "error", "message": "; ".join(errors)}), 400
+        else:
+            return jsonify({"status": "ok", "synced": 0, "message": "Žiadne lokálne súbory na presun."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # ─── Sťahovanie súborov ───────────────────────────────────────────────────────
 
 @app.route("/download/<path:file_id>", methods=["GET"])
 def download(file_id):
-    # Overenie prihlásenia alebo tokenu
+    """
+    Spoľahlivé sťahovanie cez server:
+    1. Pre lokálne súbory (local_...) odošle súbor z disku servera.
+    2. Pre Google Drive súbory streamuje obsah cez MediaIoBaseDownload (obchádza 403 Google blokácie).
+    3. Overuje prihlásenie alebo token hesla.
+    """
     if not is_authenticated():
         token = request.args.get("token")
         if token != get_stored_password():
             return redirect(url_for("index"))
 
-    use_proxy = request.args.get("proxy") == "1" or str(file_id).startswith("local_")
-
-    if not use_proxy:
-        # Priame stiahnutie vysokou rýchlosťou z Google Drive
-        return redirect(f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t")
-
-    # Proxy stream cez server pre školské siete s blokovaným Google Drive
     res, fname, mime, is_local = drive.download_stream(file_id)
     if is_local and res:
         return send_file(res, as_attachment=True, download_name=fname, mimetype=mime)
     elif res:
         return send_file(res, as_attachment=True, download_name=fname, mimetype=mime)
 
-    return redirect(f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t")
+    # Ak stream zlyhal pre Drive súbor, presmerujeme na oficiálne zobrazenie Drive súboru
+    if not is_local:
+        return redirect(f"https://drive.google.com/file/d/{file_id}/view")
+
+    flash("Súbor sa na serveri ani na Google Drive nenašiel.")
+    return redirect(url_for("index"))
 
 
-# ─── Google OAuth pripojenie (ak by bolo potrebné znova pripojiť) ─────────────
+# ─── Google OAuth pripojenie ──────────────────────────────────────────────────
 
 @app.route("/connect", methods=["GET"])
 @auth_required
 def connect_drive():
     if not drive.has_credentials():
-        flash("Chýba súbor data/credentials.json.")
+        flash("Chýba súbor credentials.json (v data/ alebo CaPPyTools/data).")
         return redirect(url_for("index"))
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
+        cred_path = drive.get_cred_path()
         flow = InstalledAppFlow.from_client_secrets_file(
-            drive.CRED_FILE, drive.SCOPES, autogenerate_code_verifier=True)
-        flow.redirect_uri = drive.get_redirect_uri()
-        auth_url, state = flow.authorization_url(access_type="offline", include_granted_scopes="true")
+            cred_path, drive.SCOPES, autogenerate_code_verifier=True)
+        redirect_uri = drive.get_redirect_uri(request)
+        flow.redirect_uri = redirect_uri
+        auth_url, state = flow.authorization_url(
+            access_type="offline",
+            include_granted_scopes="true",
+            prompt="consent"  # Vždy vyžiadať nový refresh_token
+        )
         session["oauth_state"] = state
         session["oauth_code_verifier"] = flow.code_verifier
+        session["oauth_redirect_uri"] = redirect_uri
         return redirect(auth_url)
     except Exception as e:
         flash(f"Chyba pripojenia Google Drive: {e}")
@@ -259,17 +288,31 @@ def connect_drive():
 def drive_callback():
     from google_auth_oauthlib.flow import InstalledAppFlow
     try:
+        cred_path = drive.get_cred_path()
         flow = InstalledAppFlow.from_client_secrets_file(
-            drive.CRED_FILE, drive.SCOPES, autogenerate_code_verifier=True)
-        flow.redirect_uri = drive.get_redirect_uri()
+            cred_path, drive.SCOPES, autogenerate_code_verifier=True)
+        flow.redirect_uri = session.get("oauth_redirect_uri") or drive.get_redirect_uri(request)
         flow.code_verifier = session.get("oauth_code_verifier")
         flow.fetch_token(code=request.args.get("code"), state=session.get("oauth_state"))
         with open(drive.TOKEN_FILE, "w", encoding="utf-8") as f:
             f.write(flow.credentials.to_json())
+        drive.get_service(force_refresh=True)
         flash("Google Drive úspešne pripojený! Priečinok UPLOADED je pripravený.")
     except Exception as e:
         flash(f"Autorizácia Google Drive zlyhala: {e}")
     return redirect(url_for("index"))
+
+
+@app.route("/disconnect", methods=["POST"])
+@auth_required
+def disconnect_drive():
+    try:
+        if os.path.exists(drive.TOKEN_FILE):
+            os.remove(drive.TOKEN_FILE)
+        drive.get_service(force_refresh=True)
+        return jsonify({"status": "ok", "message": "Google Drive bol odpojený."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 if __name__ == "__main__":

@@ -13,8 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressBarFill = document.getElementById('progressBarFill');
   const statCount = document.getElementById('statCount');
   const statSize = document.getElementById('statSize');
+  const btnSyncLocal = document.getElementById('btnSyncLocal');
+  const localFilesCount = document.getElementById('localFilesCount');
 
   let allFiles = [];
+
+  // Helper pre tvorbu URL rešpektujúcich Nginx prefix (/drive)
+  function appUrl(path) {
+    const p = (window.APP_PREFIX || '').replace(/\/$/, '');
+    const clean = path.replace(/^\//, '');
+    return p ? `${p}/${clean}` : `/${clean}`;
+  }
 
   // ─── Toast Notifikácie ───────────────────────────────────────────────
   window.showToast = function(msg, type = 'info') {
@@ -32,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toast.style.transform = 'translateY(10px)';
       toast.style.transition = 'all 0.3s ease';
       setTimeout(() => toast.remove(), 300);
-    }, 3500);
+    }, 3800);
   };
 
   // ─── Načítanie súborov z API ─────────────────────────────────────────
@@ -48,8 +57,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (data.status === 'ok') {
         allFiles = data.files || [];
+        window.DRIVE_CONNECTED = !!data.connected;
         if (statCount) statCount.textContent = `Počet: ${allFiles.length}`;
         if (statSize) statSize.textContent = `Veľkosť: ${data.total_size_str || '0 B'}`;
+
+        // Aktualizácia tlačidla pre presun lokálnych súborov na Drive
+        const localCount = allFiles.filter(f => f.is_local).length;
+        if (btnSyncLocal && localFilesCount) {
+          localFilesCount.textContent = localCount;
+          if (localCount > 0 && window.DRIVE_CONNECTED) {
+            btnSyncLocal.style.display = 'inline-flex';
+          } else {
+            btnSyncLocal.style.display = 'none';
+          }
+        }
+
         renderFiles();
       } else {
         showToast(data.message || 'Chyba pri načítaní súborov.', 'error');
@@ -82,13 +104,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
       return { icon: 'fa-file-zipper', cls: 'icon-archive' };
     }
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext) || mime.startsWith('image/')) {
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(ext) || (mime && mime.startsWith('image/'))) {
       return { icon: 'fa-file-image', cls: 'icon-image' };
     }
-    if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext) || mime.startsWith('video/')) {
+    if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext) || (mime && mime.startsWith('video/'))) {
       return { icon: 'fa-file-video', cls: 'icon-video' };
     }
-    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext) || mime.startsWith('audio/')) {
+    if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a'].includes(ext) || (mime && mime.startsWith('audio/'))) {
       return { icon: 'fa-file-audio', cls: 'icon-audio' };
     }
     if (['py', 'js', 'ts', 'html', 'css', 'json', 'sh', 'bat', 'c', 'cpp', 'java'].includes(ext)) {
@@ -156,9 +178,16 @@ document.addEventListener('DOMContentLoaded', () => {
     filesContainer.innerHTML = list.map(f => {
       const iconInfo = getFileIcon(f.name, f.mimeType);
       const dateFormatted = formatDate(f.modifiedTime);
-      const localBadge = f.is_local ? `<span class="stat-pill" style="color:#fbbf24;border-color:rgba(245,158,11,0.3)">Lokálny server</span>` : '';
-      const directDl = f.downloadUrl || `download/${f.id}`;
-      const serverDl = f.serverDownloadUrl || `download/${f.id}?proxy=1`;
+      const localBadge = f.is_local ? `<span class="stat-pill" style="color:#fbbf24;border-color:rgba(245,158,11,0.3)" title="Uložené v lokálnom fallbacku na serveri">Lokálny server</span>` : '';
+      
+      // Presný odkaz na stiahnutie so zohľadnením prefixu (/drive/download/...)
+      const dlPath = appUrl(`download/${encodeURIComponent(f.id)}`);
+      
+      const driveViewBtn = (!f.is_local && f.webViewLink) ? `
+        <a href="${f.webViewLink}" class="btn-action btn-download-server" target="_blank" rel="noopener" title="Otvoriť a zobraziť súbor v rozhraní Google Drive">
+          <i class="fab fa-google-drive"></i> Otvoriť
+        </a>
+      ` : '';
 
       return `
         <div class="file-item" data-id="${f.id}" data-name="${encodeURIComponent(f.name)}">
@@ -176,16 +205,14 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
           <div class="file-actions">
-            <a href="${directDl}" class="btn-action btn-download-direct" target="_blank" rel="noopener" title="Priame rýchle stiahnutie z Google Drive">
-              <i class="fas fa-bolt"></i> Stiahnuť
+            <a href="${dlPath}" class="btn-action btn-download-direct" download="${f.name}" title="Stiahnuť súbor do zariadenia">
+              <i class="fas fa-download"></i> Stiahnuť
             </a>
-            <a href="${serverDl}" class="btn-action btn-download-server" title="Alternatívne proxy stiahnutie cez server (pre blokované siete)">
-              <i class="fas fa-download"></i> Server
-            </a>
-            <button class="btn-action btn-copy-link" onclick="copyLink('${directDl}')" title="Skopírovať priamy odkaz na stiahnutie">
+            ${driveViewBtn}
+            <button class="btn-action btn-copy-link" onclick="copyLink('${dlPath}')" title="Skopírovať odkaz na stiahnutie">
               <i class="fas fa-link"></i> Link
             </button>
-            <button class="btn-action btn-delete" onclick="deleteFile('${f.id}', '${encodeURIComponent(f.name)}')" title="Zmazať súbor z Drive">
+            <button class="btn-action btn-delete" onclick="deleteFile('${f.id}', '${encodeURIComponent(f.name)}')" title="Zmazať súbor">
               <i class="fas fa-trash-alt"></i>
             </button>
           </div>
@@ -240,6 +267,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
+  // ─── Presun lokálnych súborov na Google Drive ────────────────────────
+  if (btnSyncLocal) {
+    btnSyncLocal.addEventListener('click', async () => {
+      btnSyncLocal.disabled = true;
+      btnSyncLocal.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Presúvam...';
+      try {
+        const res = await fetch('api/sync-local', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'ok') {
+          showToast(data.message || 'Súbory boli presunuté na Google Drive!', 'success');
+          loadFiles();
+        } else {
+          showToast(data.message || 'Chyba pri synchronizácii súborov.', 'error');
+        }
+      } catch (err) {
+        showToast('Chyba spojenia pri presune.', 'error');
+      } finally {
+        btnSyncLocal.disabled = false;
+        btnSyncLocal.innerHTML = '<i class="fas fa-cloud-arrow-up"></i> Presunúť na Drive (<span id="localFilesCount">0</span>)';
+      }
+    });
+  }
+
   // ─── Upload spracovanie cez XHR s progressom ─────────────────────────
   async function uploadFiles(files) {
     if (!files || files.length === 0) return;
@@ -279,7 +329,13 @@ document.addEventListener('DOMContentLoaded', () => {
           try {
             const data = JSON.parse(xhr.responseText);
             if (data.status === 'ok') {
-              showToast(`"${file.name}" úspešne nahraný do Drive!`, 'success');
+              const uploaded = data.uploaded || [];
+              const isLocal = uploaded.some(u => u.is_local);
+              if (isLocal) {
+                showToast(`"${file.name}" uložený na server (Google Drive nie je pripojený).`, 'info');
+              } else {
+                showToast(`"${file.name}" úspešne nahraný do Google Drive!`, 'success');
+              }
             } else {
               showToast(`Chyba pri nahrávaní "${file.name}".`, 'error');
             }

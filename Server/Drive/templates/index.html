@@ -30,14 +30,19 @@
 
     <div class="header-right">
       {% if drive_connected %}
-        <div class="status-badge" title="Google Drive je pripojený">
+        <div class="status-badge" title="Google Drive je aktívne pripojený a overený">
           <span class="status-dot"></span>
           <span>Drive: <b>{{ folder_name }}</b></span>
         </div>
+        {% if authenticated %}
+          <a href="{{ url_for('connect_drive') }}" class="btn-action btn-download-server" style="padding: 4px 10px; font-size: 0.78em; text-decoration: none;" title="Znova autorizovať alebo obnoviť Google Drive token">
+            <i class="fas fa-rotate"></i> Znova pripojiť
+          </a>
+        {% endif %}
       {% else %}
-        <div class="status-badge fallback" title="Drive token chýba – súbory sa ukladajú na lokálny server">
-          <span class="status-dot"></span>
-          <span>Lokálny server</span>
+        <div class="status-badge fallback" title="Google Drive nie je pripojený alebo token vypršal – súbory sa ukladajú na lokálny server">
+          <span class="status-dot" style="background: #f59e0b;"></span>
+          <span>Lokálny server (Drive odpojený)</span>
         </div>
         {% if authenticated %}
           <a href="{{ url_for('connect_drive') }}" class="btn-action btn-download-direct" style="padding: 5px 12px; font-size: 0.82em; text-decoration: none;" title="Pripojiť Google Drive účet">
@@ -53,6 +58,19 @@
       {% endif %}
     </div>
   </header>
+
+  <!-- Flash správy -->
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="flash-container" style="max-width: 900px; margin: 15px auto 0 auto; padding: 0 20px;">
+        {% for msg in messages %}
+          <div class="toast info" style="position: static; margin-bottom: 8px; display: flex; transform: none; opacity: 1;">
+            <i class="fas fa-circle-info"></i> <span style="margin-left: 8px;">{{ msg }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
 
   <!-- ─── Main Content ───────────────────────────────────────────────────── -->
   <main class="main-content">
@@ -122,6 +140,9 @@
             </h2>
             <span class="stat-pill" id="statCount">Počet: 0</span>
             <span class="stat-pill" id="statSize">Veľkosť: 0 B</span>
+            <button type="button" id="btnSyncLocal" class="btn-action" style="display: none; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5); color: #60a5fa; padding: 4px 10px; font-size: 0.82em; margin-left: 8px;" title="Presunúť lokálne uložené súbory na Google Drive">
+              <i class="fas fa-cloud-arrow-up"></i> Presunúť na Drive (<span id="localFilesCount">0</span>)
+            </button>
           </div>
 
           <div class="toolbar-right">
@@ -163,6 +184,10 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
+  <script>
+    window.APP_PREFIX = {{ prefix|tojson }};
+    window.DRIVE_CONNECTED = {{ drive_connected|tojson }};
+  </script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
