@@ -163,6 +163,9 @@
                           <i class="fas fa-arrow-up-right-from-square external-link-icon"></i>
                         </a>
                         <span class="account-fullname">{{ acc.full_name }}</span>
+                        {% if acc.is_personal %}
+                          <span class="badge-personal" title="Osobný profil – sledovanie followerov a odhlásení"><i class="fas fa-user-shield"></i> Osobný profil</span>
+                        {% endif %}
                         {% if acc.usa_audience_pct %}
                           <span class="badge-usa" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.68rem; margin-top: 3px; display: inline-block; width: fit-content;" title="Podiel USA publika">
                             🇺🇸 {{ acc.usa_audience_pct }}% USA
@@ -172,7 +175,7 @@
                     </div>
                   </td>
 
-                  <!-- Followeri (Δ) -->
+                  <!-- Followeri (Δ) & Unfollow Radar -->
                   <td>
                     <div class="followers-cell">
                       <span class="followers-main">{{ acc.followers_fmt }}</span>
@@ -183,31 +186,51 @@
                       {% else %}
                         <span class="delta-badge delta-neutral" title="Žiadna zmena">0</span>
                       {% endif %}
+                      <button type="button" class="btn-radar-pill" onclick="openUnfollowModal({{ acc.id }}, '{{ acc.username }}')" title="Otvoriť Unfollow Radar – zisti, kto ti dal unfollow">
+                        <i class="fas fa-binoculars"></i>
+                        {% if acc.unfollow_count > 0 %}
+                          <span class="radar-alert-dot"></span> <b>{{ acc.unfollow_count }} unfollow!</b>
+                        {% elif acc.tracked_followers_count > 0 %}
+                          <span>{{ acc.tracked_followers_count }} v databáze</span>
+                        {% else %}
+                          <span>Radar</span>
+                        {% endif %}
+                      </button>
                     </div>
                   </td>
 
                   <!-- Celkové Views -->
                   <td>
-                    <div class="views-cell">
-                      <span class="mono-stat">{{ acc.total_views_fmt }}</span>
-                      {% if acc.delta_views > 0 %}
-                        <span class="delta-badge delta-pos" title="Nárast od posledného syncu"><i class="fas fa-caret-up"></i> {{ acc.delta_views_fmt }}</span>
-                      {% elif acc.delta_views < 0 %}
-                        <span class="delta-badge delta-neg" title="Pokles od posledného syncu"><i class="fas fa-caret-down"></i> {{ acc.delta_views_fmt }}</span>
-                      {% else %}
-                        <span class="delta-badge delta-neutral" title="Žiadna zmena od posledného syncu">0</span>
-                      {% endif %}
-                    </div>
+                    {% if acc.is_personal %}
+                      <span class="text-dim" title="Osobný profil nesleduje video štatistiky"><i class="fas fa-shield-halved" style="opacity: 0.5;"></i> Osobný</span>
+                    {% else %}
+                      <div class="views-cell">
+                        <span class="mono-stat">{{ acc.total_views_fmt }}</span>
+                        {% if acc.delta_views > 0 %}
+                          <span class="delta-badge delta-pos" title="Nárast od posledného syncu"><i class="fas fa-caret-up"></i> {{ acc.delta_views_fmt }}</span>
+                        {% elif acc.delta_views < 0 %}
+                          <span class="delta-badge delta-neg" title="Pokles od posledného syncu"><i class="fas fa-caret-down"></i> {{ acc.delta_views_fmt }}</span>
+                        {% else %}
+                          <span class="delta-badge delta-neutral" title="Žiadna zmena od posledného syncu">0</span>
+                        {% endif %}
+                      </div>
+                    {% endif %}
                   </td>
 
                   <!-- Priemer Views -->
                   <td>
-                    <span class="mono-stat">{{ acc.avg_views_fmt }}</span>
+                    {% if acc.is_personal %}
+                      <span class="text-dim">-</span>
+                    {% else %}
+                      <span class="mono-stat">{{ acc.avg_views_fmt }}</span>
+                    {% endif %}
                   </td>
 
                   <!-- Top Reel (Views / Likes) -->
                   <td>
-                    {% if acc.top_reel_url and acc.top_reel_views > 0 %}
+                    {% if acc.is_personal %}
+                      <span class="text-dim">-</span>
+                    {% elif acc.top_reel_url and acc.top_reel_views > 0 %}
                       <div class="top-reel-cell">
                         <a href="{{ acc.top_reel_url }}" target="_blank" rel="noopener noreferrer" class="top-reel-pill" title="Otvoriť Top Reel na Instagrame">
                           <span class="reel-views"><i class="fas fa-eye"></i> {{ acc.top_reel_views_fmt }}</span>
@@ -222,43 +245,54 @@
 
                   <!-- Engagement -->
                   <td>
-                    <div class="engagement-cell">
-                      {% if acc.engagement_rate and acc.engagement_rate > 0 %}
-                        <span class="engagement-value">{{ acc.engagement_rate }} %</span>
-                      {% else %}
-                        <span class="text-dim">-</span>
-                      {% endif %}
-                    </div>
+                    {% if acc.is_personal %}
+                      <span class="text-dim">-</span>
+                    {% else %}
+                      <div class="engagement-cell">
+                        {% if acc.engagement_rate and acc.engagement_rate > 0 %}
+                          <span class="engagement-value">{{ acc.engagement_rate }} %</span>
+                        {% else %}
+                          <span class="text-dim">-</span>
+                        {% endif %}
+                      </div>
+                    {% endif %}
                   </td>
 
                   <!-- Posledné Reel (Ako sa darí) -->
                   <td>
-                    <div class="latest-post-cell">
-                      {% if acc.last_post_url %}
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                          <a href="{{ acc.last_post_url }}" target="_blank" rel="noopener noreferrer" class="latest-post-pill" title="Otvoriť posledné reelsko na Instagrame ({{ acc.last_post_views_fmt }} views, {{ acc.last_post_likes_fmt }} likes, {{ acc.last_post_date }})">
-                            <span class="post-views"><i class="fas fa-eye"></i> {{ acc.last_post_views_fmt }}</span>
-                            <span class="post-sep">/</span>
-                            <span class="post-likes"><i class="fas fa-heart"></i> {{ acc.last_post_likes_fmt }}</span>
-                            <span class="post-sep">·</span>
-                            <span class="post-time"><i class="fas fa-clock"></i> {{ acc.last_post_date }}</span>
-                          </a>
-                          {% if acc.last_reel_perf and acc.last_reel_perf.status != 'none' %}
-                            <div class="perf-badge-wrap">
-                              <span class="perf-badge {{ acc.last_reel_perf.badge_class }}" title="{{ acc.last_reel_perf.hint }}">
-                                <i class="{{ acc.last_reel_perf.icon }}"></i> {{ acc.last_reel_perf.label }}
-                              </span>
-                            </div>
-                          {% endif %}
-                        </div>
-                      {% else %}
-                        <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
-                      {% endif %}
-                    </div>
+                    {% if acc.is_personal %}
+                      <span class="text-dim">-</span>
+                    {% else %}
+                      <div class="latest-post-cell">
+                        {% if acc.last_post_url %}
+                          <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <a href="{{ acc.last_post_url }}" target="_blank" rel="noopener noreferrer" class="latest-post-pill" title="Otvoriť posledné reelsko na Instagrame ({{ acc.last_post_views_fmt }} views, {{ acc.last_post_likes_fmt }} likes, {{ acc.last_post_date }})">
+                              <span class="post-views"><i class="fas fa-eye"></i> {{ acc.last_post_views_fmt }}</span>
+                              <span class="post-sep">/</span>
+                              <span class="post-likes"><i class="fas fa-heart"></i> {{ acc.last_post_likes_fmt }}</span>
+                              <span class="post-sep">·</span>
+                              <span class="post-time"><i class="fas fa-clock"></i> {{ acc.last_post_date }}</span>
+                            </a>
+                            {% if acc.last_reel_perf and acc.last_reel_perf.status != 'none' %}
+                              <div class="perf-badge-wrap">
+                                <span class="perf-badge {{ acc.last_reel_perf.badge_class }}" title="{{ acc.last_reel_perf.hint }}">
+                                  <i class="{{ acc.last_reel_perf.icon }}"></i> {{ acc.last_reel_perf.label }}
+                                </span>
+                              </div>
+                            {% endif %}
+                          </div>
+                        {% else %}
+                          <span class="text-muted"><i class="fas fa-clock" style="font-size: 0.85em; opacity: 0.7;"></i> {{ acc.last_post_date }}</span>
+                        {% endif %}
+                      </div>
+                    {% endif %}
                   </td>
 
                   <!-- Akcie -->
                   <td style="text-align: center; white-space: nowrap;">
+                    <button class="btn-refresh" style="padding: 6px 10px; font-size: 0.82rem; margin-right: 6px; background: rgba(244, 63, 94, 0.15); color: #f43f5e; border-color: rgba(244, 63, 94, 0.3);" onclick="openUnfollowModal({{ acc.id }}, '{{ acc.username }}')" title="Unfollow Radar: Kto ťa prestal sledovať">
+                      <i class="fas fa-binoculars"></i>
+                    </button>
                     <button class="btn-refresh" style="padding: 6px 10px; font-size: 0.82rem; margin-right: 6px;" onclick="openHistoryModal({{ acc.id }}, '{{ acc.username }}')" title="Zobraziť históriu vývoja profilu">
                       <i class="fas fa-chart-line"></i>
                     </button>
@@ -374,9 +408,130 @@
     </div>
   </div>
 
+  <!-- Unfollow Radar Modal -->
+  <div id="unfollowModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="max-width: 780px;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 12px;">
+          <div class="radar-modal-icon"><i class="fas fa-binoculars"></i></div>
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #fff;">Unfollow Radar – <span id="radarUsername" style="color: #ec4899;">@...</span></div>
+            <div style="font-size: 0.8rem; color: #94a3b8;">Detekcia používateľov, ktorí ťa prestali sledovať</div>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeUnfollowModal()">&times;</button>
+      </div>
+
+      <!-- Quick Radar Stats Cards -->
+      <div class="radar-stats-grid">
+        <div class="radar-stat-box">
+          <div class="radar-stat-label">Sledovaní v Radare</div>
+          <div class="radar-stat-val" id="radarStatTracked">0</div>
+        </div>
+        <div class="radar-stat-box radar-unfollow-box">
+          <div class="radar-stat-label">Dali ti Unfollow</div>
+          <div class="radar-stat-val" id="radarStatUnfollows" style="color: #f43f5e;">0</div>
+        </div>
+        <div class="radar-stat-box radar-new-box">
+          <div class="radar-stat-label">Noví sledovatelia</div>
+          <div class="radar-stat-val" id="radarStatNew" style="color: #10b981;">0</div>
+        </div>
+      </div>
+
+      <!-- Radar Navigation Tabs -->
+      <div class="radar-tabs">
+        <button type="button" class="radar-tab-btn active" id="tabRadarUnfollowsBtn" onclick="switchRadarTab('unfollows')">
+          <i class="fas fa-user-xmark" style="color: #f43f5e;"></i> Kto ti dal unfollow (<span id="tabCountUnfollows">0</span>)
+        </button>
+        <button type="button" class="radar-tab-btn" id="tabRadarNewBtn" onclick="switchRadarTab('new')">
+          <i class="fas fa-user-plus" style="color: #10b981;"></i> Noví (<span id="tabCountNew">0</span>)
+        </button>
+        <button type="button" class="radar-tab-btn" id="tabRadarListBtn" onclick="switchRadarTab('list')">
+          <i class="fas fa-users"></i> Všetci v DB (<span id="tabCountAll">0</span>)
+        </button>
+        <button type="button" class="radar-tab-btn" id="tabRadarImportBtn" onclick="switchRadarTab('import')">
+          <i class="fas fa-cloud-arrow-up" style="color: #38bdf8;"></i> Aktualizovať zoznam
+        </button>
+      </div>
+
+      <!-- TAB 1: Kto ti dal unfollow -->
+      <div id="radarTabUnfollows" class="radar-tab-content">
+        <div id="radarUnfollowsList" class="radar-users-list">
+          <!-- Dynamicky naplnené -->
+        </div>
+      </div>
+
+      <!-- TAB 2: Noví sledovatelia -->
+      <div id="radarTabNew" class="radar-tab-content" style="display: none;">
+        <div id="radarNewList" class="radar-users-list">
+          <!-- Dynamicky naplnené -->
+        </div>
+      </div>
+
+      <!-- TAB 3: Všetci sledovaní -->
+      <div id="radarTabList" class="radar-tab-content" style="display: none;">
+        <div style="margin-bottom: 12px;">
+          <input type="text" id="radarSearchFollowers" class="radar-search-input" placeholder="Hľadať medzi sledovateľmi v databáze..." oninput="filterRadarFollowers()">
+        </div>
+        <div id="radarAllFollowersList" class="radar-tags-wrap">
+          <!-- Dynamicky naplnené -->
+        </div>
+      </div>
+
+      <!-- TAB 4: Aktualizácia zoznamu (Import / Cookie) -->
+      <div id="radarTabImport" class="radar-tab-content" style="display: none;">
+        <div class="radar-import-card">
+          <h4 style="margin: 0 0 6px 0; color: #fff; font-size: 0.95rem;">
+            <i class="fas fa-file-import" style="color: #38bdf8;"></i> Metóda 1: Nahrať Instagram Export súbor alebo vložiť text
+          </h4>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 0 0 12px 0; line-height: 1.4;">
+            Nahrajte súbor <code>followers_1.json</code> alebo <code>followers.html</code> z Instagram exportu dát (Nastavenia &gt; Vaša aktivita &gt; Stiahnuť informácie), alebo sem skopírujte zoznam mien (každé meno na nový riadok).
+          </p>
+
+          <div class="file-drop-area" id="fileDropArea">
+            <i class="fas fa-file-arrow-up" style="font-size: 1.8rem; color: #38bdf8; margin-bottom: 8px;"></i>
+            <div id="fileDropAreaText" style="font-weight: 600; font-size: 0.9rem; color: #e2e8f0;">Potiahnite sem followers_1.json alebo kliknite</div>
+            <div style="font-size: 0.78rem; color: #64748b; margin-top: 4px;">Podporuje JSON, HTML aj obyčajný text</div>
+            <input type="file" id="radarFileInput" accept=".json,.html,.txt" style="display: none;">
+          </div>
+
+          <div style="text-align: center; margin: 12px 0; color: #64748b; font-size: 0.8rem; font-weight: 600;">— ALEBO VLOŽIŤ ZOZNAM TEXTOM —</div>
+
+          <textarea id="radarTextareaInput" class="radar-textarea" rows="4" placeholder="@user1&#10;@user2&#10;user3..."></textarea>
+
+          <button type="button" class="btn-submit-import" id="btnSubmitImport" onclick="submitRadarImport()">
+            <i class="fas fa-rotate"></i> Analyzovať a zistiť zmeny
+          </button>
+        </div>
+
+        <div class="radar-import-card" style="margin-top: 16px;">
+          <h4 style="margin: 0 0 6px 0; color: #fff; font-size: 0.95rem;">
+            <i class="fas fa-cookie-bite" style="color: #fbbf24;"></i> Metóda 2: Priama synchronizácia cez Session Cookie (Voliteľné)
+          </h4>
+          <p style="font-size: 0.82rem; color: #94a3b8; margin: 0 0 10px 0; line-height: 1.4;">
+            Pre automatické stiahnutie priamo z Instagramu vložte svoje <code>sessionid</code> cookie (F12 &gt; Application &gt; Cookies &gt; instagram.com &gt; sessionid).
+          </p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input type="password" id="radarCookieInput" class="radar-search-input" style="flex: 1; min-width: 220px;" placeholder="Sem vložte sessionid...">
+            <button type="button" class="btn-refresh" style="white-space: nowrap;" id="btnSubmitCookie" onclick="submitRadarCookie()">
+              <i class="fas fa-bolt"></i> Stiahnuť z IG
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn-delete" style="font-size: 0.8rem; padding: 6px 12px;" onclick="clearRadarHistory()" title="Vymazať históriu unfollow udalostí">
+          <i class="fas fa-broom"></i> Vyčistiť históriu
+        </button>
+        <button type="button" class="btn-cancel" onclick="closeUnfollowModal()">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=2.0.0"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=2.1.0"></script>
 </body>
 </html>
