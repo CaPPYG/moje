@@ -154,17 +154,8 @@ def parse_apify_reel_item(item, default_username=""):
                 name = p.get("topic_name") or p.get("name") or p.get("title")
                 if name and str(name).strip():
                     topics.append(str(name).strip())
-            elif isinstance(p, str) and p.strip():
+            elif isinstance(p, str) and p.strip() and not p.startswith("#"):
                 topics.append(p.strip())
-
-    if not topics:
-        ht = item.get("hashtags") or []
-        if isinstance(ht, list) and ht:
-            topics = [f"#{h.lstrip('#')}" for h in ht if isinstance(h, str) and h.strip()][:5]
-        elif caption:
-            tags = re.findall(r'#([A-Za-z0-9_áčďéíĺľňóôŕšťúýžÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]+)', caption)
-            if tags:
-                topics = [f"#{t}" for t in tags[:5]]
 
     music_title = ""
     music_artist = ""
@@ -791,13 +782,8 @@ def extract_reels_from_json_node(obj, results=None, seen=None):
                         n = p.get("topic_name") or p.get("name") or p.get("title")
                         if n:
                             topics.append(str(n).strip())
-                    elif isinstance(p, str) and p.strip():
+                    elif isinstance(p, str) and p.strip() and not p.startswith("#"):
                         topics.append(p.strip())
-
-            if not topics and caption:
-                tags = re.findall(r'#([A-Za-z0-9_áčďéíĺľňóôŕšťúýžÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]+)', caption)
-                if tags:
-                    topics = [f"#{t}" for t in tags[:5]]
 
             music_title = ""
             music_artist = ""

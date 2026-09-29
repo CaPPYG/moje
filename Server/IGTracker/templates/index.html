@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2.0.0">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2.0.1">
 </head>
 <body>
 
@@ -400,6 +400,9 @@
           </div>
         </div>
         <div class="reels-header-actions">
+          <button type="button" class="btn-enrich-all" id="btnEnrichAllAI" onclick="enrichAllCurrentReelsAI()" title="Stiahnuť skutočné Meta AI captions a Topic kategórie pre všetky videá">
+            <i class="fas fa-brain"></i> Analyzovať AI
+          </button>
           <button type="button" class="btn-sync-fast" id="btnSyncReelsFast" onclick="syncCurrentReelsFast()" title="Rýchle stiahnutie najnovších Reels cez Instagram HTML SSR (bez Apify kreditov)">
             <i class="fas fa-bolt"></i> Rýchla synchronizácia (HTML)
           </button>
@@ -474,6 +477,6 @@
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=2.0.0"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=2.0.1"></script>
 </body>
 </html>

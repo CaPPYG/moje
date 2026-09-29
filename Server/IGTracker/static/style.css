@@ -1747,6 +1747,27 @@ body {
   border-color: transparent;
 }
 
+.btn-enrich-all {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-enrich-all:hover {
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
+  border-color: #c084fc;
+}
+
 /* Reels Summary Strip */
 .reels-summary-strip {
   display: grid;
@@ -2095,6 +2116,68 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+.btn-enrich-single {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #c084fc;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-enrich-single:hover {
+  background: rgba(168, 85, 247, 0.3);
+  color: #fff;
+}
+
+.reel-hashtags-row {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.hashtags-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.hashtag-pill {
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ai-topics-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.ai-topics-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fda4af;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
 .reel-card-footer {

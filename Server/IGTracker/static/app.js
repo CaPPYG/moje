@@ -387,14 +387,24 @@ window.renderReelsList = function(filterQuery = '') {
     const thumb = r.thumbnail_url || '';
     const caption = escapeHtml(r.caption || '');
     const aiCaption = (r.accessibility_caption || '').trim();
-    const topics = Array.isArray(r.topics) ? r.topics : [];
+    const topics = Array.isArray(r.topics) ? r.topics.filter(t => !String(t).startsWith('#')) : [];
 
-    // AI Topics pills
+    // Hashtags extracted from caption
+    let hashtagsHtml = '';
+    if (caption) {
+      const hts = caption.match(/#[A-Za-z0-9_áčďéíĺľňóôŕšťúýžÁČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]+/g);
+      if (hts && hts.length > 0) {
+        hashtagsHtml = `<div class="reel-hashtags-row"><span class="hashtags-label">Hashtagy:</span> ` + 
+          hts.slice(0, 5).map(h => `<span class="hashtag-pill">${escapeHtml(h)}</span>`).join(' ') + `</div>`;
+      }
+    }
+
+    // AI Topics pills (Real Meta Content Taxonomy)
     let topicsHtml = '';
     if (topics.length > 0) {
       topics.forEach(t => {
-        const cleanT = escapeHtml(String(t).replace(/^#/, ''));
-        topicsHtml += `<span class="topic-pill" title="Tematická kategória Instagram"><i class="fas fa-tag"></i> ${cleanT}</span>`;
+        const cleanT = escapeHtml(String(t));
+        topicsHtml += `<span class="topic-pill" title="Oficiálna tematická kategória Instagramu (FYP Algoritmus)"><i class="fas fa-tag"></i> ${cleanT}</span>`;
       });
     }
 
@@ -407,29 +417,35 @@ window.renderReelsList = function(filterQuery = '') {
 
     // AI Caption Box
     let aiBoxHtml = '';
-    if (aiCaption) {
+    if (aiCaption || topicsHtml) {
       aiBoxHtml = `
         <div class="reel-ai-box">
-          <div class="ai-box-header">
-            <span class="ai-box-title"><i class="fas fa-robot ig-gradient-text"></i> Čo vidí AI (Meta CV):</span>
-          </div>
-          <div class="ai-caption-text">${escapeHtml(aiCaption)}</div>
-          ${topicsHtml ? `<div class="ai-topics-list">${topicsHtml}</div>` : ''}
-        </div>
-      `;
-    } else if (topicsHtml) {
-      aiBoxHtml = `
-        <div class="reel-ai-box">
-          <div class="ai-box-header">
-            <span class="ai-box-title"><i class="fas fa-tags ig-gradient-text"></i> AI Tematické kategórie:</span>
-          </div>
-          <div class="ai-topics-list">${topicsHtml}</div>
+          ${aiCaption ? `
+            <div class="ai-box-header">
+              <span class="ai-box-title"><i class="fas fa-robot ig-gradient-text"></i> Čo vidí AI (Meta Computer Vision):</span>
+            </div>
+            <div class="ai-caption-text">"${escapeHtml(aiCaption)}"</div>
+          ` : ''}
+          ${topicsHtml ? `
+            <div class="ai-topics-container">
+              <div class="ai-topics-title"><i class="fas fa-bullseye ig-gradient-text"></i> Instagram AI Kategórie (FYP):</div>
+              <div class="ai-topics-list">${topicsHtml}</div>
+            </div>
+          ` : ''}
+          ${!aiCaption || !topicsHtml ? `
+            <div class="ai-box-actions" style="margin-top: 4px; text-align: right;">
+              <button type="button" class="btn-enrich-single" onclick="enrichSingleReel('${shortcode}', this)" title="Donačítať detailnú AI analýzu pre toto video"><i class="fas fa-wand-magic-sparkles"></i> Doplniť AI</button>
+            </div>
+          ` : ''}
         </div>
       `;
     } else {
       aiBoxHtml = `
         <div class="reel-ai-box ai-box-empty">
-          <span class="ai-empty-text"><i class="fas fa-brain" style="opacity: 0.5;"></i> AI popis zatiaľ nebol extrahovaný (stiahnite cez Apify).</span>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="ai-empty-text"><i class="fas fa-brain" style="opacity: 0.6;"></i> AI analýza zatiaľ nenačítaná.</span>
+            <button type="button" class="btn-enrich-single" onclick="enrichSingleReel('${shortcode}', this)" title="Stiahnuť Meta AI popis a tematické kategórie"><i class="fas fa-wand-magic-sparkles"></i> Načítať AI</button>
+          </div>
         </div>
       `;
     }
@@ -461,6 +477,7 @@ window.renderReelsList = function(filterQuery = '') {
           ${musicHtml}
 
           ${caption ? `<div class="reel-caption">${caption}</div>` : ''}
+          ${hashtagsHtml}
 
           ${aiBoxHtml}
 
@@ -576,6 +593,72 @@ window.syncCurrentReelsFull = async function() {
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = '<i class="fas fa-cloud-arrow-down"></i> Stiahnuť históriu (Apify)';
+    }
+  }
+};
+
+window.enrichSingleReel = async function(shortcode, btn) {
+  if (!shortcode) return;
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> AI...';
+  }
+
+  showToast(`Sťahujem Meta AI analýzu pre video ${shortcode}...`, 'info');
+
+  try {
+    const res = await fetch(`${PREFIX}/api/ig-tracker/reel/${encodeURIComponent(shortcode)}/enrich-ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      showToast(data.message || 'AI analýza úspešne načítaná!', 'success');
+      await loadAccountReels(currentReelsAccountId, currentSortBy);
+    } else {
+      showToast(data.message || 'Nepodarilo sa stiahnuť AI dáta.', 'warning');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Chyba spojenia pri AI analýze.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+};
+
+window.enrichAllCurrentReelsAI = async function() {
+  if (!currentReelsAccountId) return;
+  const btn = document.getElementById('btnEnrichAllAI');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzujem všetky...';
+  }
+
+  showToast(`Sťahujem Meta AI popis a kategórie pre všetky videá...`, 'info');
+
+  try {
+    const res = await fetch(`${PREFIX}/api/ig-tracker/${currentReelsAccountId}/enrich-all-ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      showToast(data.message || 'AI analýza dokončená!', 'success');
+      await loadAccountReels(currentReelsAccountId, currentSortBy);
+    } else {
+      showToast(data.message || 'Chyba pri hromadnej AI analýze.', 'warning');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Chyba spojenia pri AI analýze.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-brain"></i> Analyzovať AI';
     }
   }
 };

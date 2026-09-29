@@ -404,6 +404,65 @@ def api_sync_reels_full(account_id):
         return jsonify({"status": "error", "message": f"Chyba Apify synchronizácie: {e}"}), 500
 
 
+@app.route("/api/ig-tracker/reel/<shortcode>/enrich-ai", methods=["POST"])
+@auth_required
+def api_enrich_reel_ai(shortcode):
+    """Stiahne podrobnú Meta AI analýzu (Accessibility Caption + Content Taxonomy) pre konkrétne reel."""
+    shortcode = shortcode.strip().replace("/", "")
+    try:
+        det = scraper.fetch_reel_details_html(shortcode)
+        if not det:
+            return jsonify({"status": "error", "message": f"Nepodarilo sa načítať detaily pre reel {shortcode}"}), 404
+
+        with db.get_db() as conn:
+            row = conn.execute("SELECT id, account_id FROM account_reels WHERE shortcode = ?", (shortcode,)).fetchone()
+            if row:
+                aid = row["account_id"]
+                db.upsert_reel(aid, det)
+                db.sync_reels_summary_to_snapshot(aid)
+
+        return jsonify({
+            "status": "ok",
+            "message": f"AI analýza pre reel {shortcode} bola úspešne stiahnutá!",
+            "reel": det
+        }), 200
+    except Exception as e:
+        logger.error(f"Chyba pri AI analýze pre {shortcode}: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/ig-tracker/<int:account_id>/enrich-all-ai", methods=["POST"])
+@auth_required
+def api_enrich_all_reels_ai(account_id):
+    """Prejde reels daného účtu a stiahne skutočné Meta AI captions a Topic Pills."""
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return jsonify({"status": "error", "message": "Účet neexistuje."}), 404
+
+    reels = db.get_account_reels(account_id)
+    enriched = 0
+    for r in reels:
+        sc = r.get("shortcode")
+        if not sc:
+            continue
+        try:
+            det = scraper.fetch_reel_details_html(sc)
+            if det:
+                db.upsert_reel(account_id, det)
+                enriched += 1
+        except Exception:
+            continue
+
+    db.sync_reels_summary_to_snapshot(account_id)
+    all_reels = db.get_account_reels(account_id)
+    return jsonify({
+        "status": "ok",
+        "message": f"AI analýza bola stiahnutá pre {enriched} videí.",
+        "enriched_count": enriched,
+        "reels": all_reels
+    }), 200
+
+
 # ─── Spustenie Aplikácie ───────────────────────────────────────────────────────
 
 if __name__ == "__main__":
