@@ -106,38 +106,6 @@ def init_db():
         if "usa_audience_pct" not in snap_cols:
             conn.execute("ALTER TABLE snapshots ADD COLUMN usa_audience_pct REAL DEFAULT NULL")
 
-        # ── Unfollow Radar: sledovanie jednotlivých followerov ────────────
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS tracked_followers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                follower_username TEXT NOT NULL,
-                last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(account_id, follower_username),
-                FOREIGN KEY(account_id) REFERENCES tracked_accounts(id) ON DELETE CASCADE
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS unfollow_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                unfollowed_username TEXT NOT NULL,
-                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(account_id) REFERENCES tracked_accounts(id) ON DELETE CASCADE
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS new_follower_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                follower_username TEXT NOT NULL,
-                detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(account_id) REFERENCES tracked_accounts(id) ON DELETE CASCADE
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_unfollow_account ON unfollow_events(account_id, detected_at DESC)")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_new_follow_account ON new_follower_events(account_id, detected_at DESC)")
-
         # ── Media Vault: raw master videos ──────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS vault_videos (
@@ -715,14 +683,6 @@ def get_accounts_with_metrics():
                 "device_model": device_model,
                 "last_updated": None
             }
-
-        with get_db() as conn:
-            unf_row = conn.execute("SELECT COUNT(*) as c FROM unfollow_events WHERE account_id = ?", (aid,)).fetchone()
-            item["unfollow_count"] = unf_row["c"] if unf_row else 0
-            trk_row = conn.execute("SELECT COUNT(*) as c FROM tracked_followers WHERE account_id = ?", (aid,)).fetchone()
-            item["tracked_followers_count"] = trk_row["c"] if trk_row else 0
-            item["is_personal"] = (acc["username"].lower() == "patrikg._")
-
         result.append(item)
 
     return result
@@ -1171,139 +1131,5 @@ def get_unposted_posts_by_account(account_id):
             ORDER BY p.scheduled_time ASC
         """, (account_id,)).fetchall()
         return [dict(r) for r in rows]
-
-
-# ─── UNFOLLOW RADAR DB OPERÁCIE ──────────────────────────────────────────────
-
-def record_followers_snapshot(account_id, new_followers_list):
-    """
-    Zaznamená aktuálny stav followerov pre daný účet a identifikuje, kto dal unfollow.
-    - account_id: ID účtu v tracked_accounts
-    - new_followers_list: zoznam username stringov
-    """
-    normalized_new = set()
-    for u in new_followers_list:
-        clean = str(u).strip().lstrip("@").lower()
-        if clean and len(clean) <= 60:
-            normalized_new.add(clean)
-
-    with get_db() as conn:
-        rows = conn.execute(
-            "SELECT follower_username FROM tracked_followers WHERE account_id = ?",
-            (account_id,)
-        ).fetchall()
-        existing_set = set(r["follower_username"] for r in rows)
-
-        # 1. Prvotná inicializácia (baseline)
-        if not existing_set:
-            for u in normalized_new:
-                conn.execute(
-                    "INSERT OR IGNORE INTO tracked_followers (account_id, follower_username, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                    (account_id, u)
-                )
-            return {
-                "is_baseline": True,
-                "total_tracked": len(normalized_new),
-                "unfollowed": [],
-                "new_followed": []
-            }
-
-        # 2. Porovnanie voči existujúcim followerom
-        unfollowed = sorted(list(existing_set - normalized_new))
-        new_followed = sorted(list(normalized_new - existing_set))
-
-        # Zaznamenať unfollow eventy a vymazať z tracked_followers
-        for u in unfollowed:
-            conn.execute(
-                "INSERT INTO unfollow_events (account_id, unfollowed_username, detected_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                (account_id, u)
-            )
-            conn.execute(
-                "DELETE FROM tracked_followers WHERE account_id = ? AND follower_username = ?",
-                (account_id, u)
-            )
-
-        # Zaznamenať novovzniknutých followerov a pridať do tracked_followers
-        for u in new_followed:
-            conn.execute(
-                "INSERT INTO new_follower_events (account_id, follower_username, detected_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                (account_id, u)
-            )
-            conn.execute(
-                "INSERT OR IGNORE INTO tracked_followers (account_id, follower_username, last_seen_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-                (account_id, u)
-            )
-
-        # Obnoviť timestamp pre všetkých aktuálnych
-        conn.execute(
-            "UPDATE tracked_followers SET last_seen_at = CURRENT_TIMESTAMP WHERE account_id = ?",
-            (account_id,)
-        )
-
-        return {
-            "is_baseline": False,
-            "total_tracked": len(normalized_new),
-            "unfollowed": unfollowed,
-            "new_followed": new_followed
-        }
-
-
-def get_unfollow_data(account_id, limit=100):
-    """Vráti kompletné dáta pre Unfollow Radar: odhlásených, nových a aktuálne sledovaných."""
-    with get_db() as conn:
-        acc = conn.execute("SELECT * FROM tracked_accounts WHERE id = ?", (account_id,)).fetchone()
-        if not acc:
-            return None
-
-        unfollowed_rows = conn.execute("""
-            SELECT id, unfollowed_username as username, detected_at
-            FROM unfollow_events
-            WHERE account_id = ?
-            ORDER BY detected_at DESC
-            LIMIT ?
-        """, (account_id, limit)).fetchall()
-
-        new_follower_rows = conn.execute("""
-            SELECT id, follower_username as username, detected_at
-            FROM new_follower_events
-            WHERE account_id = ?
-            ORDER BY detected_at DESC
-            LIMIT ?
-        """, (account_id, limit)).fetchall()
-
-        tracked_rows = conn.execute("""
-            SELECT follower_username, last_seen_at
-            FROM tracked_followers
-            WHERE account_id = ?
-            ORDER BY follower_username ASC
-            LIMIT 500
-        """, (account_id,)).fetchall()
-
-        total_tracked = conn.execute("SELECT COUNT(*) as c FROM tracked_followers WHERE account_id = ?", (account_id,)).fetchone()["c"]
-        total_unfollows = conn.execute("SELECT COUNT(*) as c FROM unfollow_events WHERE account_id = ?", (account_id,)).fetchone()["c"]
-        total_new = conn.execute("SELECT COUNT(*) as c FROM new_follower_events WHERE account_id = ?", (account_id,)).fetchone()["c"]
-
-        return {
-            "account": {
-                "id": acc["id"],
-                "username": acc["username"],
-                "full_name": acc["full_name"],
-                "avatar_url": acc["avatar_url"]
-            },
-            "total_tracked": total_tracked,
-            "total_unfollows": total_unfollows,
-            "total_new": total_new,
-            "unfollowed": [dict(r) for r in unfollowed_rows],
-            "new_followers": [dict(r) for r in new_follower_rows],
-            "sample_followers": [r["follower_username"] for r in tracked_rows]
-        }
-
-
-def clear_unfollow_events(account_id):
-    """Vymaže históriu unfollow udalostí pre daný účet."""
-    with get_db() as conn:
-        conn.execute("DELETE FROM unfollow_events WHERE account_id = ?", (account_id,))
-        conn.execute("DELETE FROM new_follower_events WHERE account_id = ?", (account_id,))
-
 
 
