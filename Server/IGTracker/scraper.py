@@ -310,10 +310,10 @@ def fetch_profiles_batch(usernames):
                 payload_posts = {
                     "directUrls": [f"https://www.instagram.com/{u}/" for u in clean_usernames],
                     "resultsType": "posts",
-                    "resultsLimit": 35
+                    "resultsLimit": 15
                 }
                 print(f"[Apify Batch] Sťahujem reels metriky (playCount) pre {len(clean_usernames)} účtov...")
-                r2 = requests.post(url, json=payload_posts, timeout=90)
+                r2 = requests.post(url, json=payload_posts, timeout=60)
                 if r2.status_code in (200, 201):
                     posts_items = r2.json()
                     _enrich_profiles_with_posts(results, posts_items)
@@ -326,7 +326,7 @@ def fetch_profiles_batch(usernames):
         except Exception as e:
             print(f"[Apify Batch] Chyba batch sťahovania: {e}. Prechádzam na fallback.")
 
-    # Fallback: po jednom cez záložný crawler
+    # Fallback: po jednom cez záložný crawler (iba ak Apify vôbec nevrátilo výsledky)
     results = {}
     for u in clean_usernames:
         try:
@@ -429,10 +429,10 @@ def fetch_via_crawler(username):
     target_url = f"https://www.instagram.com/{username}/"
     # Používame výhradne overené proxy, nikdy nie priamy unproxied request z datacenter IP VPS
     candidates = get_proxy_candidates()
-    for p in candidates[:20]:
+    for p in candidates[:3]:
         proxies = {'http': f'http://{p}', 'https': f'http://{p}'}
         try:
-            r = requests.get(target_url, headers=CRAWLER_HEADERS, proxies=proxies, timeout=5)
+            r = requests.get(target_url, headers=CRAWLER_HEADERS, proxies=proxies, timeout=3)
             if r.status_code == 200 and 'follower' in r.text.lower():
                 parsed = parse_instagram_html(username, r.text)
                 if parsed:

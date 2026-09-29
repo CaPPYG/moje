@@ -238,7 +238,39 @@ def add_account(username, full_name="", avatar_url=""):
 
 def delete_account(account_id):
     with get_db() as conn:
+        conn.execute("DELETE FROM snapshots WHERE account_id = ?", (account_id,))
         conn.execute("DELETE FROM tracked_accounts WHERE id = ?", (account_id,))
+
+
+def get_account_snapshots(account_id, limit=30):
+    """Vráti históriu snapshotov pre účet zoradenú od najstaršieho po najnovší (pre grafy)."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT * FROM snapshots
+            WHERE account_id = ?
+            ORDER BY timestamp DESC, id DESC
+            LIMIT ?
+        """, (account_id, limit)).fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+
+def get_comparison_data():
+    """Vráti usporiadané metriky pre vizuálne porovnávanie progressu profilov."""
+    accounts = get_accounts_with_metrics()
+    active = [a for a in accounts if a.get("has_data")]
+
+    by_follower_growth = sorted(active, key=lambda a: a.get("delta_followers", 0), reverse=True)
+    by_views = sorted(active, key=lambda a: a.get("total_views", 0), reverse=True)
+    by_engagement = sorted(active, key=lambda a: a.get("engagement_rate", 0), reverse=True)
+    by_avg_views = sorted(active, key=lambda a: a.get("avg_views", 0), reverse=True)
+
+    return {
+        "accounts": accounts,
+        "by_follower_growth": by_follower_growth,
+        "by_views": by_views,
+        "by_engagement": by_engagement,
+        "by_avg_views": by_avg_views
+    }
 
 
 def get_account_by_username(username):
