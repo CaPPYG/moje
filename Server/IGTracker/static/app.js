@@ -215,7 +215,372 @@ window.closeHistoryModal = function() {
   if (modal) modal.style.display = 'none';
 };
 
-// ─── Zmazanie Účtu ────────────────────────────────────────────────────────────
+// ─── Reels & AI Analýza Modal ────────────────────────────────────────────────
+let currentReelsAccountId = null;
+let currentReelsUsername = '';
+let currentReelsList = [];
+let currentSortBy = 'taken_at';
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatStatNum(val) {
+  if (val === null || val === undefined) return '0';
+  const n = Number(val);
+  if (isNaN(n)) return '0';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return n.toLocaleString();
+}
+
+window.openReelsModal = async function(id, username) {
+  currentReelsAccountId = id;
+  currentReelsUsername = username;
+  currentSortBy = 'taken_at';
+
+  const modal = document.getElementById('reelsModal');
+  const userEl = document.getElementById('reelsModalUsername');
+  const fullEl = document.getElementById('reelsModalFullName');
+  const avatarEl = document.getElementById('reelsModalAvatar');
+  const grid = document.getElementById('reelsGrid');
+  const searchInput = document.getElementById('reelsSearchInput');
+
+  if (userEl) userEl.textContent = '@' + username;
+  if (fullEl) fullEl.textContent = 'Načítavam...';
+  if (avatarEl) avatarEl.src = `https://ui-avatars.com/api/?name=${username}&background=random`;
+  if (searchInput) searchInput.value = '';
+  if (grid) {
+    grid.innerHTML = `
+      <div class="reels-loading-state" style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #94a3b8;">
+        <i class="fas fa-spinner fa-spin fa-2x ig-gradient-text" style="margin-bottom: 12px; display: inline-block;"></i>
+        <p>Načítavam Reels a AI Content Taxonomy pre @${username}...</p>
+      </div>
+    `;
+  }
+
+  // Reset sort buttons
+  document.querySelectorAll('.reels-sort-group .sort-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sort === 'taken_at');
+  });
+
+  if (modal) modal.style.display = 'flex';
+  await loadAccountReels(id, 'taken_at');
+};
+
+window.closeReelsModal = function() {
+  const modal = document.getElementById('reelsModal');
+  if (modal) modal.style.display = 'none';
+};
+
+async function loadAccountReels(id, sortBy = 'taken_at') {
+  try {
+    const res = await fetch(`${PREFIX}/api/ig-tracker/${id}/reels?sort_by=${sortBy}`);
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      currentReelsList = data.reels || [];
+
+      // Update Header Info
+      const fullEl = document.getElementById('reelsModalFullName');
+      const avatarEl = document.getElementById('reelsModalAvatar');
+      if (data.account) {
+        if (fullEl) fullEl.textContent = data.account.full_name || `@${data.account.username}`;
+        if (avatarEl && data.account.avatar_url) avatarEl.src = data.account.avatar_url;
+      }
+
+      // Update Summary Strip
+      const s = data.summary || {};
+      const countEl = document.getElementById('reelsCountVal');
+      const totalViewsEl = document.getElementById('reelsTotalViewsVal');
+      const avgViewsEl = document.getElementById('reelsAvgViewsVal');
+      const topViewsEl = document.getElementById('reelsTopViewsVal');
+
+      if (countEl) countEl.textContent = s.reels_count || data.count || 0;
+      if (totalViewsEl) totalViewsEl.textContent = s.total_views_fmt || '0';
+      if (avgViewsEl) avgViewsEl.textContent = s.avg_views_fmt || '0';
+      if (topViewsEl) {
+        topViewsEl.textContent = (s.top_reel && s.top_reel.views_fmt) ? s.top_reel.views_fmt : '0';
+      }
+
+      renderReelsList();
+    } else {
+      const grid = document.getElementById('reelsGrid');
+      if (grid) {
+        grid.innerHTML = `
+          <div class="reels-error-state" style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #ef4444;">
+            <i class="fas fa-exclamation-triangle fa-2x" style="margin-bottom: 12px; display: inline-block;"></i>
+            <p>${escapeHtml(data.message || 'Nepodarilo sa načítať reels.')}</p>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    const grid = document.getElementById('reelsGrid');
+    if (grid) {
+      grid.innerHTML = `
+        <div class="reels-error-state" style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #ef4444;">
+          <i class="fas fa-wifi fa-2x" style="margin-bottom: 12px; display: inline-block;"></i>
+          <p>Chyba komunikácie so serverom.</p>
+        </div>
+      `;
+    }
+  }
+}
+
+window.renderReelsList = function(filterQuery = '') {
+  const grid = document.getElementById('reelsGrid');
+  if (!grid) return;
+
+  const q = (filterQuery || (document.getElementById('reelsSearchInput')?.value || '')).trim().toLowerCase();
+
+  let list = currentReelsList;
+  if (q) {
+    list = list.filter(r => {
+      const cap = (r.caption || '').toLowerCase();
+      const ai = (r.accessibility_caption || '').toLowerCase();
+      const topStr = Array.isArray(r.topics) ? r.topics.join(' ').toLowerCase() : '';
+      const mus = ((r.music_title || '') + ' ' + (r.music_artist || '')).toLowerCase();
+      return cap.includes(q) || ai.includes(q) || topStr.includes(q) || mus.includes(q);
+    });
+  }
+
+  if (list.length === 0) {
+    if (q) {
+      grid.innerHTML = `
+        <div class="reels-empty-state" style="grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: #94a3b8;">
+          <i class="fas fa-filter-circle-xmark fa-2x" style="color: #64748b; margin-bottom: 10px; display: inline-block;"></i>
+          <p>Žiadne Reels nevyhovujú filtru „${escapeHtml(q)}“.</p>
+          <button class="btn-refresh" style="margin-top: 12px;" onclick="document.getElementById('reelsSearchInput').value=''; renderReelsList();">Zrušiť filter</button>
+        </div>
+      `;
+    } else {
+      grid.innerHTML = `
+        <div class="reels-empty-state" style="grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: #94a3b8;">
+          <div class="empty-icon ig-gradient-text" style="font-size: 2.5rem; margin-bottom: 12px;"><i class="fas fa-film"></i></div>
+          <h3 style="color: #fff; font-size: 1.15rem; margin-bottom: 8px;">Zatiaľ žiadne uložené Reels pre tento profil</h3>
+          <p style="font-size: 0.9rem; max-width: 480px; margin: 0 auto; color: #94a3b8;">Spusťte rýchlu synchronizáciu cez HTML alebo stiahnite celú históriu profilu cez Apify.</p>
+          <div style="display: flex; gap: 12px; margin-top: 20px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn-sync-fast" onclick="syncCurrentReelsFast()"><i class="fas fa-bolt"></i> Rýchla synchronizácia (HTML)</button>
+            <button class="btn-sync-full" onclick="syncCurrentReelsFull()"><i class="fas fa-cloud-arrow-down"></i> Stiahnuť históriu (Apify)</button>
+          </div>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  let html = '';
+  list.forEach(r => {
+    const shortcode = escapeHtml(r.shortcode || '');
+    const url = r.url || `https://www.instagram.com/reel/${shortcode}/`;
+    const views = r.views_fmt || formatStatNum(r.views_count || 0);
+    const likes = r.likes_fmt || formatStatNum(r.likes_count || 0);
+    const comments = r.comments_fmt || formatStatNum(r.comments_count || 0);
+    const relDate = r.taken_at_relative || 'Aktuálne';
+    const thumb = r.thumbnail_url || '';
+    const caption = escapeHtml(r.caption || '');
+    const aiCaption = (r.accessibility_caption || '').trim();
+    const topics = Array.isArray(r.topics) ? r.topics : [];
+
+    // AI Topics pills
+    let topicsHtml = '';
+    if (topics.length > 0) {
+      topics.forEach(t => {
+        const cleanT = escapeHtml(String(t).replace(/^#/, ''));
+        topicsHtml += `<span class="topic-pill" title="Tematická kategória Instagram"><i class="fas fa-tag"></i> ${cleanT}</span>`;
+      });
+    }
+
+    // Music info
+    let musicHtml = '';
+    if (r.music_title) {
+      const mText = escapeHtml(r.music_artist ? `${r.music_artist} – ${r.music_title}` : r.music_title);
+      musicHtml = `<div class="reel-music-info" title="Hudba / Zvuk: ${mText}"><i class="fas fa-music"></i> <span>${mText}</span></div>`;
+    }
+
+    // AI Caption Box
+    let aiBoxHtml = '';
+    if (aiCaption) {
+      aiBoxHtml = `
+        <div class="reel-ai-box">
+          <div class="ai-box-header">
+            <span class="ai-box-title"><i class="fas fa-robot ig-gradient-text"></i> Čo vidí AI (Meta CV):</span>
+          </div>
+          <div class="ai-caption-text">${escapeHtml(aiCaption)}</div>
+          ${topicsHtml ? `<div class="ai-topics-list">${topicsHtml}</div>` : ''}
+        </div>
+      `;
+    } else if (topicsHtml) {
+      aiBoxHtml = `
+        <div class="reel-ai-box">
+          <div class="ai-box-header">
+            <span class="ai-box-title"><i class="fas fa-tags ig-gradient-text"></i> AI Tematické kategórie:</span>
+          </div>
+          <div class="ai-topics-list">${topicsHtml}</div>
+        </div>
+      `;
+    } else {
+      aiBoxHtml = `
+        <div class="reel-ai-box ai-box-empty">
+          <span class="ai-empty-text"><i class="fas fa-brain" style="opacity: 0.5;"></i> AI popis zatiaľ nebol extrahovaný (stiahnite cez Apify).</span>
+        </div>
+      `;
+    }
+
+    html += `
+      <div class="reel-card" data-shortcode="${shortcode}">
+        <div class="reel-thumbnail-wrap">
+          ${thumb ? `<img src="${thumb}" class="reel-thumbnail" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+          <div class="reel-thumb-fallback" style="${thumb ? 'display: none;' : 'display: flex;'}">
+            <i class="fas fa-film fa-2x ig-gradient-text"></i>
+          </div>
+          <div class="reel-badge-top-left">
+            <span class="badge-views"><i class="fas fa-play"></i> ${views}</span>
+          </div>
+          <div class="reel-badge-top-right">
+            <a href="${url}" target="_blank" rel="noopener noreferrer" class="reel-link-btn" title="Otvoriť Reel na Instagrame">
+              <i class="fas fa-arrow-up-right-from-square"></i>
+            </a>
+          </div>
+        </div>
+
+        <div class="reel-content">
+          <div class="reel-stats-bar">
+            <span class="reel-stat-item stat-likes" title="Lajky"><i class="fas fa-heart"></i> ${likes}</span>
+            <span class="reel-stat-item stat-comments" title="Komentáre"><i class="fas fa-comment"></i> ${comments}</span>
+            <span class="reel-stat-item stat-date" title="Dátum publikovania"><i class="fas fa-clock"></i> ${relDate}</span>
+          </div>
+
+          ${musicHtml}
+
+          ${caption ? `<div class="reel-caption">${caption}</div>` : ''}
+
+          ${aiBoxHtml}
+
+          <div class="reel-card-footer">
+            <a href="${url}" target="_blank" rel="noopener noreferrer" class="btn-open-reel">
+              <i class="fab fa-instagram"></i> Otvoriť Reel na Instagrame
+            </a>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  grid.innerHTML = html;
+};
+
+window.filterReelsList = function() {
+  const query = document.getElementById('reelsSearchInput')?.value || '';
+  renderReelsList(query);
+};
+
+window.sortReels = function(sortKey, btn) {
+  currentSortBy = sortKey;
+  document.querySelectorAll('.reels-sort-group .sort-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  if (sortKey === 'views_count') {
+    currentReelsList.sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
+  } else if (sortKey === 'likes_count') {
+    currentReelsList.sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
+  } else if (sortKey === 'comments_count') {
+    currentReelsList.sort((a, b) => (b.comments_count || 0) - (a.comments_count || 0));
+  } else {
+    currentReelsList.sort((a, b) => {
+      const pinDiff = (b.is_pinned || 0) - (a.is_pinned || 0);
+      if (pinDiff !== 0) return pinDiff;
+      const timeA = a.taken_at ? new Date(a.taken_at).getTime() : 0;
+      const timeB = b.taken_at ? new Date(b.taken_at).getTime() : 0;
+      return timeB - timeA;
+    });
+  }
+
+  renderReelsList();
+};
+
+window.syncCurrentReelsFast = async function() {
+  if (!currentReelsAccountId) return;
+  const btn = document.getElementById('btnSyncReelsFast');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rýchla synchronizácia...';
+  }
+
+  showToast(`Sťahujem najnovšie Reels pre @${currentReelsUsername} cez HTML...`, 'info');
+
+  try {
+    const res = await fetch(`${PREFIX}/api/ig-tracker/${currentReelsAccountId}/sync-reels-fast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      showToast(data.message || 'Reels úspešne synchronizované!', 'success');
+      await loadAccountReels(currentReelsAccountId, currentSortBy);
+      updateSummaries();
+      renderComparison();
+    } else {
+      showToast(data.message || 'Upozornenie pri synchronizácii.', 'warning');
+      await loadAccountReels(currentReelsAccountId, currentSortBy);
+      updateSummaries();
+      renderComparison();
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Chyba spojenia pri rýchlej synchronizácii.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-bolt"></i> Rýchla synchronizácia (HTML)';
+    }
+  }
+};
+
+window.syncCurrentReelsFull = async function() {
+  if (!currentReelsAccountId) return;
+  const btn = document.getElementById('btnSyncReelsFull');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sťahujem históriu (Apify)...';
+  }
+
+  showToast(`Spúšťam plné sťahovanie histórie Reels pre @${currentReelsUsername} cez Apify...`, 'info');
+
+  try {
+    const res = await fetch(`${PREFIX}/api/ig-tracker/${currentReelsAccountId}/sync-reels-full`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 100 })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'ok') {
+      showToast(data.message || 'História úspešne stiahnutá!', 'success');
+      await loadAccountReels(currentReelsAccountId, currentSortBy);
+      updateSummaries();
+      renderComparison();
+    } else {
+      showToast(data.message || 'Chyba pri sťahovaní cez Apify.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showToast('Chyba spojenia pri Apify synchronizácii.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-cloud-arrow-down"></i> Stiahnuť históriu (Apify)';
+    }
+  }
+};
+
+// ─── Inicializácia Formularov a Event Listenerov ──────────────────────────────
 window.deleteAccount = async function(id, username) {
   if (!confirm(`Naozaj chcete odstrániť účet @${username} zo sledovania?`)) {
     return;
@@ -268,8 +633,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.target === historyModal) closeHistoryModal();
     });
   }
+  const reelsModal = document.getElementById('reelsModal');
+  if (reelsModal) {
+    reelsModal.addEventListener('click', (e) => {
+      if (e.target === reelsModal) closeReelsModal();
+    });
+  }
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeHistoryModal();
+    if (e.key === 'Escape') {
+      closeHistoryModal();
+      closeReelsModal();
+    }
   });
 
   // Pridanie profilu

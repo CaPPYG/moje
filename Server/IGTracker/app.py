@@ -149,6 +149,7 @@ def api_add_account():
             last_post_likes=scraped.get("last_post_likes", 0),
             usa_audience_pct=scraped.get("usa_audience_pct")
         )
+        db.sync_reels_summary_to_snapshot(account_id)
     except Exception as e:
         logger.error(f"Chyba pri scrapovaní nového profilu @{username}: {e}")
 
@@ -220,6 +221,7 @@ def api_sync():
                     last_post_likes=scraped.get("last_post_likes", 0),
                     usa_audience_pct=scraped.get("usa_audience_pct")
                 )
+                db.sync_reels_summary_to_snapshot(acc["id"])
                 synced_count += 1
             except Exception as e:
                 logger.error(f"Chyba pri ukladaní snapshote pre @{uname}: {e}")
@@ -273,6 +275,133 @@ def api_update_account_audience(account_id):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": f"Neplatná hodnota: {e}"}), 400
+
+
+# ─── REST API: Reels Management & AI Analýza ─────────────────────────────────
+
+@app.route("/api/ig-tracker/<int:account_id>/reels", methods=["GET"])
+@auth_required
+def api_get_account_reels(account_id):
+    """Vráti všetky uložené Reels pre daný účet vrátane AI Accessibility Caption a tém."""
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return jsonify({"status": "error", "message": "Účet neexistuje."}), 404
+
+    sort_by = request.args.get("sort_by", default="taken_at")
+    order = request.args.get("order", default="DESC")
+
+    reels = db.get_account_reels(account_id, sort_by=sort_by, order=order)
+    summary = db.get_reels_summary(account_id)
+
+    return jsonify({
+        "status": "ok",
+        "account": account,
+        "summary": summary,
+        "count": len(reels),
+        "reels": reels
+    }), 200
+
+
+@app.route("/api/ig-tracker/<int:account_id>/sync-reels-fast", methods=["POST"])
+@auth_required
+def api_sync_reels_fast(account_id):
+    """
+    Rýchla inkrementálna synchronizácia najnovších Reels (HTML SSR JSON) bez Apify kreditov.
+    Stiahne až 12 najnovších reels a uloží/aktualizuje ich v DB.
+    """
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return jsonify({"status": "error", "message": "Účet neexistuje."}), 404
+
+    username = account["username"]
+    try:
+        reels = scraper.fetch_recent_reels_html(username)
+        count = 0
+        if reels:
+            # Pre najnovšie reels skúsime doplniť AI detaily ak chýbajú
+            for r in reels[:2]:
+                sc = r.get("shortcode")
+                if sc and not r.get("accessibility_caption"):
+                    try:
+                        det = scraper.fetch_reel_details_html(sc)
+                        if det:
+                            if det.get("accessibility_caption"):
+                                r["accessibility_caption"] = det["accessibility_caption"]
+                            if det.get("topics") and not r.get("topics"):
+                                r["topics"] = det["topics"]
+                                r["topics_json"] = det["topics_json"]
+                            if det.get("video_url") and not r.get("video_url"):
+                                r["video_url"] = det["video_url"]
+                    except Exception:
+                        pass
+
+            count = db.upsert_reels_batch(account_id, reels)
+            db.sync_reels_summary_to_snapshot(account_id)
+
+        all_reels = db.get_account_reels(account_id)
+        summary = db.get_reels_summary(account_id)
+        updated_accounts = db.get_accounts_with_metrics()
+
+        if count > 0:
+            return jsonify({
+                "status": "ok",
+                "message": f"Rýchla synchronizácia úspešná. Načítaných {count} reels.",
+                "count": count,
+                "summary": summary,
+                "reels": all_reels,
+                "accounts": updated_accounts
+            }), 200
+        else:
+            return jsonify({
+                "status": "warning",
+                "message": "HTML crawler nenašiel nové reels (Instagram mohol dočasne obmedziť priamy prístup). Odporúčame použiť Apify synchronizáciu.",
+                "count": 0,
+                "summary": summary,
+                "reels": all_reels,
+                "accounts": updated_accounts
+            }), 200
+
+    except Exception as e:
+        logger.error(f"Chyba pri rýchlej synchronizácii reels pre @{username}: {e}")
+        return jsonify({"status": "error", "message": f"Chyba rýchlej synchronizácie: {e}"}), 500
+
+
+@app.route("/api/ig-tracker/<int:account_id>/sync-reels-full", methods=["POST"])
+@auth_required
+def api_sync_reels_full(account_id):
+    """
+    Plná synchronizácia histórie všetkých Reels profilu cez Apify.
+    Stiahne kompletné dáta: videoPlayCount, AI Accessibility Caption, AI tematické kategórie (Content Taxonomy).
+    """
+    account = db.get_account_by_id(account_id)
+    if not account:
+        return jsonify({"status": "error", "message": "Účet neexistuje."}), 404
+
+    username = account["username"]
+    data = request.get_json(silent=True) or request.form or {}
+    limit = int(data.get("limit") or 100)
+
+    try:
+        reels = scraper.fetch_all_reels_apify(username, limit=limit)
+        count = db.upsert_reels_batch(account_id, reels)
+        db.sync_reels_summary_to_snapshot(account_id)
+
+        all_reels = db.get_account_reels(account_id)
+        summary = db.get_reels_summary(account_id)
+        updated_accounts = db.get_accounts_with_metrics()
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Plná synchronizácia cez Apify dokončená. Uložených {count} reels pre @{username}.",
+            "count": count,
+            "summary": summary,
+            "reels": all_reels,
+            "accounts": updated_accounts
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Chyba pri plnej synchronizácii cez Apify pre @{username}: {e}")
+        return jsonify({"status": "error", "message": f"Chyba Apify synchronizácie: {e}"}), 500
 
 
 # ─── Spustenie Aplikácie ───────────────────────────────────────────────────────

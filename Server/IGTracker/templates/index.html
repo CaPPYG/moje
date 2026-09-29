@@ -163,6 +163,11 @@
                           <i class="fas fa-arrow-up-right-from-square external-link-icon"></i>
                         </a>
                         <span class="account-fullname">{{ acc.full_name }}</span>
+                        {% if acc.reels_count and acc.reels_count > 0 %}
+                          <span class="badge-reels" onclick="openReelsModal({{ acc.id }}, '{{ acc.username }}')" style="cursor: pointer; background: rgba(236, 72, 153, 0.15); color: #f472b6; padding: 1px 6px; border-radius: 4px; font-weight: 600; font-size: 0.68rem; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; width: fit-content;" title="Kliknutím otvoríte galériu Reels">
+                            <i class="fas fa-film"></i> {{ acc.reels_count }} reels
+                          </span>
+                        {% endif %}
                         {% if acc.usa_audience_pct %}
                           <span class="badge-usa" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 0.68rem; margin-top: 3px; display: inline-block; width: fit-content;" title="Podiel USA publika">
                             🇺🇸 {{ acc.usa_audience_pct }}% USA
@@ -259,6 +264,12 @@
 
                   <!-- Akcie -->
                   <td style="text-align: center; white-space: nowrap;">
+                    <button class="btn-refresh" style="padding: 6px 10px; font-size: 0.82rem; margin-right: 6px; background: rgba(220, 39, 67, 0.15); border-color: rgba(220, 39, 67, 0.35); color: #f43f5e;" onclick="openReelsModal({{ acc.id }}, '{{ acc.username }}')" title="Zobraziť Reels galériu & AI analýzu">
+                      <i class="fas fa-film"></i> Reels
+                      {% if acc.reels_count and acc.reels_count > 0 %}
+                        <span style="background: rgba(255, 255, 255, 0.2); padding: 1px 5px; border-radius: 8px; font-size: 0.72rem; margin-left: 2px;">{{ acc.reels_count }}</span>
+                      {% endif %}
+                    </button>
                     <button class="btn-refresh" style="padding: 6px 10px; font-size: 0.82rem; margin-right: 6px;" onclick="openHistoryModal({{ acc.id }}, '{{ acc.username }}')" title="Zobraziť históriu vývoja profilu">
                       <i class="fas fa-chart-line"></i>
                     </button>
@@ -373,6 +384,92 @@
       </div>
     </div>
   </div>
+
+  <!-- Reels Gallery & AI Taxonomy Modal -->
+  <div id="reelsModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card reels-modal-card">
+      <!-- Modal Header -->
+      <div class="modal-header reels-modal-header">
+        <div class="reels-modal-user">
+          <img id="reelsModalAvatar" src="" class="reels-modal-avatar" onerror="this.src='https://ui-avatars.com/api/?name=IG&background=random'">
+          <div>
+            <div class="modal-title">
+              <i class="fas fa-film ig-gradient-text"></i> Reels & AI Analýza – <strong id="reelsModalUsername" class="ig-gradient-text">@...</strong>
+            </div>
+            <span id="reelsModalFullName" class="reels-modal-fullname">...</span>
+          </div>
+        </div>
+        <div class="reels-header-actions">
+          <button type="button" class="btn-sync-fast" id="btnSyncReelsFast" onclick="syncCurrentReelsFast()" title="Rýchle stiahnutie najnovších Reels cez Instagram HTML SSR (bez Apify kreditov)">
+            <i class="fas fa-bolt"></i> Rýchla synchronizácia (HTML)
+          </button>
+          <button type="button" class="btn-sync-full" id="btnSyncReelsFull" onclick="syncCurrentReelsFull()" title="Kompletné stiahnutie histórie všetkých Reels cez Apify scraper">
+            <i class="fas fa-cloud-arrow-down"></i> Stiahnuť históriu (Apify)
+          </button>
+          <button class="modal-close" onclick="closeReelsModal()">&times;</button>
+        </div>
+      </div>
+
+      <!-- Reels Summary Strip -->
+      <div class="reels-summary-strip" id="reelsSummaryStrip">
+        <div class="summary-pill">
+          <span class="summary-pill-label"><i class="fas fa-film"></i> Celkovo Reels</span>
+          <span class="summary-pill-val" id="reelsCountVal">0</span>
+        </div>
+        <div class="summary-pill">
+          <span class="summary-pill-label"><i class="fas fa-play" style="color: #38bdf8;"></i> Celkové Zhliadnutia</span>
+          <span class="summary-pill-val" id="reelsTotalViewsVal">0</span>
+        </div>
+        <div class="summary-pill">
+          <span class="summary-pill-label"><i class="fas fa-chart-simple" style="color: #ec4899;"></i> Priemer na Reel</span>
+          <span class="summary-pill-val" id="reelsAvgViewsVal">0</span>
+        </div>
+        <div class="summary-pill">
+          <span class="summary-pill-label"><i class="fas fa-trophy" style="color: #fbbf24;"></i> Top Reel</span>
+          <span class="summary-pill-val" id="reelsTopViewsVal">0</span>
+        </div>
+      </div>
+
+      <!-- Filter & Sort Bar -->
+      <div class="reels-filter-bar">
+        <div class="reels-search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" id="reelsSearchInput" placeholder="Hľadať v popise, AI vizuálnom popise alebo téme..." oninput="filterReelsList()">
+        </div>
+        <div class="reels-sort-group">
+          <span class="sort-label">Zoradiť:</span>
+          <button type="button" class="sort-btn active" data-sort="taken_at" onclick="sortReels('taken_at', this)">
+            <i class="fas fa-clock"></i> Najnovšie
+          </button>
+          <button type="button" class="sort-btn" data-sort="views_count" onclick="sortReels('views_count', this)">
+            <i class="fas fa-fire"></i> Najviac videní
+          </button>
+          <button type="button" class="sort-btn" data-sort="likes_count" onclick="sortReels('likes_count', this)">
+            <i class="fas fa-heart"></i> Najviac lajkov
+          </button>
+          <button type="button" class="sort-btn" data-sort="comments_count" onclick="sortReels('comments_count', this)">
+            <i class="fas fa-comment"></i> Najviac komentárov
+          </button>
+        </div>
+      </div>
+
+      <!-- Reels Body / Grid -->
+      <div class="modal-body reels-modal-body" id="reelsModalBody">
+        <div class="reels-grid" id="reelsGrid">
+          <!-- Dynamicky načítané -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer reels-modal-footer">
+        <span class="reels-footer-hint">
+          <i class="fas fa-circle-info"></i> <b>AI Accessibility Caption</b>: Čo v scéne vidí Meta AI computer vision. <b>AI Tematické kategórie</b>: Content Taxonomy detekovaná Instagramom.
+        </span>
+        <button type="button" class="btn-cancel" onclick="closeReelsModal()">Zavrieť</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>

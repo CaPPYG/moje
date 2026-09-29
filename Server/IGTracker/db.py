@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sqlite3
@@ -201,6 +202,58 @@ def init_db():
             )
         """)
 
+        # ── Account Reels: individual reels per account ─────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS account_reels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                shortcode VARCHAR(100) NOT NULL,
+                pk VARCHAR(100),
+                url TEXT,
+                video_url TEXT,
+                thumbnail_url TEXT,
+                views_count INTEGER DEFAULT 0,
+                likes_count INTEGER DEFAULT 0,
+                comments_count INTEGER DEFAULT 0,
+                caption TEXT,
+                taken_at TIMESTAMP,
+                is_pinned INTEGER DEFAULT 0,
+                accessibility_caption TEXT,
+                topics_json TEXT DEFAULT '[]',
+                music_title TEXT,
+                music_artist TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(account_id, shortcode),
+                FOREIGN KEY(account_id) REFERENCES tracked_accounts(id) ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_account_reels_acc ON account_reels(account_id, taken_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_account_reels_views ON account_reels(account_id, views_count DESC)")
+
+        # Migration check for account_reels
+        reels_cols = [c["name"] for c in conn.execute("PRAGMA table_info(account_reels)").fetchall()]
+        for col_name, col_type in [
+            ("pk", "VARCHAR(100)"),
+            ("url", "TEXT"),
+            ("video_url", "TEXT"),
+            ("thumbnail_url", "TEXT"),
+            ("views_count", "INTEGER DEFAULT 0"),
+            ("likes_count", "INTEGER DEFAULT 0"),
+            ("comments_count", "INTEGER DEFAULT 0"),
+            ("caption", "TEXT"),
+            ("taken_at", "TIMESTAMP"),
+            ("is_pinned", "INTEGER DEFAULT 0"),
+            ("accessibility_caption", "TEXT"),
+            ("topics_json", "TEXT DEFAULT '[]'"),
+            ("music_title", "TEXT"),
+            ("music_artist", "TEXT"),
+            ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        ]:
+            if col_name not in reels_cols:
+                conn.execute(f"ALTER TABLE account_reels ADD COLUMN {col_name} {col_type}")
+
 
 def format_number(val):
     """Sformátuje číslo do pekného skráteného tvaru (napr. 14.2k, 1.8M)."""
@@ -216,6 +269,366 @@ def format_number(val):
     elif num >= 1_000:
         return f"{num / 1_000:.1f}k"
     return str(int(num))
+
+
+def format_relative_timestamp(ts_val):
+    """Prevedie ISO čas alebo timestamp na slovenský relatívny čas."""
+    if not ts_val:
+        return "Aktuálne"
+    try:
+        if isinstance(ts_val, (int, float)):
+            dt = datetime.fromtimestamp(ts_val, tz=timezone.utc)
+        elif isinstance(ts_val, str):
+            clean_ts = ts_val.strip()
+            if not clean_ts or clean_ts == "Aktuálne":
+                return "Aktuálne"
+            if clean_ts.isdigit():
+                dt = datetime.fromtimestamp(int(clean_ts), tz=timezone.utc)
+            else:
+                dt = datetime.fromisoformat(clean_ts.replace("Z", "+00:00"))
+        elif isinstance(ts_val, datetime):
+            dt = ts_val if ts_val.tzinfo else ts_val.replace(tzinfo=timezone.utc)
+        else:
+            return "Aktuálne"
+        now = datetime.now(timezone.utc)
+        diff = now - dt
+        secs = int(diff.total_seconds())
+        if secs < 0:
+            return "pred chvíľou"
+        if secs < 3600:
+            return f"pred {max(1, secs // 60)} min"
+        elif secs < 86400:
+            return f"pred {secs // 3600} h"
+        elif secs < 172800:
+            return "včera"
+        else:
+            days = secs // 86400
+            if days == 1:
+                return "pred 1 dňom"
+            elif 2 <= days <= 4:
+                return f"pred {days} dňami"
+            return f"pred {days} dňami"
+    except Exception:
+        return "prednedávnom"
+
+
+def upsert_reel(account_id, reel_data):
+    """
+    Vloží alebo aktualizuje záznam o reelsku pre daný účet.
+    """
+    if not account_id or not reel_data:
+        return None
+
+    shortcode = (reel_data.get("shortcode") or reel_data.get("code") or reel_data.get("shortCode") or reel_data.get("short_code") or "").strip()
+    if not shortcode:
+        # Skús extrahovať z URL
+        url_cand = reel_data.get("url") or ""
+        m = re.search(r'/reel/([A-Za-z0-9_-]+)', url_cand)
+        if m:
+            shortcode = m.group(1)
+    if not shortcode:
+        return None
+
+    pk = str(reel_data.get("pk") or reel_data.get("id") or "")
+    url = reel_data.get("url") or f"https://www.instagram.com/reel/{shortcode}/"
+    video_url = reel_data.get("video_url") or reel_data.get("videoUrl") or ""
+    thumbnail_url = reel_data.get("thumbnail_url") or reel_data.get("displayUrl") or reel_data.get("thumbnailUrl") or reel_data.get("display_url") or ""
+
+    views_count = int(reel_data.get("views_count") or reel_data.get("videoPlayCount") or reel_data.get("videoViewCount") or reel_data.get("playCount") or reel_data.get("viewsCount") or 0)
+    likes_count = int(reel_data.get("likes_count") or reel_data.get("likesCount") or 0)
+    comments_count = int(reel_data.get("comments_count") or reel_data.get("commentsCount") or 0)
+
+    caption = reel_data.get("caption") or ""
+    if isinstance(caption, dict):
+        caption = caption.get("text") or ""
+
+    raw_taken_at = reel_data.get("taken_at") or reel_data.get("timestamp") or reel_data.get("taken_at_timestamp")
+    taken_at = None
+    if isinstance(raw_taken_at, (int, float)):
+        taken_at = datetime.fromtimestamp(raw_taken_at, tz=timezone.utc).isoformat()
+    elif isinstance(raw_taken_at, datetime):
+        taken_at = (raw_taken_at if raw_taken_at.tzinfo else raw_taken_at.replace(tzinfo=timezone.utc)).isoformat()
+    elif isinstance(raw_taken_at, str) and raw_taken_at.strip():
+        clean_t = raw_taken_at.strip()
+        if clean_t.isdigit():
+            taken_at = datetime.fromtimestamp(int(clean_t), tz=timezone.utc).isoformat()
+        else:
+            try:
+                dt = datetime.fromisoformat(clean_t.replace("Z", "+00:00"))
+                taken_at = dt.astimezone(timezone.utc).isoformat()
+            except Exception:
+                taken_at = clean_t
+
+    has_pinned_key = ("is_pinned" in reel_data) or ("isPinned" in reel_data) or ("pinned" in reel_data)
+    is_pinned_val = 1 if (reel_data.get("is_pinned") or reel_data.get("isPinned") or reel_data.get("pinned")) else (0 if has_pinned_key else None)
+
+    accessibility_caption = reel_data.get("accessibility_caption") or reel_data.get("accessibilityCaption") or ""
+
+    topics = reel_data.get("topics") or reel_data.get("related_topic_pills") or reel_data.get("relatedTopicPills") or []
+    if isinstance(topics, list):
+        clean_topics = []
+        for t in topics:
+            if isinstance(t, str) and t.strip():
+                clean_topics.append(t.strip())
+            elif isinstance(t, dict):
+                name = t.get("topic_name") or t.get("name") or t.get("title") or ""
+                if name and name.strip():
+                    clean_topics.append(name.strip())
+        topics_json = json.dumps(clean_topics, ensure_ascii=False)
+    elif isinstance(topics, str):
+        topics_json = topics
+    else:
+        topics_json = "[]"
+
+    music_title = reel_data.get("music_title") or reel_data.get("musicTitle") or ""
+    music_artist = reel_data.get("music_artist") or reel_data.get("musicArtist") or ""
+    if not music_title and isinstance(reel_data.get("musicInfo"), dict):
+        m_info = reel_data["musicInfo"]
+        music_title = m_info.get("song_name") or m_info.get("songName") or m_info.get("title") or ""
+        music_artist = m_info.get("artist_name") or m_info.get("artistName") or ""
+    elif not music_title and isinstance(reel_data.get("music_info"), dict):
+        m_info = reel_data["music_info"]
+        music_title = m_info.get("song_name") or m_info.get("title") or ""
+        music_artist = m_info.get("artist_name") or m_info.get("artist") or ""
+
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO account_reels (
+                account_id, shortcode, pk, url, video_url, thumbnail_url,
+                views_count, likes_count, comments_count, caption, taken_at,
+                is_pinned, accessibility_caption, topics_json, music_title, music_artist,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, 0), ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(account_id, shortcode) DO UPDATE SET
+                pk = CASE WHEN excluded.pk != '' THEN excluded.pk ELSE account_reels.pk END,
+                url = CASE WHEN excluded.url != '' THEN excluded.url ELSE account_reels.url END,
+                video_url = CASE WHEN excluded.video_url != '' THEN excluded.video_url ELSE account_reels.video_url END,
+                thumbnail_url = CASE WHEN excluded.thumbnail_url != '' THEN excluded.thumbnail_url ELSE account_reels.thumbnail_url END,
+                views_count = CASE WHEN excluded.views_count > 0 THEN excluded.views_count ELSE account_reels.views_count END,
+                likes_count = CASE WHEN excluded.likes_count > 0 THEN excluded.likes_count ELSE account_reels.likes_count END,
+                comments_count = CASE WHEN excluded.comments_count > 0 THEN excluded.comments_count ELSE account_reels.comments_count END,
+                caption = CASE WHEN excluded.caption != '' THEN excluded.caption ELSE account_reels.caption END,
+                taken_at = CASE WHEN ? IS NOT NULL THEN ? ELSE account_reels.taken_at END,
+                is_pinned = CASE WHEN ? IS NOT NULL THEN ? ELSE account_reels.is_pinned END,
+                accessibility_caption = CASE WHEN excluded.accessibility_caption != '' THEN excluded.accessibility_caption ELSE account_reels.accessibility_caption END,
+                topics_json = CASE WHEN excluded.topics_json != '[]' AND excluded.topics_json != '' THEN excluded.topics_json ELSE account_reels.topics_json END,
+                music_title = CASE WHEN excluded.music_title != '' THEN excluded.music_title ELSE account_reels.music_title END,
+                music_artist = CASE WHEN excluded.music_artist != '' THEN excluded.music_artist ELSE account_reels.music_artist END,
+                updated_at = CURRENT_TIMESTAMP
+        """, (
+            account_id, shortcode, pk, url, video_url, thumbnail_url,
+            views_count, likes_count, comments_count, caption, taken_at, is_pinned_val,
+            accessibility_caption, topics_json, music_title, music_artist,
+            taken_at, taken_at,
+            is_pinned_val, is_pinned_val
+        ))
+        row = conn.execute("SELECT * FROM account_reels WHERE account_id = ? AND shortcode = ?", (account_id, shortcode)).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_reels_batch(account_id, reels_list):
+    """
+    Vloží alebo aktualizuje dávku reels.
+    """
+    if not account_id or not reels_list:
+        return 0
+    count = 0
+    for r in reels_list:
+        if isinstance(r, dict):
+            res = upsert_reel(account_id, r)
+            if res:
+                count += 1
+    return count
+
+
+def get_account_reels(account_id, sort_by='taken_at', order='DESC'):
+    """
+    Vráti zoznam uložených reels pre daný účet so spracovanými témami a formátovanými metrikami.
+    """
+    allowed_sorts = {
+        'taken_at': 'taken_at',
+        'views_count': 'views_count',
+        'likes_count': 'likes_count',
+        'comments_count': 'comments_count',
+        'created_at': 'created_at'
+    }
+    col = allowed_sorts.get(sort_by, 'taken_at')
+    dir_order = 'ASC' if str(order).upper() == 'ASC' else 'DESC'
+
+    # Ak triedime podľa dátumu (taken_at), rešpektujeme is_pinned na začiatku
+    # Ak triedime podľa metrík (views, likes, comments), zoradíme primárne podľa danej metriky
+    order_clause = f"is_pinned DESC, {col} {dir_order}, id DESC" if col == 'taken_at' else f"{col} {dir_order}, is_pinned DESC, id DESC"
+
+    with get_db() as conn:
+        rows = conn.execute(f"""
+            SELECT * FROM account_reels
+            WHERE account_id = ?
+            ORDER BY {order_clause}
+        """, (account_id,)).fetchall()
+
+        results = []
+        for r in rows:
+            d = dict(r)
+            try:
+                topics_raw = d.get("topics_json")
+                d["topics"] = json.loads(topics_raw) if topics_raw else []
+            except Exception:
+                d["topics"] = []
+
+            d["views_fmt"] = format_number(d.get("views_count", 0))
+            d["likes_fmt"] = format_number(d.get("likes_count", 0))
+            d["comments_fmt"] = format_number(d.get("comments_count", 0))
+
+            t_at = d.get("taken_at")
+            d["taken_at_relative"] = format_relative_timestamp(t_at) if t_at else "Aktuálne"
+            results.append(d)
+        return results
+
+
+def get_reels_summary(account_id):
+    """
+    Vráti súhrnné štatistiky reels pre účet (celkové views, top reel, priemery).
+    """
+    with get_db() as conn:
+        row = conn.execute("""
+            SELECT 
+                COUNT(*) as reels_count,
+                COALESCE(SUM(views_count), 0) as total_views,
+                COALESCE(SUM(likes_count), 0) as total_likes,
+                COALESCE(SUM(comments_count), 0) as total_comments
+            FROM account_reels
+            WHERE account_id = ?
+        """, (account_id,)).fetchone()
+
+        reels_count = row["reels_count"] if row else 0
+        total_views = row["total_views"] if row else 0
+        total_likes = row["total_likes"] if row else 0
+        total_comments = row["total_comments"] if row else 0
+        avg_views = (total_views // reels_count) if reels_count > 0 else 0
+
+        # Top reel podľa počtu views a lajkov
+        top_row = conn.execute("""
+            SELECT * FROM account_reels
+            WHERE account_id = ?
+            ORDER BY views_count DESC, likes_count DESC, taken_at DESC
+            LIMIT 1
+        """, (account_id,)).fetchone()
+        top_reel = None
+        if top_row:
+            top_reel = dict(top_row)
+            top_reel["views_fmt"] = format_number(top_reel.get("views_count", 0))
+            top_reel["likes_fmt"] = format_number(top_reel.get("likes_count", 0))
+            try:
+                top_reel["topics"] = json.loads(top_reel.get("topics_json") or "[]")
+            except Exception:
+                top_reel["topics"] = []
+
+        # Latest reel podľa taken_at
+        latest_row = conn.execute("""
+            SELECT * FROM account_reels
+            WHERE account_id = ?
+            ORDER BY taken_at DESC, id DESC
+            LIMIT 1
+        """, (account_id,)).fetchone()
+        latest_reel = None
+        if latest_row:
+            latest_reel = dict(latest_row)
+            latest_reel["views_fmt"] = format_number(latest_reel.get("views_count", 0))
+            latest_reel["likes_fmt"] = format_number(latest_reel.get("likes_count", 0))
+            t_at = latest_reel.get("taken_at")
+            latest_reel["taken_at_relative"] = format_relative_timestamp(t_at) if t_at else "Aktuálne"
+            try:
+                latest_reel["topics"] = json.loads(latest_reel.get("topics_json") or "[]")
+            except Exception:
+                latest_reel["topics"] = []
+
+        return {
+            "reels_count": reels_count,
+            "total_views": total_views,
+            "total_views_fmt": format_number(total_views) if total_views > 0 else "0",
+            "total_likes": total_likes,
+            "total_likes_fmt": format_number(total_likes) if total_likes > 0 else "0",
+            "total_comments": total_comments,
+            "total_comments_fmt": format_number(total_comments) if total_comments > 0 else "0",
+            "avg_views": avg_views,
+            "avg_views_fmt": format_number(avg_views) if avg_views > 0 else "0",
+            "top_reel": top_reel,
+            "latest_reel": latest_reel
+        }
+
+
+def sync_reels_summary_to_snapshot(account_id):
+    """Aktualizuje najnovší snapshot účtu na základe agregovaných údajov z tabuľky account_reels."""
+    summary = get_reels_summary(account_id)
+    if summary["reels_count"] == 0:
+        return None
+
+    top_r = summary.get("top_reel") or {}
+    lat_r = summary.get("latest_reel") or {}
+
+    with get_db() as conn:
+        latest = get_latest_snapshot(account_id)
+        if latest:
+            # Ak top_reel v tabuľke reels má >= počet views ako snapshot, aktualizujeme top_reel polia ako jeden celok
+            update_top = bool(top_r.get("url")) and (top_r.get("views_count", 0) >= (latest["top_reel_views"] or 0))
+            new_top_url = top_r.get("url") if update_top else latest["top_reel_url"]
+            new_top_views = top_r.get("views_count", 0) if update_top else (latest["top_reel_views"] or 0)
+            new_top_likes = top_r.get("likes_count", 0) if update_top else (latest["top_reel_likes"] or 0)
+
+            # Posledné reelsko: aktualizujeme celú sadu údajov z lat_r
+            update_lat = bool(lat_r.get("url"))
+            new_lat_url = lat_r.get("url") if update_lat else latest["last_post_url"]
+            new_lat_views = lat_r.get("views_count", 0) if update_lat else (latest["last_post_views"] or 0)
+            new_lat_likes = lat_r.get("likes_count", 0) if update_lat else (latest["last_post_likes"] or 0)
+            new_lat_date = lat_r.get("taken_at_relative") if update_lat else latest["last_post_date"]
+
+            # Celkové videnia a priemer: berieme maximum / agregáciu
+            new_total_views = max(summary["total_views"], latest["total_views"] or 0)
+            new_avg_views = summary["avg_views"] if summary["total_views"] >= (latest["total_views"] or 0) else (latest["avg_views"] or 0)
+
+            conn.execute("""
+                UPDATE snapshots SET
+                    total_views = ?,
+                    avg_views = ?,
+                    top_reel_url = ?,
+                    top_reel_views = ?,
+                    top_reel_likes = ?,
+                    last_post_url = ?,
+                    last_post_views = ?,
+                    last_post_likes = ?,
+                    last_post_date = ?
+                WHERE id = ?
+            """, (
+                new_total_views,
+                new_avg_views,
+                new_top_url,
+                new_top_views,
+                new_top_likes,
+                new_lat_url,
+                new_lat_views,
+                new_lat_likes,
+                new_lat_date,
+                latest["id"]
+            ))
+            return latest["id"]
+        else:
+            return add_snapshot(
+                account_id=account_id,
+                followers=0,
+                following=0,
+                posts_count=summary["reels_count"],
+                top_reel_url=top_r.get("url", ""),
+                top_reel_views=top_r.get("views_count", 0),
+                top_reel_likes=top_r.get("likes_count", 0),
+                total_views=summary["total_views"],
+                avg_views=summary["avg_views"],
+                last_post_date=lat_r.get("taken_at_relative"),
+                last_post_views=lat_r.get("views_count", 0),
+                last_post_url=lat_r.get("url", ""),
+                last_post_likes=lat_r.get("likes_count", 0)
+            )
+
+
 
 
 def add_account(username, full_name="", avatar_url=""):
@@ -238,6 +651,7 @@ def add_account(username, full_name="", avatar_url=""):
 
 def delete_account(account_id):
     with get_db() as conn:
+        conn.execute("DELETE FROM account_reels WHERE account_id = ?", (account_id,))
         conn.execute("DELETE FROM snapshots WHERE account_id = ?", (account_id,))
         conn.execute("DELETE FROM tracked_accounts WHERE id = ?", (account_id,))
 
@@ -683,6 +1097,39 @@ def get_accounts_with_metrics():
                 "device_model": device_model,
                 "last_updated": None
             }
+
+        # Obohatenie o agregované štatistiky reels z tabuľky account_reels
+        reels_summary = get_reels_summary(aid)
+        reels_cnt = reels_summary.get("reels_count", 0)
+        item["reels_count"] = reels_cnt
+        if reels_cnt > 0:
+            if not item.get("has_data"):
+                item["has_data"] = True
+            r_total_views = reels_summary.get("total_views", 0)
+            if r_total_views > 0 and (item.get("total_views", 0) == 0 or r_total_views > item.get("total_views", 0)):
+                item["total_views"] = r_total_views
+                item["total_views_fmt"] = reels_summary.get("total_views_fmt", format_number(r_total_views))
+                item["avg_views"] = reels_summary.get("avg_views", 0)
+                item["avg_views_fmt"] = reels_summary.get("avg_views_fmt", format_number(item["avg_views"]))
+
+            top_r = reels_summary.get("top_reel")
+            if top_r and (not item.get("top_reel_url") or item.get("top_reel_views", 0) < top_r.get("views_count", 0)):
+                item["top_reel_url"] = top_r.get("url")
+                item["top_reel_views"] = top_r.get("views_count", 0)
+                item["top_reel_views_fmt"] = top_r.get("views_fmt", format_number(item["top_reel_views"]))
+                item["top_reel_likes"] = top_r.get("likes_count", 0)
+                item["top_reel_likes_fmt"] = top_r.get("likes_fmt", format_number(item["top_reel_likes"]))
+
+            lat_r = reels_summary.get("latest_reel")
+            if lat_r and lat_r.get("url"):
+                item["last_post_url"] = lat_r.get("url")
+                item["last_post_views"] = lat_r.get("views_count", 0)
+                item["last_post_views_fmt"] = lat_r.get("views_fmt", format_number(item["last_post_views"]))
+                item["last_post_likes"] = lat_r.get("likes_count", 0)
+                item["last_post_likes_fmt"] = lat_r.get("likes_fmt", format_number(item["last_post_likes"]))
+                item["last_post_date"] = lat_r.get("taken_at_relative") or "Aktuálne"
+                item["last_reel_perf"] = calculate_reel_perf(item["last_post_views"], item.get("avg_views", 0), item["last_post_date"], item["last_post_likes"])
+
         result.append(item)
 
     return result
